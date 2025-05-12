@@ -1,0 +1,45 @@
+// src/grammar.pest
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+COMMENT = _{ "#" ~ (!"\n" ~ ANY)* ~ "\n" }
+
+rule_set = { SOI ~ rule+ ~ EOI }
+
+rule = {
+    selector ~ "gets" ~ outcome ~
+    "if" ~ condition ~ ("and" ~ condition)* ~ "."
+}
+
+selector = @{ identifier }
+outcome = @{ (!("if") ~ ANY)+ }
+
+condition = {
+    property_condition |
+    rule_reference
+}
+
+property_condition = {
+    "the" ~ property ~ "of" ~ "the" ~ selector ~ predicate
+}
+
+rule_reference = {
+    "the" ~ selector ~ "passes" ~ string_literal
+}
+
+predicate = {
+    "is greater than or equal to" ~ value |
+    "is equal to" ~ value |
+    "is the same as" ~ value |
+    "is later than" ~ value |
+    "is greater than" ~ value |
+    "is in" ~ list_value
+}
+
+list_value = { "[" ~ value ~ ("," ~ value)* ~ "]" }
+value = { number | string_literal | date_literal | boolean }
+
+property = { "__" ~ identifier ~ "__" }
+identifier = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+string_literal = @{ "\"" ~ (!("\"") ~ ANY)* ~ "\"" | identifier }
+number = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
+date_literal = @{ "date(" ~ ASCII_DIGIT{4} ~ "-" ~ ASCII_DIGIT{2} ~ "-" ~ ASCII_DIGIT{2} ~ ")" }
+boolean = { "true" | "false" }
