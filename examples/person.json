@@ -1,7 +1,7 @@
 {
   "Person": {
     "age": 18,
-    "drivingtestscore": 75,
+    "drivingTestScore": 75,
     "eyeTestPassed": true
   }
 }

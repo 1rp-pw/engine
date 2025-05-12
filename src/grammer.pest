@@ -1,16 +1,28 @@
-// src/grammar.pest
+// src/grammar.pest (update selector and property rules)
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 COMMENT = _{ "#" ~ (!"\n" ~ ANY)* ~ "\n" }
 
-rule_set = { SOI ~ rule+ ~ EOI }
+rule_set = { SOI ~ (COMMENT | rule)* ~ EOI }
 
 rule = {
-    selector ~ "gets" ~ outcome ~
+    rule_header ~ rule_outcome ~
     "if" ~ condition ~ ("and" ~ condition)* ~ "."
 }
 
+rule_header = { label? ~ "A " ~ object_selector }
+label = @{ (!(". A ") ~ ANY)+ ~ ". " }
+
+object_selector = @{ "**" ~ identifier ~ "**" }
 selector = @{ identifier }
-outcome = @{ (!("if") ~ ANY)+ }
+
+rule_outcome = {
+  outcome_verb ~ outcome
+}
+outcome_verb = {
+  "gets" | "passes" | "is" | "has" | "receives" | "qualifies for" | "meets" | "satisfies"
+}
+
+outcome = @{ (!("if" | ".") ~ ANY)+ }
 
 condition = {
     property_condition |
@@ -18,28 +30,55 @@ condition = {
 }
 
 property_condition = {
-    "the" ~ property ~ "of" ~ "the" ~ selector ~ predicate
+    "the" ~ property ~ "of" ~ "the" ~ object_selector ~ predicate
 }
 
 rule_reference = {
-    "the" ~ selector ~ "passes" ~ string_literal
+    "the" ~ object_selector ~ reference_verb ~ reference_object?
 }
 
+reference_verb = {
+    "passes" | "meets" | "satisfies" | "qualifies for" | "is eligible for" | "has passed"
+}
+
+reference_object = @{ (!(" and " | ".") ~ ANY)+ }
+
 predicate = {
-    "is greater than or equal to" ~ value |
-    "is equal to" ~ value |
-    "is the same as" ~ value |
-    "is later than" ~ value |
-    "is greater than" ~ value |
-    "is in" ~ list_value
+    comparison_operator ~ value |
+    list_operator ~ list_value
+}
+
+list_operator = {
+    "is in" |
+    "is not in"
+}
+
+comparison_operator = {
+    "is greater than or equal to" |
+    "is less than or equal to" |
+    "is equal to" |
+    "is not equal to" |
+    "is the same as" |
+    "is not the same as" |
+    "is later than" |
+    "is earlier than" |
+    "is greater than" |
+    "is less than" |
+    "contains"
 }
 
 list_value = { "[" ~ value ~ ("," ~ value)* ~ "]" }
 value = { number | string_literal | date_literal | boolean }
 
-property = { "__" ~ identifier ~ "__" }
+rule_name = @{(!(". " | " and " | ".") ~ ANY)+}
+property = @{ "__" ~ property_name ~ "__" }
+property_name = @{ (!("__") ~ ANY)+ }
 identifier = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 string_literal = @{ "\"" ~ (!("\"") ~ ANY)* ~ "\"" | identifier }
 number = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
-date_literal = @{ "date(" ~ ASCII_DIGIT{4} ~ "-" ~ ASCII_DIGIT{2} ~ "-" ~ ASCII_DIGIT{2} ~ ")" }
+date_format = @{ ASCII_DIGIT{4} ~ "-" ~ ASCII_DIGIT{2} ~ "-" ~ ASCII_DIGIT{2} }
+date_literal = @{
+  "date(" ~ date_format ~ ")" |
+  date_format
+}
 boolean = { "true" | "false" }

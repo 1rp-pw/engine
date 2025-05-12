@@ -4,7 +4,7 @@ use crate::model::{Condition, ComparisonOperator, RuleSet, RuleValue};
 use chrono::NaiveDate;
 use pest::Parser;
 use pest_derive::Parser;
-use pest::iterators::{Pair, Pairs};
+use pest::iterators::Pair;
 
 #[derive(Parser)]
 #[grammar = "src/grammer.pest"]
@@ -36,15 +36,43 @@ pub fn parse_rules(input: &str) -> Result<RuleSet, RuleError> {
 fn parse_rule(pair: Pair<Rule>) -> Result<crate::model::Rule, RuleError> {
     let mut inner_pairs = pair.into_inner();
 
-    let selector = inner_pairs.next()
-        .ok_or_else(|| RuleError::ParseError("Missing selector".to_string()))?
+    // Parse rule header (which includes label and selector)
+    let header_pair = inner_pairs.next()
+        .ok_or_else(|| RuleError::ParseError("Missing rule header".to_string()))?;
+
+    let mut label = None;
+    let mut selector = String::new();
+
+    for header_part in header_pair.into_inner() {
+        match header_part.as_rule() {
+            Rule::label => {
+                // Remove the trailing ". " from the label
+                let label_text = header_part.as_str();
+                label = Some(label_text[..label_text.len()-2].to_string());
+            },
+            Rule::object_selector => {
+                // Extract the selector from between the double asterisks
+                let selector_text = header_part.as_str();
+                selector = selector_text[2..selector_text.len()-2].to_string();
+            },
+            _ => {}
+        }
+    }
+
+    if selector.is_empty() {
+        return Err(RuleError::ParseError("Missing selector in rule".to_string()));
+    }
+
+    // Parse the outcome
+    let outcome_pair = inner_pairs.next()
+        .ok_or_else(|| RuleError::ParseError("Missing outcome".to_string()))?;
+
+    // Extract the outcome text, ignoring the verb
+    let outcome_text = outcome_pair.into_inner().nth(1)
+        .ok_or_else(|| RuleError::ParseError("Missing outcome text".to_string()))?
         .as_str().trim().to_string();
 
-    let outcome = inner_pairs.next()
-        .ok_or_else(|| RuleError::ParseError("Missing outcome".to_string()))?
-        .as_str().trim().to_string();
-
-    let mut rule = crate::model::Rule::new(selector, outcome);
+    let mut rule = crate::model::Rule::new(label, selector, outcome_text);
 
     // Parse conditions
     for condition_pair in inner_pairs {
@@ -56,6 +84,7 @@ fn parse_rule(pair: Pair<Rule>) -> Result<crate::model::Rule, RuleError> {
 
     Ok(rule)
 }
+
 
 fn parse_condition(pair: Pair<Rule>) -> Result<Condition, RuleError> {
     let inner_pair = pair.into_inner().next()
@@ -71,15 +100,22 @@ fn parse_condition(pair: Pair<Rule>) -> Result<Condition, RuleError> {
 fn parse_property_condition(pair: Pair<Rule>) -> Result<Condition, RuleError> {
     let mut inner_pairs = pair.into_inner();
 
-    let property = inner_pairs.next()
-        .ok_or_else(|| RuleError::ParseError("Missing property".to_string()))?
-        .into_inner().next()
-        .ok_or_else(|| RuleError::ParseError("Empty property".to_string()))?
-        .as_str().to_string();
+    let property_pair = inner_pairs.next()
+        .ok_or_else(|| RuleError::ParseError("Missing property".to_string()))?;
 
-    let selector = inner_pairs.next()
-        .ok_or_else(|| RuleError::ParseError("Missing selector".to_string()))?
-        .as_str().to_string();
+    // Extract the property name from between the double underscores
+    let property_text = property_pair.as_str();
+    let property_name = property_text[2..property_text.len()-2].to_string();
+
+    // Transform property name with spaces to camelCase
+    let property = transform_property_name(&property_name);
+
+    let object_selector_pair = inner_pairs.next()
+        .ok_or_else(|| RuleError::ParseError("Missing object selector".to_string()))?;
+
+    // Extract the selector from between the double asterisks
+    let selector_text = object_selector_pair.as_str();
+    let selector = selector_text[2..selector_text.len()-2].to_string();
 
     let predicate = inner_pairs.next()
         .ok_or_else(|| RuleError::ParseError("Missing predicate".to_string()))?;
@@ -97,13 +133,23 @@ fn parse_property_condition(pair: Pair<Rule>) -> Result<Condition, RuleError> {
 fn parse_rule_reference(pair: Pair<Rule>) -> Result<Condition, RuleError> {
     let mut inner_pairs = pair.into_inner();
 
-    let selector = inner_pairs.next()
-        .ok_or_else(|| RuleError::ParseError("Missing selector in rule reference".to_string()))?
-        .as_str().to_string();
+    let object_selector_pair = inner_pairs.next()
+        .ok_or_else(|| RuleError::ParseError("Missing object selector in rule reference".to_string()))?;
 
-    let rule_name = inner_pairs.next()
-        .ok_or_else(|| RuleError::ParseError("Missing rule name in reference".to_string()))?
-        .as_str().trim_matches('"').to_string();
+    // Extract the selector from between the double asterisks
+    let selector_text = object_selector_pair.as_str();
+    let selector = selector_text[2..selector_text.len()-2].to_string();
+
+    // Skip the verb
+    inner_pairs.next();
+
+    // The reference object might be optional
+    let rule_name = if let Some(reference_object_pair) = inner_pairs.next() {
+        reference_object_pair.as_str().trim().to_string()
+    } else {
+        // If no specific reference object, use a generic name based on the verb
+        "requirement".to_string()
+    };
 
     Ok(Condition::RuleReference {
         selector,
@@ -111,33 +157,48 @@ fn parse_rule_reference(pair: Pair<Rule>) -> Result<Condition, RuleError> {
     })
 }
 
+
+
+
 fn parse_predicate(pair: Pair<Rule>) -> Result<(ComparisonOperator, RuleValue), RuleError> {
-    let mut inner_pairs = pair.into_inner();
+    let inner_pairs = pair.into_inner().collect::<Vec<_>>();
 
-    let op_pair = inner_pairs.next()
-        .ok_or_else(|| RuleError::ParseError("Missing operator".to_string()))?;
+    if inner_pairs.len() < 2 {
+        return Err(RuleError::ParseError("Predicate must have an operator and a value".to_string()));
+    }
 
+    let op_pair = &inner_pairs[0];
     let operator = match op_pair.as_str() {
         "is greater than or equal to" => ComparisonOperator::GreaterThanOrEqual,
+        "is less than or equal to" => ComparisonOperator::LessThanOrEqual,
         "is equal to" => ComparisonOperator::EqualTo,
+        "is not equal to" => ComparisonOperator::NotEqualTo,
         "is the same as" => ComparisonOperator::SameAs,
+        "is not the same as" => ComparisonOperator::NotSameAs,
         "is later than" => ComparisonOperator::LaterThan,
+        "is earlier than" => ComparisonOperator::EarlierThan,
         "is greater than" => ComparisonOperator::GreaterThan,
+        "is less than" => ComparisonOperator::LessThan,
         "is in" => ComparisonOperator::In,
+        "is not in" => ComparisonOperator::NotIn,
+        "contains" => ComparisonOperator::Contains,
         _ => return Err(RuleError::ParseError(format!("Unknown operator: {}", op_pair.as_str())))
     };
+    
+    let value_pair = &inner_pairs[1];
+    println!("Value pair rule: {:?}, text: {}", value_pair.as_rule(), value_pair.as_str());
 
-    let value_pair = inner_pairs.next()
-        .ok_or_else(|| RuleError::ParseError("Missing value".to_string()))?;
-
-    let value = if operator == ComparisonOperator::In {
-        parse_list_value(value_pair)?
+    let value = if operator == ComparisonOperator::In || operator == ComparisonOperator::NotIn {
+        parse_list_value(value_pair.clone())?
     } else {
-        parse_value(value_pair)?
+        parse_value(value_pair.clone())?
     };
+
+    println!("Parsed value: {:?}", value);
 
     Ok((operator, value))
 }
+
 
 fn parse_list_value(pair: Pair<Rule>) -> Result<RuleValue, RuleError> {
     let inner_pairs = pair.into_inner();
@@ -151,30 +212,60 @@ fn parse_list_value(pair: Pair<Rule>) -> Result<RuleValue, RuleError> {
 }
 
 fn parse_value(pair: Pair<Rule>) -> Result<RuleValue, RuleError> {
-    let inner_pair = pair.into_inner().next()
-        .ok_or_else(|| RuleError::ParseError("Empty value".to_string()))?;
-
-    match inner_pair.as_rule() {
+    match pair.as_rule() {
+        Rule::value => {
+            // If we got a value container, get the first child
+            let inner = pair.into_inner().next()
+                .ok_or_else(|| RuleError::ParseError("Empty value".to_string()))?;
+            parse_value(inner)
+        },
         Rule::number => {
-            let num = inner_pair.as_str().parse::<f64>()
+            let num = pair.as_str().parse::<f64>()
                 .map_err(|e| RuleError::ParseError(format!("Invalid number: {}", e)))?;
             Ok(RuleValue::Number(num))
         },
         Rule::string_literal => {
-            let s = inner_pair.as_str().trim_matches('"').to_string();
+            let s = pair.as_str().trim_matches('"').to_string();
             Ok(RuleValue::String(s))
         },
         Rule::date_literal => {
-            let date_str = inner_pair.as_str();
+            let date_str = pair.as_str();
+            // Debug output to see what we're parsing
+            println!("Parsing date literal: {}", date_str);
+
+            // Extract the date part from inside the date() function
+            // The format should be: date(YYYY-MM-DD)
             let date_part = &date_str[5..date_str.len()-1]; // Remove date() wrapper
+
+            println!("Extracted date part: {}", date_part);
+
             let date = NaiveDate::parse_from_str(date_part, "%Y-%m-%d")
                 .map_err(|e| RuleError::ParseError(format!("Invalid date: {}", e)))?;
+
+            println!("Parsed date: {}", date);
             Ok(RuleValue::Date(date))
         },
         Rule::boolean => {
-            let b = inner_pair.as_str() == "true";
+            let b = pair.as_str() == "true";
             Ok(RuleValue::Boolean(b))
         },
-        _ => Err(RuleError::ParseError(format!("Unknown value type: {:?}", inner_pair.as_rule())))
+        _ => Err(RuleError::ParseError(format!("Unknown value type: {:?}", pair.as_rule())))
     }
+}
+
+fn transform_property_name(name: &str) -> String {
+    let words: Vec<&str> = name.split_whitespace().collect();
+    if words.is_empty() {
+        return String::new();
+    }
+
+    let mut result = words[0].to_lowercase();
+    for word in &words[1..] {
+        if !word.is_empty() {
+            result.push_str(&word[0..1].to_uppercase());
+            result.push_str(&word[1..].to_lowercase());
+        }
+    }
+
+    result
 }

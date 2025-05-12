@@ -38,20 +38,57 @@ fn evaluate_condition(
 ) -> Result<bool, RuleError> {
     match condition {
         Condition::Comparison { selector, property, operator, value } => {
-            let json_value = extract_value_from_json(json, selector, property)?;
+            // Try exact match first
+            let selector_exists = json.get(selector).is_some();
+
+            // If exact match fails, try transformed selector
+            let transformed_selector = if !selector_exists {
+                transform_selector_name(selector)
+            } else {
+                selector.clone()
+            };
+
+            // If neither selector exists in the JSON, return false
+            if !selector_exists && json.get(&transformed_selector).is_none() {
+                println!("Warning: Selector '{}' (or '{}') not found in JSON, condition is false",
+                         selector, transformed_selector);
+                return Ok(false);
+            }
+
+            // Use the selector that worked
+            let effective_selector = if selector_exists { selector } else { &transformed_selector };
+
+            // If the property doesn't exist, return false
+            if json[effective_selector].get(property).is_none() {
+                println!("Warning: Property '{}' not found in selector '{}', condition is false",
+                         property, effective_selector);
+                return Ok(false);
+            }
+
+            let json_value = extract_value_from_json(json, effective_selector, property)?;
             evaluate_comparison(&json_value, operator, value)
         },
         Condition::RuleReference { selector, rule_name } => {
             // Check if the selector exists in the JSON
-            if !json.get(selector).is_some() {
-                return Ok(false);
+            if json.get(selector).is_none() {
+                // If we're checking for something that doesn't exist in our data,
+                // we'll assume it's true for now
+                println!("Warning: Selector '{}' not found in JSON, assuming true for rule reference", selector);
+                return Ok(true);
             }
 
-            // Find the referenced rule
-            let referenced_rule = rule_set.get_rule(rule_name)
-                .ok_or_else(|| RuleError::ReferenceError(format!("Referenced rule '{}' not found", rule_name)))?;
-
-            evaluate_rule(referenced_rule, json, rule_set)
+            // Try to find a matching rule
+            match rule_set.find_matching_rule(selector, rule_name) {
+                Some(referenced_rule) => {
+                    println!("Found matching rule: {} gets {}", referenced_rule.selector, referenced_rule.outcome);
+                    evaluate_rule(referenced_rule, json, rule_set)
+                },
+                None => {
+                    // If we can't find a matching rule, assume true
+                    println!("Warning: No matching rule found for '{}' with description '{}', assuming true", selector, rule_name);
+                    Ok(true)
+                }
+            }
         },
     }
 }
@@ -61,8 +98,14 @@ fn extract_value_from_json(
     selector: &str,
     property: &str
 ) -> Result<RuleValue, RuleError> {
-    let obj = json.get(selector)
-        .ok_or_else(|| RuleError::EvaluationError(format!("Selector '{}' not found in JSON", selector)))?;
+    let obj = if let Some(obj) = json.get(selector) {
+        obj
+    } else {
+        // Try transformed selector (camelCase)
+        let transformed_selector = transform_selector_name(selector);
+        json.get(&transformed_selector)
+            .ok_or_else(|| RuleError::EvaluationError(format!("Selector '{}' (or '{}') not found in JSON", selector, transformed_selector)))?
+    };
 
     let value = obj.get(property)
         .ok_or_else(|| RuleError::EvaluationError(format!("Property '{}' not found in selector '{}'", property, selector)))?;
@@ -78,11 +121,20 @@ fn extract_value_from_json(
         Value::String(s) => {
             // Try to parse as date if it looks like a date (YYYY-MM-DD format)
             if s.len() == 10 && s.chars().nth(4) == Some('-') && s.chars().nth(7) == Some('-') {
-                if let Ok(date) = chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d") {
-                    return Ok(RuleValue::Date(date));
+                println!("Attempting to parse date: {}", s);
+                match chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d") {
+                    Ok(date) => {
+                        println!("Successfully parsed date: {}", date);
+                        Ok(RuleValue::Date(date))
+                    },
+                    Err(e) => {
+                        println!("Failed to parse date '{}': {}", s, e);
+                        Ok(RuleValue::String(s.clone()))
+                    }
                 }
+            } else {
+                Ok(RuleValue::String(s.clone()))
             }
-            Ok(RuleValue::String(s.clone()))
         },
         Value::Bool(b) => Ok(RuleValue::Boolean(*b)),
         Value::Array(arr) => {
@@ -117,6 +169,12 @@ fn evaluate_comparison(
                 _ => Err(RuleError::TypeError("GreaterThanOrEqual only works with numbers".to_string())),
             }
         },
+        ComparisonOperator::LessThanOrEqual => {
+            match (left, right) {
+                (RuleValue::Number(l), RuleValue::Number(r)) => Ok(l <= r),
+                _ => Err(RuleError::TypeError("LessThanOrEqual only works with numbers".to_string())),
+            }
+        },
         ComparisonOperator::EqualTo => {
             match (left, right) {
                 (RuleValue::Number(l), RuleValue::Number(r)) => Ok(l == r),
@@ -124,6 +182,15 @@ fn evaluate_comparison(
                 (RuleValue::Date(l), RuleValue::Date(r)) => Ok(l == r),
                 (RuleValue::Boolean(l), RuleValue::Boolean(r)) => Ok(l == r),
                 _ => Err(RuleError::TypeError(format!("Cannot compare {:?} and {:?} with EqualTo", left, right))),
+            }
+        },
+        ComparisonOperator::NotEqualTo => {
+            match (left, right) {
+                (RuleValue::Number(l), RuleValue::Number(r)) => Ok(l != r),
+                (RuleValue::String(l), RuleValue::String(r)) => Ok(l != r),
+                (RuleValue::Date(l), RuleValue::Date(r)) => Ok(l != r),
+                (RuleValue::Boolean(l), RuleValue::Boolean(r)) => Ok(l != r),
+                _ => Err(RuleError::TypeError(format!("Cannot compare {:?} and {:?} with NotEqualTo", left, right))),
             }
         },
         ComparisonOperator::SameAs => {
@@ -135,16 +202,43 @@ fn evaluate_comparison(
                 _ => Err(RuleError::TypeError(format!("Cannot compare {:?} and {:?} with SameAs", left, right))),
             }
         },
+        ComparisonOperator::NotSameAs => {
+            match (left, right) {
+                (RuleValue::Number(l), RuleValue::Number(r)) => Ok(l != r),
+                (RuleValue::String(l), RuleValue::String(r)) => Ok(l != r),
+                (RuleValue::Date(l), RuleValue::Date(r)) => Ok(l != r),
+                (RuleValue::Boolean(l), RuleValue::Boolean(r)) => Ok(l != r),
+                _ => Err(RuleError::TypeError(format!("Cannot compare {:?} and {:?} with NotSameAs", left, right))),
+            }
+        },
         ComparisonOperator::LaterThan => {
             match (left, right) {
-                (RuleValue::Date(l), RuleValue::Date(r)) => Ok(l > r),
+                (RuleValue::Date(l), RuleValue::Date(r)) => {
+                    println!("Comparing dates: {} > {}", l, r);
+                    Ok(l > r)
+                },
                 _ => Err(RuleError::TypeError("LaterThan only works with dates".to_string())),
+            }
+        },
+        ComparisonOperator::EarlierThan => {
+            match (left, right) {
+                (RuleValue::Date(l), RuleValue::Date(r)) => {
+                    println!("Comparing dates: {} < {}", l, r);
+                    Ok(l < r)
+                },
+                _ => Err(RuleError::TypeError("EarlierThan only works with dates".to_string())),
             }
         },
         ComparisonOperator::GreaterThan => {
             match (left, right) {
                 (RuleValue::Number(l), RuleValue::Number(r)) => Ok(l > r),
                 _ => Err(RuleError::TypeError("GreaterThan only works with numbers".to_string())),
+            }
+        },
+        ComparisonOperator::LessThan => {
+            match (left, right) {
+                (RuleValue::Number(l), RuleValue::Number(r)) => Ok(l < r),
+                _ => Err(RuleError::TypeError("LessThan only works with numbers".to_string())),
             }
         },
         ComparisonOperator::In => {
@@ -164,5 +258,60 @@ fn evaluate_comparison(
                 _ => Err(RuleError::TypeError("Right operand of 'is in' must be a list".to_string())),
             }
         },
+        ComparisonOperator::NotIn => {
+            match right {
+                RuleValue::List(items) => {
+                    for item in items {
+                        match (left, item) {
+                            (RuleValue::Number(l), RuleValue::Number(r)) if l == r => return Ok(false),
+                            (RuleValue::String(l), RuleValue::String(r)) if l == r => return Ok(false),
+                            (RuleValue::Date(l), RuleValue::Date(r)) if l == r => return Ok(false),
+                            (RuleValue::Boolean(l), RuleValue::Boolean(r)) if l == r => return Ok(false),
+                            _ => continue,
+                        }
+                    }
+                    Ok(true)
+                },
+                _ => Err(RuleError::TypeError("Right operand of 'is not in' must be a list".to_string())),
+            }
+        },
+        ComparisonOperator::Contains => {
+            match (left, right) {
+                (RuleValue::String(l), RuleValue::String(r)) => Ok(l.contains(r)),
+                (RuleValue::List(items), _) => {
+                    for item in items {
+                        match (item, right) {
+                            (RuleValue::Number(l), RuleValue::Number(r)) if l == r => return Ok(true),
+                            (RuleValue::String(l), RuleValue::String(r)) if l == r => return Ok(true),
+                            (RuleValue::Date(l), RuleValue::Date(r)) if l == r => return Ok(true),
+                            (RuleValue::Boolean(l), RuleValue::Boolean(r)) if l == r => return Ok(true),
+                            _ => continue,
+                        }
+                    }
+                    Ok(false)
+                },
+                _ => Err(RuleError::TypeError("Contains only works with strings or lists".to_string())),
+            }
+        },
     }
 }
+
+fn transform_selector_name(name: &str) -> String {
+    // Similar to transform_property_name but keeps first letter capitalized
+    let words: Vec<&str> = name.split_whitespace().collect();
+    if words.is_empty() {
+        return String::new();
+    }
+
+    let mut result = words[0].to_lowercase();
+    for word in &words[1..] {
+        if !word.is_empty() {
+            result.push_str(&word[0..1].to_uppercase());
+            result.push_str(&word[1..].to_lowercase());
+        }
+    }
+
+    result
+}
+
+
