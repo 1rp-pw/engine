@@ -1,19 +1,12 @@
 use serde_json::json;
-use crate::evaluator::evaluate_rule_set;
-use crate::parser::parse_rules;
+mod runner;
 
-// src/lib.rs
-pub mod error;
-pub mod model;
-pub mod parser;
-pub mod evaluator;
 
-// src/lib.rs (partial update - just the tests)
 #[cfg(test)]
 mod tests {
     use super::*;
-    use parser::parse_rules;
-    use evaluator::evaluate_rule_set;
+    use runner::parser::parse_rules;
+    use runner::evaluator::evaluate_rule_set;
     use serde_json::json;
 
     #[test]
@@ -297,7 +290,7 @@ fn test_property_name_transformation() {
       if the __first name__ of the **Person** is equal to "John".
     "#;
 
-    let rule_set = parse_rules(rule_text).unwrap();
+    let rule_set = runner::parser::parse_rules(rule_text).unwrap();
 
     // Test case where condition is true
     let json_true = json!({
@@ -305,7 +298,7 @@ fn test_property_name_transformation() {
             "firstName": "John"
         }
     });
-    let results_true = evaluate_rule_set(&rule_set, &json_true).unwrap();
+    let results_true = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
     assert!(results_true["discount"]);
 
     // Test case where condition is false
@@ -314,7 +307,7 @@ fn test_property_name_transformation() {
             "firstName": "Jane"
         }
     });
-    let results_false = evaluate_rule_set(&rule_set, &json_false).unwrap();
+    let results_false = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
     assert!(!results_false["discount"]);
 }
 

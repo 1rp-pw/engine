@@ -1,4 +1,3 @@
-// src/error.rs
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -11,9 +10,6 @@ pub enum RuleError {
 
     #[error("Type error: {0}")]
     TypeError(String),
-
-    #[error("Reference error: {0}")]
-    ReferenceError(String),
 
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),

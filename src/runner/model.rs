@@ -1,9 +1,7 @@
-// src/model.rs
 use chrono::NaiveDate;
 use std::collections::HashMap;
 use std::fmt;
 
-// src/model.rs (partial update)
 #[derive(Debug, Clone, PartialEq)]
 pub enum ComparisonOperator {
     GreaterThanOrEqual,
@@ -131,16 +129,6 @@ impl RuleSet {
 
     pub fn get_rule(&self, outcome: &str) -> Option<&Rule> {
         self.rule_map.get(outcome).map(|&index| &self.rules[index])
-    }
-
-    pub fn find_rule_by_description(&self, description: &str) -> Option<&Rule> {
-        for rule in &self.rules {
-            let rule_desc = format!("passes {}", rule.outcome);
-            if rule_desc == description {
-                return Some(rule);
-            }
-        }
-        None
     }
 
     pub fn find_matching_rule(&self, selector: &str, description: &str) -> Option<&Rule> {

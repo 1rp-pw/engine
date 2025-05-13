@@ -1,15 +1,11 @@
-// src/main.rs
-mod error;
-mod model;
-mod parser;
-mod evaluator;
+mod runner;
+use runner::error::RuleError;
+use runner::parser::parse_rules;
+use runner::evaluator::evaluate_rule_set;
+use runner::model::Condition;
 
-use error::RuleError;
-use parser::parse_rules;
-use evaluator::evaluate_rule_set;
 use serde_json::Value;
 use std::fs;
-use crate::model::Condition;
 
 fn main() -> Result<(), RuleError> {
     let rules_file = "examples/driving_test.rules";

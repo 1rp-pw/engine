@@ -1,6 +1,5 @@
-// src/evaluator.rs
-use crate::error::RuleError;
-use crate::model::{Condition, ComparisonOperator, Rule, RuleSet, RuleValue};
+use crate::runner::error::RuleError;
+use crate::runner::model::{Condition, ComparisonOperator, Rule, RuleSet, RuleValue};
 use serde_json::Value;
 use std::collections::HashMap;
 

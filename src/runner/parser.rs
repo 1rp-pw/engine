@@ -1,13 +1,12 @@
-// src/parser.rs
-use crate::error::RuleError;
-use crate::model::{Condition, ComparisonOperator, RuleSet, RuleValue};
+use crate::runner::error::RuleError;
 use chrono::NaiveDate;
 use pest::Parser;
 use pest_derive::Parser;
 use pest::iterators::Pair;
+use crate::runner::model::{ComparisonOperator, RuleSet, RuleValue, Condition};
 
 #[derive(Parser)]
-#[grammar = "src/grammer.pest"]
+#[grammar = "pests/grammer.pest"]
 pub struct RuleParser;
 
 pub fn parse_rules(input: &str) -> Result<RuleSet, RuleError> {
@@ -22,7 +21,7 @@ pub fn parse_rules(input: &str) -> Result<RuleSet, RuleError> {
                 for rule_pair in pair.into_inner() {
                     if rule_pair.as_rule() == Rule::rule {
                         let rule = parse_rule(rule_pair)?;
-                        rule_set.add_rule(rule);
+                        rule_set.add_rule(rule)
                     }
                 }
             }
@@ -33,7 +32,7 @@ pub fn parse_rules(input: &str) -> Result<RuleSet, RuleError> {
     Ok(rule_set)
 }
 
-fn parse_rule(pair: Pair<Rule>) -> Result<crate::model::Rule, RuleError> {
+fn parse_rule(pair: Pair<Rule>) -> Result<crate::runner::model::Rule, RuleError> {
     let mut inner_pairs = pair.into_inner();
 
     // Parse rule header (which includes label and selector)
@@ -72,7 +71,7 @@ fn parse_rule(pair: Pair<Rule>) -> Result<crate::model::Rule, RuleError> {
         .ok_or_else(|| RuleError::ParseError("Missing outcome text".to_string()))?
         .as_str().trim().to_string();
 
-    let mut rule = crate::model::Rule::new(label, selector, outcome_text);
+    let mut rule = crate::runner::model::Rule::new(label, selector, outcome_text);
 
     // Parse conditions
     for condition_pair in inner_pairs {
@@ -184,9 +183,9 @@ fn parse_predicate(pair: Pair<Rule>) -> Result<(ComparisonOperator, RuleValue), 
         "contains" => ComparisonOperator::Contains,
         _ => return Err(RuleError::ParseError(format!("Unknown operator: {}", op_pair.as_str())))
     };
-    
+
     let value_pair = &inner_pairs[1];
-    println!("Value pair rule: {:?}, text: {}", value_pair.as_rule(), value_pair.as_str());
+    //println!("Value pair rule: {:?}, text: {}", value_pair.as_rule(), value_pair.as_str());
 
     let value = if operator == ComparisonOperator::In || operator == ComparisonOperator::NotIn {
         parse_list_value(value_pair.clone())?
@@ -230,12 +229,16 @@ fn parse_value(pair: Pair<Rule>) -> Result<RuleValue, RuleError> {
         },
         Rule::date_literal => {
             let date_str = pair.as_str();
-            // Debug output to see what we're parsing
             println!("Parsing date literal: {}", date_str);
 
-            // Extract the date part from inside the date() function
-            // The format should be: date(YYYY-MM-DD)
-            let date_part = &date_str[5..date_str.len()-1]; // Remove date() wrapper
+            // Check if it's in date() format or plain format
+            let date_part = if date_str.starts_with("date(") && date_str.ends_with(")") {
+                // Extract from date() wrapper
+                &date_str[5..date_str.len()-1]
+            } else {
+                // It's already in YYYY-MM-DD format
+                date_str
+            };
 
             println!("Extracted date part: {}", date_part);
 

@@ -1,4 +1,3 @@
-// src/grammar.pest (update selector and property rules)
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 COMMENT = _{ "#" ~ (!"\n" ~ ANY)* ~ "\n" }
 
