@@ -1,7 +1,6 @@
 use serde_json::json;
 mod runner;
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -152,11 +151,11 @@ mod tests {
     #[test]
     fn test_earlier_than() {
         let rule_text = r#"
-        A **Document** is archived
+        A Document is archived
           if the __creationDate__ of the **Document** is earlier than 2020-01-01.
         "#;
 
-        let rule_set = parse_rules(rule_text).unwrap();
+        let rule_set = parse_rules(rule_text).expect("Parse error: failed to parse rules");
 
         // Test case where condition is true
         let json_true = json!({

@@ -225,7 +225,7 @@ fn evaluate_comparison(
                     println!("Comparing dates: {} < {}", l, r);
                     Ok(l < r)
                 },
-                _ => Err(RuleError::TypeError("EarlierThan only works with dates".to_string())),
+                _ => Err(RuleError::TypeError(format!("EarlierThan only works with dates {} {}", left, right))),
             }
         },
         ComparisonOperator::GreaterThan => {
