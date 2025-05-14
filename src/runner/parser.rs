@@ -3,7 +3,7 @@ use chrono::NaiveDate;
 use pest::Parser;
 use pest_derive::Parser;
 use pest::iterators::Pair;
-use crate::runner::model::{ComparisonOperator, RuleSet, RuleValue, Condition};
+use crate::runner::model::{ComparisonOperator, RuleSet, RuleValue, Condition, SourcePosition};
 
 #[derive(Parser)]
 #[grammar = "pests/grammer.pest"]
@@ -29,10 +29,22 @@ pub fn parse_rules(input: &str) -> Result<RuleSet, RuleError> {
         }
     }
 
+    crate::runner::utils::find_global_rule(&rule_set.rules)?;
+
     Ok(rule_set)
 }
 
 fn parse_rule(pair: Pair<Rule>) -> Result<crate::runner::model::Rule, RuleError> {
+    let span = pair.as_span();
+    let line = span.start_pos().line_col().0;
+    let start = span.start();
+    let end = span.end();
+    let position = Some(SourcePosition {
+        line,
+        start,
+        end,
+    });
+
     let mut inner_pairs = pair.into_inner();
 
     // Parse rule header (which includes label and selector)
@@ -41,6 +53,11 @@ fn parse_rule(pair: Pair<Rule>) -> Result<crate::runner::model::Rule, RuleError>
 
     let mut label = None;
     let mut selector = String::new();
+    let mut selector_pos = Some(SourcePosition {
+        line: 0,
+        start: 0,
+        end: 0,
+    });
 
     for header_part in header_pair.into_inner() {
         match header_part.as_rule() {
@@ -51,6 +68,12 @@ fn parse_rule(pair: Pair<Rule>) -> Result<crate::runner::model::Rule, RuleError>
             },
             Rule::object_selector => {
                 // Extract the selector from between the double asterisks
+                let span = header_part.as_span();
+                selector_pos = Some(SourcePosition {
+                    line: span.start_pos().line_col().0,
+                    start: span.start(),
+                    end: span.end(),
+                });
                 let selector_text = header_part.as_str();
                 selector = selector_text[2..selector_text.len()-2].to_string();
             },
@@ -72,6 +95,8 @@ fn parse_rule(pair: Pair<Rule>) -> Result<crate::runner::model::Rule, RuleError>
         .as_str().trim().to_string();
 
     let mut rule = crate::runner::model::Rule::new(label, selector, outcome_text);
+    rule.position = position;
+    rule.selector_pos = selector_pos;
 
     // Parse conditions
     for condition_pair in inner_pairs {
@@ -83,7 +108,6 @@ fn parse_rule(pair: Pair<Rule>) -> Result<crate::runner::model::Rule, RuleError>
 
     Ok(rule)
 }
-
 
 fn parse_condition(pair: Pair<Rule>) -> Result<Condition, RuleError> {
     let inner_pair = pair.into_inner().next()
@@ -107,7 +131,7 @@ fn parse_property_condition(pair: Pair<Rule>) -> Result<Condition, RuleError> {
     let property_name = property_text[2..property_text.len()-2].to_string();
 
     // Transform property name with spaces to camelCase
-    let property = transform_property_name(&property_name);
+    let property = crate::runner::utils::transform_property_name(&property_name);
 
     let object_selector_pair = inner_pairs.next()
         .ok_or_else(|| RuleError::ParseError("Missing object selector".to_string()))?;
@@ -140,24 +164,28 @@ fn parse_rule_reference(pair: Pair<Rule>) -> Result<Condition, RuleError> {
     let selector = selector_text[2..selector_text.len()-2].to_string();
 
     // Skip the verb
-    inner_pairs.next();
+    let verb = inner_pairs.next();
+    println!("Parsing rule reference: selector='{}', verb='{:?}'", selector, verb.map(|v| v.as_str()));
 
     // The reference object might be optional
-    let rule_name = if let Some(reference_object_pair) = inner_pairs.next() {
-        reference_object_pair.as_str().trim().to_string()
-    } else {
-        // If no specific reference object, use a generic name based on the verb
+    let mut rule_name = String::new();
+    for part in inner_pairs {
+        println!("  Rule name part: '{}'", part.as_str().trim());
+        rule_name.push_str(part.as_str().trim());
+    }
+
+    let rule_name = if rule_name.is_empty() {
         "requirement".to_string()
+    } else {
+        rule_name
     };
 
+    println!("  Final rule name: '{}'", rule_name);
     Ok(Condition::RuleReference {
         selector,
         rule_name,
     })
 }
-
-
-
 
 fn parse_predicate(pair: Pair<Rule>) -> Result<(ComparisonOperator, RuleValue), RuleError> {
     let inner_pairs = pair.into_inner().collect::<Vec<_>>();
@@ -193,11 +221,8 @@ fn parse_predicate(pair: Pair<Rule>) -> Result<(ComparisonOperator, RuleValue), 
         parse_value(value_pair.clone())?
     };
 
-    println!("Parsed value: {:?}", value);
-
     Ok((operator, value))
 }
-
 
 fn parse_list_value(pair: Pair<Rule>) -> Result<RuleValue, RuleError> {
     let inner_pairs = pair.into_inner();
@@ -254,21 +279,4 @@ fn parse_value(pair: Pair<Rule>) -> Result<RuleValue, RuleError> {
         },
         _ => Err(RuleError::ParseError(format!("Unknown value type: {:?}", pair.as_rule())))
     }
-}
-
-fn transform_property_name(name: &str) -> String {
-    let words: Vec<&str> = name.split_whitespace().collect();
-    if words.is_empty() {
-        return String::new();
-    }
-
-    let mut result = words[0].to_lowercase();
-    for word in &words[1..] {
-        if !word.is_empty() {
-            result.push_str(&word[0..1].to_uppercase());
-            result.push_str(&word[1..].to_lowercase());
-        }
-    }
-
-    result
 }

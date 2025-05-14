@@ -1,40 +1,78 @@
 use crate::runner::error::RuleError;
 use crate::runner::model::{Condition, ComparisonOperator, Rule, RuleSet, RuleValue};
-use crate::runner::trace::{RuleSetTrace, RuleTrace, ConditionTrace, ComparisonTrace, ComparisonEvaluationTrace, RuleReferenceTrace};
+use crate::runner::trace::{
+    RuleSetTrace, 
+    RuleTrace, 
+    ConditionTrace, 
+    ComparisonTrace, 
+    ComparisonEvaluationTrace, 
+    RuleReferenceTrace,
+    PropertyCheckTrace,
+};
 
-use serde_json::Value;
-use std::collections::HashMap;
+use serde_json::{json, Value};
+use std::collections::{HashMap, HashSet};
 
 pub fn evaluate_rule_set(
     rule_set: &RuleSet,
     json: &Value
 ) -> Result<(HashMap<String, bool>, RuleSetTrace), RuleError> {
-    let mut results = HashMap::new();
-    let mut rule_traces = Vec::new();
+    let global_rule= crate::runner::utils::find_global_rule(&rule_set.rules)?;
+    let (result, rule_trace) = evaluate_rule(global_rule, json, rule_set)?;
 
-    for rule in &rule_set.rules {
-        let (result, rule_trace) = evaluate_rule(rule, json, rule_set)?;
-        results.insert(rule.outcome.clone(), result);
-        rule_traces.push(rule_trace);
+    let mut results = HashMap::new();
+    results.insert(global_rule.outcome.clone(), result);
+
+    let mut all_traces = vec![rule_trace];
+
+    let mut processed_rules = HashSet::new();
+    processed_rules.insert(global_rule.outcome.clone());
+
+    let mut i = 0;
+    while i < all_traces.len() {
+        let mut rules_to_process = Vec::new();
+        {
+            let trace = &all_traces[i];
+            for condition in &trace.conditions {
+                if let ConditionTrace::RuleReference(ref_trace) = condition {
+                    if let Some(outcome) = &ref_trace.referenced_rule_outcome {
+                        if !processed_rules.contains(outcome) {
+                            if let Some(rule) = rule_set.get_rule(outcome) {
+                                rules_to_process.push((outcome.clone(), rule));
+                                processed_rules.insert(outcome.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Then process the collected rules and modify all_traces
+        for (outcome, rule) in rules_to_process {
+            let (sub_result, sub_trace) = evaluate_rule(rule, json, rule_set)?;
+            results.insert(outcome, sub_result);
+            all_traces.push(sub_trace);
+        }
+
+        i += 1;
     }
     
     let rule_set_trace = RuleSetTrace {
-        rules: rule_traces,
-        results: results.clone().into_iter().collect(),
+        execution: all_traces,
     };
 
     Ok((results, rule_set_trace))
 }
 
 pub fn evaluate_rule(
-    rule: &Rule,
+    model_rule: &Rule,
     json: &Value,
     rule_set: &RuleSet
 ) -> Result<(bool, RuleTrace), RuleError> {
     let mut condition_traces = Vec::new();
     let mut rule_result = true;
     
-    for condition in &rule.conditions {
+    for condition in &model_rule.conditions {
         let (condition_result, condition_trace) = evaluate_condition(condition, json, rule_set)?;
         condition_traces.push(condition_trace);
         if !condition_result {
@@ -43,10 +81,13 @@ pub fn evaluate_rule(
     }
     
     let rule_trace = RuleTrace {
-        label: rule.label.clone(),
-        selector: rule.selector.clone(),
-        outcome: rule.outcome.clone(),
+        label: model_rule.label.clone(),
+        selector: model_rule.selector.clone(),
+        selector_pos: None,
+        outcome: model_rule.outcome.clone(),
+        outcome_pos: None,
         conditions: condition_traces,
+        position: None,
         result: rule_result,
     };
     
@@ -59,6 +100,119 @@ fn evaluate_condition(
     rule_set: &RuleSet
 ) -> Result<(bool, ConditionTrace), RuleError> {
     match condition {
+        Condition::RuleReference { selector, rule_name } => {
+            let selector_exists = json.get(selector).is_some();
+            let effective_selector = if selector_exists {
+                selector.clone()
+            } else {
+                let transformed = transform_selector_name(selector);
+                if json.get(&transformed).is_some() {
+                    transformed
+                } else {
+                    return Ok((false, ConditionTrace::RuleReference(RuleReferenceTrace {
+                        selector: selector.clone(),
+                        rule_name: rule_name.clone(),
+                        referenced_rule_outcome: None,
+                        property_check: None,
+                        result: false,
+                    })));
+                }
+            };
+
+            // Process just this specific rule reference
+            let part = rule_name.trim();
+            let mut overall_result = true;
+            let mut referenced_outcome = None;
+            let mut property_check = None;
+
+            // Try to find a matching rule by exact outcome match first
+            if let Some(referenced_rule) = rule_set.get_rule(part) {
+                let (referenced_result, _) = evaluate_rule(referenced_rule, json, rule_set)?;
+                if !referenced_result {
+                    overall_result = false;
+                }
+                referenced_outcome = Some(referenced_rule.outcome.to_string());
+            } else {
+                // If no exact match, try to find a rule with similar description
+                if let Some(referenced_rule) = rule_set.find_matching_rule(selector, part) {
+                    let (referenced_result, _) = evaluate_rule(referenced_rule, json, rule_set)?;
+                    if !referenced_result {
+                        overall_result = false;
+                    }
+                    referenced_outcome = Some(referenced_rule.outcome.clone());
+                } else {
+                    // If we still can't find a matching rule, try to infer a property
+                    let possible_properties = crate::runner::utils::infer_possible_properties(part);
+                    let mut property_found = false;
+
+                    if let Some(obj) = json.get(&effective_selector) {
+                        for property in &possible_properties {
+                            if let Some(property_value) = obj.get(property) {
+                                property_found = true;
+
+                                // Check the property value
+                                if let Some(value_bool) = property_value.as_bool() {
+                                    if !value_bool {
+                                        overall_result = false;
+                                    }
+                                    // Store the property check details
+                                    property_check = Some(PropertyCheckTrace {
+                                        property_name: property.clone(),
+                                        property_value: json!({ "Boolean": value_bool }),
+                                    });
+                                } else if let Some(value_str) = property_value.as_str() {
+                                    // For string values, consider "pass", "true", "yes", etc. as passing
+                                    let lower_value = value_str.to_lowercase();
+                                    let passes = lower_value == "pass" || lower_value == "true" ||
+                                        lower_value == "yes" || lower_value == "passed";
+                                    if !passes {
+                                        overall_result = false;
+                                    }
+                                    // Store the property check details
+                                    property_check = Some(PropertyCheckTrace {
+                                        property_name: property.clone(),
+                                        property_value: json!({ "String": value_str }),
+                                    });
+                                } else if let Some(value_num) = property_value.as_f64() {
+                                    // For numeric values, consider non-zero as passing
+                                    if value_num == 0.0 {
+                                        overall_result = false;
+                                    }
+                                    // Store the property check details
+                                    property_check = Some(PropertyCheckTrace {
+                                        property_name: property.clone(),
+                                        property_value: json!({ "Number": value_num }),
+                                    });
+                                } else {
+                                    // For other types, just store the raw value
+                                    property_check = Some(PropertyCheckTrace {
+                                        property_name: property.clone(),
+                                        property_value: property_value.clone(),
+                                    });
+                                }
+
+                                break;
+                            }
+                        }
+                    }
+
+                    if !property_found {
+                        // If we can't find any corresponding property, assume true
+                        println!("Warning: No matching rule or property found for '{}' with description '{}', assuming true", selector, part);
+                    }
+                }
+            }
+
+            let rule_reference_trace = RuleReferenceTrace {
+                selector: selector.clone(),
+                rule_name: rule_name.clone(),
+                referenced_rule_outcome: referenced_outcome,
+                property_check: property_check,
+                result: overall_result,
+            };
+
+            Ok((overall_result, ConditionTrace::RuleReference(rule_reference_trace)))
+        },
         Condition::Comparison { selector, property, operator, value } => {
             // Try exact match first
             let selector_exists = json.get(selector).is_some();
@@ -71,20 +225,37 @@ fn evaluate_condition(
             };
 
             // If neither selector exists in the JSON, return false
-            if !selector_exists && json.get(&transformed_selector).is_none() {
-                println!("Warning: Selector '{}' (or '{}') not found in JSON, condition is false",
-                         selector, transformed_selector);
-                false;
-            }
-
-            // Use the selector that worked
-            let effective_selector = if selector_exists { selector } else { &transformed_selector };
+            let effective_selector = if selector_exists {
+                selector
+            } else if json.get(&transformed_selector).is_some() {
+                &transformed_selector
+            } else {
+                return Ok((false, ConditionTrace::Comparison(ComparisonTrace {
+                    selector: selector.clone(),
+                    selector_pos: None,
+                    property: property.clone(),
+                    property_pos: None,
+                    operator: operator.clone(),
+                    value: value.clone(),
+                    evaluation_details: None,
+                    result: false,
+                    position: None,
+                })))
+            };
 
             // If the property doesn't exist, return false
             if json[effective_selector].get(property).is_none() {
-                println!("Warning: Property '{}' not found in selector '{}', condition is false",
-                         property, effective_selector);
-                false;
+                return Ok((false, ConditionTrace::Comparison(ComparisonTrace {
+                    selector: selector.clone(),
+                    selector_pos: None,
+                    property: property.clone(),
+                    property_pos: None,
+                    operator: operator.clone(),
+                    value: value.clone(),
+                    evaluation_details: None,
+                    result: false,
+                    position: None,
+                })))
             }
 
             let json_value = extract_value_from_json(json, effective_selector, property)?;
@@ -102,49 +273,20 @@ fn evaluate_condition(
                     (false, None)
                 }
             };
-            
+
             let comparison_trace = ComparisonTrace {
                 selector: selector.clone(),
+                selector_pos: None,
                 property: property.clone(),
+                property_pos: None,
                 operator: operator.clone(),
                 value: value.clone(),
-                evaluation_details: evaluation_details,
+                evaluation_details,
                 result: comparison_result,
+                position: None,
             };
-            
-            Ok((comparison_result, ConditionTrace::Comparison(comparison_trace)))
-        },
-        Condition::RuleReference { selector, rule_name } => {
-            // Check if the selector exists in the JSON
-            if json.get(selector).is_none() {
-                // If we're checking for something that doesn't exist in our data,
-                // we'll assume it's true for now
-                println!("Warning: Selector '{}' not found in JSON, assuming true for rule reference", selector);
-                true;
-            }
 
-            // Try to find a matching rule
-            let (rule_reference_result, referenced_rule_outcome) = match rule_set.find_matching_rule(selector, rule_name) {
-                Some(referenced_rule) => {
-                    println!("Found matching rule: {} gets {}", referenced_rule.selector, referenced_rule.outcome);
-                    let (referenced_result, _) = evaluate_rule(referenced_rule, json, rule_set)?;
-                    (referenced_result, Some(referenced_rule.outcome.clone()))
-                },
-                None => {
-                    // If we can't find a matching rule, assume true
-                    println!("Warning: No matching rule found for '{}' with description '{}', assuming true", selector, rule_name);
-                    (true, None)
-                }
-            };
-            
-            let rule_reference_trace = RuleReferenceTrace {
-                selector: selector.clone(),
-                rule_name: rule_name.clone(),
-                referenced_rule_outcome,
-                result: rule_reference_result,
-            };
-            
-            Ok((rule_reference_result, ConditionTrace::RuleReference(rule_reference_trace)))
+            Ok((comparison_result, ConditionTrace::Comparison(comparison_trace)))
         },
     }
 }

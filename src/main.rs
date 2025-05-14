@@ -1,4 +1,6 @@
 mod runner;
+
+use std::collections::HashMap;
 use runner::parser::parse_rules;
 use runner::evaluator::evaluate_rule_set;
 use runner::model::{Condition, RuleSet};
@@ -21,11 +23,15 @@ struct RuleDataPackage {
 
 #[derive(Serialize)]
 struct EvaluationResponse {
-    results: Vec<(String, bool)>,
+    result: bool,
     #[serde(skip_serializing_if="Option::is_none")]
     error: Option<String>,
     #[serde(skip_serializing_if="Option::is_none")]
     trace: Option<RuleSetTrace>,
+    #[serde(skip_serializing_if="Option::is_none")]
+    labels: Option<HashMap<String, bool>>,
+    text: Vec<String>,
+    data: Value,
 }
 
 #[tokio::main]
@@ -47,54 +53,56 @@ async fn handle_evaluation(Json(package): Json<RuleDataPackage>) -> (StatusCode,
     match parse_rules(&package.rule) {
         Ok(rule_set) => match evaluate_rule_set(&rule_set, &package.data) {
             Ok((results, trace)) => {
+                print_rules(&rule_set);
+                
+                let mut labels = HashMap::new();
+                for rule_trace in &trace.execution {
+                    if let Some(label) = &rule_trace.label {
+                        labels.insert(label.to_string(), rule_trace.result);
+                    }
+                }
+
+                let result = results.values().next().cloned().unwrap_or(false);
+                let text = package.rule.lines().map(String::from).collect();
                 let response = EvaluationResponse {
-                    results: results.into_iter().collect(),
+                    result,
                     error: None,
                     trace: Some(trace),
+                    labels: if labels.is_empty() { 
+                        None
+                    } else {
+                        Some(labels)
+                    },
+                    text,
+                    data: package.data.clone(),
                 };
                 (StatusCode::OK, Json(response))
             }
             Err(error) => {
                 let response = EvaluationResponse {
-                    results: Vec::new(),
+                    result: false,
                     error: Some(error.to_string()),
                     trace: None,
+                    labels: None,
+                    text: vec![],
+                    data: Default::default(),
                 };
                 (StatusCode::BAD_REQUEST, Json(response))
             }
         },
         Err(error) => {
             let response = EvaluationResponse {
-                results: Vec::new(),
+                result: false,
                 error: Some(error.to_string()),
                 trace: None,
+                labels: None,
+                text: vec![],
+                data: Default::default(),
             };
             (StatusCode::BAD_REQUEST, Json(response))
         }
     }
 }
-// let rule_text: String;
-//     let json: Value;
-//
-//     let mut buffer = String::new();
-//     io::stdin().read_to_string(&mut buffer)?;
-//
-//     let package: RuleDataPackage = serde_json::from_str(&buffer)
-//         .map_err(|err| RuleError::ParseError(err.to_string()))?;
-//
-//     rule_text = package.rule;
-//     json = package.data;
-//
-//     let rule_set = parse_rules(&rule_text)?;
-//     let results = evaluate_rule_set(&rule_set, &json)?;
-//     for (selector, outcome) in results.iter() {
-//         println!("{}: {}", selector, outcome);
-//     }
-//
-//     print_rules(&rule_set);
-//
-//     Ok(())
-// }
 
 fn print_rules(rule_set: &RuleSet) {
     for (i, rule) in rule_set.rules.iter().enumerate() {
@@ -108,11 +116,11 @@ fn print_rules(rule_set: &RuleSet) {
         for (j, condition) in rule.conditions.iter().enumerate() {
             match condition {
                 Condition::Comparison { selector, property, operator, value } => {
-                    println!("     Condition {}: the __{}__ of the **{}** {} {}",
+                    println!("     Comparison Condition {}: the __{}__ of the **{}** {} {}",
                              j + 1, property, selector, operator, value);
                 },
                 Condition::RuleReference { selector, rule_name } => {
-                    println!("     Condition {}: the **{}** passes {}",
+                    println!("     Rule Condition {}: the **{}** passes {}",
                              j + 1, selector, rule_name);
                 },
             }

@@ -1,19 +1,23 @@
 use serde::Serialize;
-use crate::runner::model::{ComparisonOperator, RuleValue};
+use crate::runner::model::{ComparisonOperator, RuleValue, SourcePosition};
 
 #[derive(Debug, Serialize)]
 pub struct RuleSetTrace {
-    pub rules: Vec<RuleTrace>,
-    pub results: Vec<(String, bool)>,
+    pub(crate) execution: Vec<RuleTrace>,
 }
+
+
 
 #[derive(Debug, Serialize)]
 pub struct RuleTrace {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
     pub selector: String,
+    pub selector_pos: Option<SourcePosition>,
     pub outcome: String,
+    pub outcome_pos: Option<SourcePosition>,
     pub conditions: Vec<ConditionTrace>,
+    pub position: Option<SourcePosition>,
     pub result: bool,
 }
 
@@ -27,11 +31,14 @@ pub enum ConditionTrace {
 #[derive(Debug, Serialize)]
 pub struct ComparisonTrace {
     pub selector: String,
+    pub selector_pos: Option<SourcePosition>,
     pub property: String,
+    pub property_pos: Option<SourcePosition>,
     pub operator: ComparisonOperator,
     pub value: RuleValue,
     pub evaluation_details: Option<ComparisonEvaluationTrace>,
     pub result: bool,
+    pub position: Option<SourcePosition>,
 }
 
 #[derive(Debug, Serialize)]
@@ -47,5 +54,13 @@ pub struct RuleReferenceTrace {
     pub rule_name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub referenced_rule_outcome: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub property_check: Option<PropertyCheckTrace>,
     pub result: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PropertyCheckTrace {
+    pub property_name: String,
+    pub property_value: serde_json::Value,
 }
