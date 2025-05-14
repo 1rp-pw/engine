@@ -180,47 +180,56 @@ fn evaluate_condition(
 
             let rule_parts: Vec<&str> = rule_name.split(" and ").collect();
             let mut overall_result = true;
-            let mut referenced_outcome = None;
+            let mut referenced_outcomes = Vec::new();
 
             for part in &rule_parts {
                 let part = part.trim();
 
                 // Try to find a matching rule
-                match rule_set.find_matching_rule(selector, part) {
-                    Some(referenced_rule) => {
-                        println!("Found matching rule: {} gets {}", referenced_rule.selector, referenced_rule.outcome);
-                        let (referenced_result, _) = evaluate_rule(referenced_rule, json, rule_set)?;
-
-                        if !referenced_result {
-                            overall_result = false;
+                if let Some(referenced_rule) = rule_set.get_rule(part) {
+                    let (referenced_result, _) = evaluate_rule(referenced_rule, json, rule_set)?;
+                    if !referenced_result {
+                        overall_result = false;
+                    }
+                    referenced_outcomes.push(part.to_string())
+                } else {
+                    match rule_set.find_matching_rule(selector, part) {
+                        Some(referenced_rule) => {
+                            let (referenced_result, _) = evaluate_rule(referenced_rule, json, rule_set)?;
+                            if !referenced_result {
+                                overall_result = false;
+                            }
+                            referenced_outcomes.push(referenced_rule.outcome.clone());
+                        },
+                        None => {
+                            let property_name = part;
+                            if let Some(obj) = json.get(selector) {
+                                if let Some(property_value) = obj.get(&property_name) {
+                                    if let Some(value_bool) = property_value.as_bool() {
+                                        if !value_bool {
+                                            overall_result = false;
+                                        }
+                                    } else {}
+                                } else {
+                                    let camel_property = crate::runner::utils::transform_property_name(&property_name);
+                                    if let Some(property_value) = obj.get(&camel_property) {
+                                        if let Some(value_bool) = property_value.as_bool() {
+                                            if !value_bool {
+                                                overall_result = false;
+                                            }
+                                        } else {
+                                            println!("Warning: No matching rule found for '{}' with description '{}', assuming true", selector, part);
+                                        }
+                                    }
+                                }
+                            }
                         }
-
-                        // Store the outcome for tracing
-                        if referenced_outcome.is_none() {
-                            referenced_outcome = Some(referenced_rule.outcome.clone());
-                        }
-                    },
-                    None => {
-                        // If we can't find a matching rule, assume true for now
-                        println!("Warning: No matching rule found for '{}' with description '{}', assuming true", selector, part);
                     }
                 }
             }
 
-            // // Try to find a matching rule
-            // let (rule_reference_result, referenced_rule_outcome) = match rule_set.find_matching_rule(selector, rule_name) {
-            //     Some(referenced_rule) => {
-            //         println!("Found matching rule: {} gets {}", referenced_rule.selector, referenced_rule.outcome);
-            //         let (referenced_result, _) = evaluate_rule(referenced_rule, json, rule_set)?;
-            //         (referenced_result, Some(referenced_rule.outcome.clone()))
-            //     },
-            //     None => {
-            //         // If we can't find a matching rule, assume true
-            //         println!("Warning: No matching rule found for '{}' with description '{}', assuming true", selector, rule_name);
-            //         (true, None)
-            //     }
-            // };
-            
+            let referenced_outcome = referenced_outcomes.first().cloned();
+
             let rule_reference_trace = RuleReferenceTrace {
                 selector: selector.clone(),
                 rule_name: rule_name.clone(),

@@ -83,28 +83,6 @@ async fn handle_evaluation(Json(package): Json<RuleDataPackage>) -> (StatusCode,
         }
     }
 }
-// let rule_text: String;
-//     let json: Value;
-//
-//     let mut buffer = String::new();
-//     io::stdin().read_to_string(&mut buffer)?;
-//
-//     let package: RuleDataPackage = serde_json::from_str(&buffer)
-//         .map_err(|err| RuleError::ParseError(err.to_string()))?;
-//
-//     rule_text = package.rule;
-//     json = package.data;
-//
-//     let rule_set = parse_rules(&rule_text)?;
-//     let results = evaluate_rule_set(&rule_set, &json)?;
-//     for (selector, outcome) in results.iter() {
-//         println!("{}: {}", selector, outcome);
-//     }
-//
-//     print_rules(&rule_set);
-//
-//     Ok(())
-// }
 
 fn print_rules(rule_set: &RuleSet) {
     for (i, rule) in rule_set.rules.iter().enumerate() {
