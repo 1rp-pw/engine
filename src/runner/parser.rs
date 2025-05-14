@@ -145,11 +145,15 @@ fn parse_rule_reference(pair: Pair<Rule>) -> Result<Condition, RuleError> {
     inner_pairs.next();
 
     // The reference object might be optional
-    let rule_name = if let Some(reference_object_pair) = inner_pairs.next() {
-        reference_object_pair.as_str().trim().to_string()
-    } else {
-        // If no specific reference object, use a generic name based on the verb
+    let mut rule_name = String::new();
+    for part in inner_pairs {
+        rule_name.push_str(part.as_str().trim());
+    }
+
+    let rule_name = if rule_name.is_empty() {
         "requirement".to_string()
+    } else {
+        rule_name
     };
 
     Ok(Condition::RuleReference {
