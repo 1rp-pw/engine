@@ -3,8 +3,7 @@ use crate::runner::model::{ComparisonOperator, RuleValue};
 
 #[derive(Debug, Serialize)]
 pub struct RuleSetTrace {
-    pub rules: Vec<RuleTrace>,
-    pub results: Vec<(String, bool)>,
+    pub execution: Vec<RuleTrace>,
 }
 
 #[derive(Debug, Serialize)]

@@ -21,7 +21,7 @@ struct RuleDataPackage {
 
 #[derive(Serialize)]
 struct EvaluationResponse {
-    results: Vec<(String, bool)>,
+    result: bool,
     #[serde(skip_serializing_if="Option::is_none")]
     error: Option<String>,
     #[serde(skip_serializing_if="Option::is_none")]
@@ -47,8 +47,9 @@ async fn handle_evaluation(Json(package): Json<RuleDataPackage>) -> (StatusCode,
     match parse_rules(&package.rule) {
         Ok(rule_set) => match evaluate_rule_set(&rule_set, &package.data) {
             Ok((results, trace)) => {
+                let result = results.values().next().cloned().unwrap_or(false);
                 let response = EvaluationResponse {
-                    results: results.into_iter().collect(),
+                    result,
                     error: None,
                     trace: Some(trace),
                 };
@@ -56,7 +57,7 @@ async fn handle_evaluation(Json(package): Json<RuleDataPackage>) -> (StatusCode,
             }
             Err(error) => {
                 let response = EvaluationResponse {
-                    results: Vec::new(),
+                    result: false,
                     error: Some(error.to_string()),
                     trace: None,
                 };
@@ -65,7 +66,7 @@ async fn handle_evaluation(Json(package): Json<RuleDataPackage>) -> (StatusCode,
         },
         Err(error) => {
             let response = EvaluationResponse {
-                results: Vec::new(),
+                result: false,
                 error: Some(error.to_string()),
                 trace: None,
             };

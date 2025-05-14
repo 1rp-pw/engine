@@ -9,32 +9,27 @@ pub fn evaluate_rule_set(
     rule_set: &RuleSet,
     json: &Value
 ) -> Result<(HashMap<String, bool>, RuleSetTrace), RuleError> {
+    let global_rule= crate::runner::utils::find_global_rule(&rule_set.rules)?; 
+    let (result, rule_trace) = evaluate_rule(global_rule, json, rule_set)?;
     let mut results = HashMap::new();
-    let mut rule_traces = Vec::new();
-
-    for rule in &rule_set.rules {
-        let (result, rule_trace) = evaluate_rule(rule, json, rule_set)?;
-        results.insert(rule.outcome.clone(), result);
-        rule_traces.push(rule_trace);
-    }
+    results.insert(global_rule.outcome.clone(), result);
     
     let rule_set_trace = RuleSetTrace {
-        rules: rule_traces,
-        results: results.clone().into_iter().collect(),
+        execution: vec![rule_trace],
     };
 
     Ok((results, rule_set_trace))
 }
 
 pub fn evaluate_rule(
-    rule: &Rule,
+    model_rule: &Rule,
     json: &Value,
     rule_set: &RuleSet
 ) -> Result<(bool, RuleTrace), RuleError> {
     let mut condition_traces = Vec::new();
     let mut rule_result = true;
     
-    for condition in &rule.conditions {
+    for condition in &model_rule.conditions {
         let (condition_result, condition_trace) = evaluate_condition(condition, json, rule_set)?;
         condition_traces.push(condition_trace);
         if !condition_result {
@@ -43,9 +38,9 @@ pub fn evaluate_rule(
     }
     
     let rule_trace = RuleTrace {
-        label: rule.label.clone(),
-        selector: rule.selector.clone(),
-        outcome: rule.outcome.clone(),
+        label: model_rule.label.clone(),
+        selector: model_rule.selector.clone(),
+        outcome: model_rule.outcome.clone(),
         conditions: condition_traces,
         result: rule_result,
     };

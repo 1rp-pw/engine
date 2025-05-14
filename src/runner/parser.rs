@@ -29,6 +29,8 @@ pub fn parse_rules(input: &str) -> Result<RuleSet, RuleError> {
         }
     }
 
+    crate::runner::utils::find_global_rule(&rule_set.rules)?;
+
     Ok(rule_set)
 }
 
