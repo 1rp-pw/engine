@@ -29,9 +29,14 @@ struct EvaluationResponse {
 async fn main() {
     let app = Router::new()
         .route("/run", post(handle_evaluation));
+    
+    let port: u16 = std::env::var("PORT")
+        .unwrap_or_else(|_| "3000".to_string())
+        .parse()
+        .expect("PORT must be a number");
 
-    let addr = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    println!("Listening on http://0.0.0.0:3000");
+    let addr = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await.unwrap();
+    println!("Listening on http://0.0.0.0:{}", port);
     axum::serve(addr, app).await.unwrap();
 }
 
