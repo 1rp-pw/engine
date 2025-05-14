@@ -2,6 +2,7 @@ mod runner;
 use runner::parser::parse_rules;
 use runner::evaluator::evaluate_rule_set;
 use runner::model::{Condition, RuleSet};
+use runner::trace::RuleSetTrace;
 
 use serde_json::Value;
 use serde::{Deserialize, Serialize};
@@ -23,6 +24,8 @@ struct EvaluationResponse {
     results: Vec<(String, bool)>,
     #[serde(skip_serializing_if="Option::is_none")]
     error: Option<String>,
+    #[serde(skip_serializing_if="Option::is_none")]
+    trace: Option<RuleSetTrace>,
 }
 
 #[tokio::main]
@@ -43,10 +46,11 @@ async fn main() {
 async fn handle_evaluation(Json(package): Json<RuleDataPackage>) -> (StatusCode, Json<EvaluationResponse>) {
     match parse_rules(&package.rule) {
         Ok(rule_set) => match evaluate_rule_set(&rule_set, &package.data) {
-            Ok(results) => {
+            Ok((results, trace)) => {
                 let response = EvaluationResponse {
                     results: results.into_iter().collect(),
                     error: None,
+                    trace: Some(trace),
                 };
                 (StatusCode::OK, Json(response))
             }
@@ -54,6 +58,7 @@ async fn handle_evaluation(Json(package): Json<RuleDataPackage>) -> (StatusCode,
                 let response = EvaluationResponse {
                     results: Vec::new(),
                     error: Some(error.to_string()),
+                    trace: None,
                 };
                 (StatusCode::BAD_REQUEST, Json(response))
             }
@@ -62,6 +67,7 @@ async fn handle_evaluation(Json(package): Json<RuleDataPackage>) -> (StatusCode,
             let response = EvaluationResponse {
                 results: Vec::new(),
                 error: Some(error.to_string()),
+                trace: None,
             };
             (StatusCode::BAD_REQUEST, Json(response))
         }

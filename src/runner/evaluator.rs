@@ -1,40 +1,63 @@
 use crate::runner::error::RuleError;
 use crate::runner::model::{Condition, ComparisonOperator, Rule, RuleSet, RuleValue};
+use crate::runner::trace::{RuleSetTrace, RuleTrace, ConditionTrace, ComparisonTrace, ComparisonEvaluationTrace, RuleReferenceTrace};
+
 use serde_json::Value;
 use std::collections::HashMap;
 
 pub fn evaluate_rule_set(
     rule_set: &RuleSet,
     json: &Value
-) -> Result<HashMap<String, bool>, RuleError> {
+) -> Result<(HashMap<String, bool>, RuleSetTrace), RuleError> {
     let mut results = HashMap::new();
+    let mut rule_traces = Vec::new();
 
     for rule in &rule_set.rules {
-        let result = evaluate_rule(rule, json, rule_set)?;
+        let (result, rule_trace) = evaluate_rule(rule, json, rule_set)?;
         results.insert(rule.outcome.clone(), result);
+        rule_traces.push(rule_trace);
     }
+    
+    let rule_set_trace = RuleSetTrace {
+        rules: rule_traces,
+        results: results.clone().into_iter().collect(),
+    };
 
-    Ok(results)
+    Ok((results, rule_set_trace))
 }
 
 pub fn evaluate_rule(
     rule: &Rule,
     json: &Value,
     rule_set: &RuleSet
-) -> Result<bool, RuleError> {
+) -> Result<(bool, RuleTrace), RuleError> {
+    let mut condition_traces = Vec::new();
+    let mut rule_result = true;
+    
     for condition in &rule.conditions {
-        if !evaluate_condition(condition, json, rule_set)? {
-            return Ok(false);
+        let (condition_result, condition_trace) = evaluate_condition(condition, json, rule_set)?;
+        condition_traces.push(condition_trace);
+        if !condition_result {
+            rule_result = false;
         }
     }
-    Ok(true)
+    
+    let rule_trace = RuleTrace {
+        label: rule.label.clone(),
+        selector: rule.selector.clone(),
+        outcome: rule.outcome.clone(),
+        conditions: condition_traces,
+        result: rule_result,
+    };
+    
+    Ok((rule_result, rule_trace))
 }
 
 fn evaluate_condition(
     condition: &Condition,
     json: &Value,
     rule_set: &RuleSet
-) -> Result<bool, RuleError> {
+) -> Result<(bool, ConditionTrace), RuleError> {
     match condition {
         Condition::Comparison { selector, property, operator, value } => {
             // Try exact match first
@@ -51,7 +74,7 @@ fn evaluate_condition(
             if !selector_exists && json.get(&transformed_selector).is_none() {
                 println!("Warning: Selector '{}' (or '{}') not found in JSON, condition is false",
                          selector, transformed_selector);
-                return Ok(false);
+                false;
             }
 
             // Use the selector that worked
@@ -61,11 +84,35 @@ fn evaluate_condition(
             if json[effective_selector].get(property).is_none() {
                 println!("Warning: Property '{}' not found in selector '{}', condition is false",
                          property, effective_selector);
-                return Ok(false);
+                false;
             }
 
             let json_value = extract_value_from_json(json, effective_selector, property)?;
-            evaluate_comparison(&json_value, operator, value)
+            let (comparison_result, evaluation_details) = match evaluate_comparison(&json_value, operator, value) {
+                Ok(res) => {
+                    let details = ComparisonEvaluationTrace {
+                        left_value: json_value.clone(),
+                        right_value: value.clone(),
+                        comparison_result: res,
+                    };
+                    (res, Some(details))
+                },
+                Err(e) => {
+                    println!("Comparison Error {}", e);
+                    (false, None)
+                }
+            };
+            
+            let comparison_trace = ComparisonTrace {
+                selector: selector.clone(),
+                property: property.clone(),
+                operator: operator.clone(),
+                value: value.clone(),
+                evaluation_details: evaluation_details,
+                result: comparison_result,
+            };
+            
+            Ok((comparison_result, ConditionTrace::Comparison(comparison_trace)))
         },
         Condition::RuleReference { selector, rule_name } => {
             // Check if the selector exists in the JSON
@@ -73,21 +120,31 @@ fn evaluate_condition(
                 // If we're checking for something that doesn't exist in our data,
                 // we'll assume it's true for now
                 println!("Warning: Selector '{}' not found in JSON, assuming true for rule reference", selector);
-                return Ok(true);
+                true;
             }
 
             // Try to find a matching rule
-            match rule_set.find_matching_rule(selector, rule_name) {
+            let (rule_reference_result, referenced_rule_outcome) = match rule_set.find_matching_rule(selector, rule_name) {
                 Some(referenced_rule) => {
                     println!("Found matching rule: {} gets {}", referenced_rule.selector, referenced_rule.outcome);
-                    evaluate_rule(referenced_rule, json, rule_set)
+                    let (referenced_result, _) = evaluate_rule(referenced_rule, json, rule_set)?;
+                    (referenced_result, Some(referenced_rule.outcome.clone()))
                 },
                 None => {
                     // If we can't find a matching rule, assume true
                     println!("Warning: No matching rule found for '{}' with description '{}', assuming true", selector, rule_name);
-                    Ok(true)
+                    (true, None)
                 }
-            }
+            };
+            
+            let rule_reference_trace = RuleReferenceTrace {
+                selector: selector.clone(),
+                rule_name: rule_name.clone(),
+                referenced_rule_outcome,
+                result: rule_reference_result,
+            };
+            
+            Ok((rule_reference_result, ConditionTrace::RuleReference(rule_reference_trace)))
         },
     }
 }

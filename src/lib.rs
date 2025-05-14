@@ -22,7 +22,7 @@ mod tests {
                 "age": 70
             }
         });
-        let results_true = evaluate_rule_set(&rule_set, &json_true).unwrap();
+        let (results_true, _trace_true) = evaluate_rule_set(&rule_set, &json_true).unwrap();
         assert!(results_true["senior_discount"]);
 
         // Test case where condition is false
@@ -31,7 +31,7 @@ mod tests {
                 "age": 60
             }
         });
-        let results_false = evaluate_rule_set(&rule_set, &json_false).unwrap();
+        let (results_false, _trace_false) = evaluate_rule_set(&rule_set, &json_false).unwrap();
         assert!(!results_false["senior_discount"]);
     }
 
@@ -50,7 +50,7 @@ mod tests {
                 "age": 10
             }
         });
-        let results_true = evaluate_rule_set(&rule_set, &json_true).unwrap();
+        let (results_true, _trace_true) = evaluate_rule_set(&rule_set, &json_true).unwrap();
         assert!(results_true["child_discount"]);
 
         // Test case where condition is false
@@ -59,7 +59,7 @@ mod tests {
                 "age": 15
             }
         });
-        let results_false = evaluate_rule_set(&rule_set, &json_false).unwrap();
+        let (results_false, _trace_false) = evaluate_rule_set(&rule_set, &json_false).unwrap();
         assert!(!results_false["child_discount"]);
     }
 
@@ -78,7 +78,7 @@ mod tests {
                 "amount": 1337
             }
         });
-        let results_true = evaluate_rule_set(&rule_set, &json_true).unwrap();
+        let (results_true, _trace_true) = evaluate_rule_set(&rule_set, &json_true).unwrap();
         assert!(results_true["flagged"]);
 
         // Test case where condition is false
@@ -87,7 +87,7 @@ mod tests {
                 "amount": 1000
             }
         });
-        let results_false = evaluate_rule_set(&rule_set, &json_false).unwrap();
+        let (results_false, _trace_false) = evaluate_rule_set(&rule_set, &json_false).unwrap();
         assert!(!results_false["flagged"]);
     }
 
@@ -106,7 +106,7 @@ mod tests {
                 "status": "completed"
             }
         });
-        let results_true = evaluate_rule_set(&rule_set, &json_true).unwrap();
+        let (results_true, _trace_true) = evaluate_rule_set(&rule_set, &json_true).unwrap();
         assert!(results_true["normal"]);
 
         // Test case where condition is false
@@ -115,7 +115,7 @@ mod tests {
                 "status": "flagged"
             }
         });
-        let results_false = evaluate_rule_set(&rule_set, &json_false).unwrap();
+        let (results_false, _trace_false) = evaluate_rule_set(&rule_set, &json_false).unwrap();
         assert!(!results_false["normal"]);
     }
 
@@ -134,7 +134,7 @@ mod tests {
     //             "expiryDate": "2023-12-31"
     //         }
     //     });
-    //     let results_true = evaluate_rule_set(&rule_set, &json_true).unwrap();
+    //     let (results_true, _trace_true) = evaluate_rule_set(&rule_set, &json_true).unwrap();
     //     assert!(results_true["active"]);
     //
     //     // Test case where condition is false
@@ -143,7 +143,7 @@ mod tests {
     //             "expiryDate": "2022-12-31"
     //         }
     //     });
-    //     let results_false = evaluate_rule_set(&rule_set, &json_false).unwrap();
+    //     let (results_false, _trace_false) = evaluate_rule_set(&rule_set, &json_false).unwrap();
     //     assert!(!results_false["active"]);
     // }
 
@@ -162,7 +162,7 @@ mod tests {
     //             "creationDate": "2019-06-15"
     //         }
     //     });
-    //     let results_true = evaluate_rule_set(&rule_set, &json_true).unwrap();
+    //     let (results_true, _trace_true) = evaluate_rule_set(&rule_set, &json_true).unwrap();
     //     assert!(results_true["archived"]);
     //
     //     // Test case where condition is false
@@ -171,7 +171,7 @@ mod tests {
     //             "creationDate": "2022-03-10"
     //         }
     //     });
-    //     let results_false = evaluate_rule_set(&rule_set, &json_false).unwrap();
+    //     let (results_false, _trace_false) = evaluate_rule_set(&rule_set, &json_false).unwrap();
     //     assert!(!results_false["archived"]);
     // }
 
@@ -190,7 +190,7 @@ mod tests {
                 "category": "electronics"
             }
         });
-        let results_true = evaluate_rule_set(&rule_set, &json_true).unwrap();
+        let (results_true, _trace_true) = evaluate_rule_set(&rule_set, &json_true).unwrap();
         assert!(results_true["on_sale"]);
 
         // Test case where condition is false
@@ -199,7 +199,7 @@ mod tests {
                 "category": "furniture"
             }
         });
-        let results_false = evaluate_rule_set(&rule_set, &json_false).unwrap();
+        let (results_false, _trace_false) = evaluate_rule_set(&rule_set, &json_false).unwrap();
         assert!(!results_false["on_sale"]);
     }
 
@@ -218,7 +218,7 @@ mod tests {
                 "category": "furniture"
             }
         });
-        let results_true = evaluate_rule_set(&rule_set, &json_true).unwrap();
+        let (results_true, _trace_true) = evaluate_rule_set(&rule_set, &json_true).unwrap();
         assert!(results_true["full_price"]);
 
         // Test case where condition is false
@@ -227,7 +227,7 @@ mod tests {
                 "category": "electronics"
             }
         });
-        let results_false = evaluate_rule_set(&rule_set, &json_false).unwrap();
+        let (results_false, _trace_false) = evaluate_rule_set(&rule_set, &json_false).unwrap();
         assert!(!results_false["full_price"]);
     }
 
@@ -246,7 +246,7 @@ mod tests {
             "content": "This is an urgent message"
         }
     });
-        let results_true = evaluate_rule_set(&rule_set, &json_true).unwrap();
+        let (results_true, _trace_true) = evaluate_rule_set(&rule_set, &json_true).unwrap();
         assert!(results_true["flagged"]);
 
         // Test case where condition is false
@@ -255,7 +255,7 @@ mod tests {
             "content": "This is a normal message"
         }
     });
-        let results_false = evaluate_rule_set(&rule_set, &json_false).unwrap();
+        let (results_false, _trace_false) = evaluate_rule_set(&rule_set, &json_false).unwrap();
         assert!(!results_false["flagged"]);
     }
 
@@ -276,7 +276,7 @@ mod tests {
                 "age": 70
             }
         });
-        let results_true = evaluate_rule_set(&rule_set, &json_true).unwrap();
+        let (results_true, _trace_true) = evaluate_rule_set(&rule_set, &json_true).unwrap();
         assert!(results_true["senior_discount"]);
     }
 }
@@ -296,7 +296,7 @@ fn test_property_name_transformation() {
             "firstName": "John"
         }
     });
-    let results_true = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
+    let (results_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
     assert!(results_true["discount"]);
 
     // Test case where condition is false
@@ -305,7 +305,7 @@ fn test_property_name_transformation() {
             "firstName": "Jane"
         }
     });
-    let results_false = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
+    let (results_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
     assert!(!results_false["discount"]);
 }
 

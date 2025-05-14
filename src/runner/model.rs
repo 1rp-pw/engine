@@ -1,8 +1,9 @@
 use chrono::NaiveDate;
 use std::collections::HashMap;
 use std::fmt;
+use serde::Serialize;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum ComparisonOperator {
     GreaterThanOrEqual,
     LessThanOrEqual,
@@ -40,7 +41,7 @@ impl fmt::Display for ComparisonOperator {
 }
 
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum RuleValue {
     Number(f64),
     String(String),
