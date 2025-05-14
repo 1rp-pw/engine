@@ -26,6 +26,8 @@ struct EvaluationResponse {
     error: Option<String>,
     #[serde(skip_serializing_if="Option::is_none")]
     trace: Option<RuleSetTrace>,
+    text: Vec<String>,
+    data: Value,
 }
 
 #[tokio::main]
@@ -48,10 +50,13 @@ async fn handle_evaluation(Json(package): Json<RuleDataPackage>) -> (StatusCode,
         Ok(rule_set) => match evaluate_rule_set(&rule_set, &package.data) {
             Ok((results, trace)) => {
                 let result = results.values().next().cloned().unwrap_or(false);
+                let text = package.rule.lines().map(String::from).collect();
                 let response = EvaluationResponse {
                     result,
                     error: None,
                     trace: Some(trace),
+                    text,
+                    data: package.data.clone(),
                 };
                 (StatusCode::OK, Json(response))
             }
@@ -60,6 +65,8 @@ async fn handle_evaluation(Json(package): Json<RuleDataPackage>) -> (StatusCode,
                     result: false,
                     error: Some(error.to_string()),
                     trace: None,
+                    text: vec![],
+                    data: Default::default(),
                 };
                 (StatusCode::BAD_REQUEST, Json(response))
             }
@@ -69,6 +76,8 @@ async fn handle_evaluation(Json(package): Json<RuleDataPackage>) -> (StatusCode,
                 result: false,
                 error: Some(error.to_string()),
                 trace: None,
+                text: vec![],
+                data: Default::default(),
             };
             (StatusCode::BAD_REQUEST, Json(response))
         }

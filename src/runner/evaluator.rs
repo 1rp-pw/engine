@@ -75,8 +75,11 @@ pub fn evaluate_rule(
     let rule_trace = RuleTrace {
         label: model_rule.label.clone(),
         selector: model_rule.selector.clone(),
+        selector_pos: None,
         outcome: model_rule.outcome.clone(),
+        outcome_pos: None,
         conditions: condition_traces,
+        position: None,
         result: rule_result,
     };
     
@@ -108,11 +111,14 @@ fn evaluate_condition(
             } else {
                 return Ok((false, ConditionTrace::Comparison(ComparisonTrace {
                     selector: selector.clone(),
+                    selector_pos: None,
                     property: property.clone(),
+                    property_pos: None,
                     operator: operator.clone(),
                     value: value.clone(),
                     evaluation_details: None,
                     result: false,
+                    position: None,
                 })))
             };
 
@@ -120,11 +126,14 @@ fn evaluate_condition(
             if json[effective_selector].get(property).is_none() {
                 return Ok((false, ConditionTrace::Comparison(ComparisonTrace {
                     selector: selector.clone(),
+                    selector_pos: None,
                     property: property.clone(),
+                    property_pos: None,
                     operator: operator.clone(),
                     value: value.clone(),
                     evaluation_details: None,
                     result: false,
+                    position: None,
                 })))
             }
 
@@ -146,11 +155,14 @@ fn evaluate_condition(
             
             let comparison_trace = ComparisonTrace {
                 selector: selector.clone(),
+                selector_pos: None,
                 property: property.clone(),
+                property_pos: None,
                 operator: operator.clone(),
                 value: value.clone(),
                 evaluation_details,
                 result: comparison_result,
+                position: None,
             };
             
             Ok((comparison_result, ConditionTrace::Comparison(comparison_trace)))

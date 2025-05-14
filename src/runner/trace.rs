@@ -1,18 +1,23 @@
 use serde::Serialize;
-use crate::runner::model::{ComparisonOperator, RuleValue};
+use crate::runner::model::{ComparisonOperator, RuleValue, SourcePosition};
 
 #[derive(Debug, Serialize)]
 pub struct RuleSetTrace {
     pub(crate) execution: Vec<RuleTrace>,
 }
 
+
+
 #[derive(Debug, Serialize)]
 pub struct RuleTrace {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
     pub selector: String,
+    pub selector_pos: Option<SourcePosition>,
     pub outcome: String,
+    pub outcome_pos: Option<SourcePosition>,
     pub conditions: Vec<ConditionTrace>,
+    pub position: Option<SourcePosition>,
     pub result: bool,
 }
 
@@ -26,11 +31,14 @@ pub enum ConditionTrace {
 #[derive(Debug, Serialize)]
 pub struct ComparisonTrace {
     pub selector: String,
+    pub selector_pos: Option<SourcePosition>,
     pub property: String,
+    pub property_pos: Option<SourcePosition>,
     pub operator: ComparisonOperator,
     pub value: RuleValue,
     pub evaluation_details: Option<ComparisonEvaluationTrace>,
     pub result: bool,
+    pub position: Option<SourcePosition>,
 }
 
 #[derive(Debug, Serialize)]

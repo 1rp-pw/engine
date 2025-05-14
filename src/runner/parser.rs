@@ -3,7 +3,7 @@ use chrono::NaiveDate;
 use pest::Parser;
 use pest_derive::Parser;
 use pest::iterators::Pair;
-use crate::runner::model::{ComparisonOperator, RuleSet, RuleValue, Condition};
+use crate::runner::model::{ComparisonOperator, RuleSet, RuleValue, Condition, SourcePosition};
 
 #[derive(Parser)]
 #[grammar = "pests/grammer.pest"]
@@ -35,6 +35,11 @@ pub fn parse_rules(input: &str) -> Result<RuleSet, RuleError> {
 }
 
 fn parse_rule(pair: Pair<Rule>) -> Result<crate::runner::model::Rule, RuleError> {
+    let span = pair.as_span();
+    let line = span.start_pos().line_col().0;
+    let start = span.start();
+    let end = span.end();
+    
     let mut inner_pairs = pair.into_inner();
 
     // Parse rule header (which includes label and selector)
@@ -74,6 +79,11 @@ fn parse_rule(pair: Pair<Rule>) -> Result<crate::runner::model::Rule, RuleError>
         .as_str().trim().to_string();
 
     let mut rule = crate::runner::model::Rule::new(label, selector, outcome_text);
+    rule.position = Some(SourcePosition {
+        line,
+        start,
+        end,
+    });
 
     // Parse conditions
     for condition_pair in inner_pairs {

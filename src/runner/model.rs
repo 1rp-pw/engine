@@ -89,8 +89,11 @@ pub enum Condition {
 pub struct Rule {
     pub label: Option<String>,
     pub selector: String,
+    pub selector_pos: Option<SourcePosition>,
     pub outcome: String,
+    pub outcome_pos: Option<SourcePosition>,
     pub conditions: Vec<Condition>,
+    pub position: Option<SourcePosition>,
 }
 
 impl Rule {
@@ -98,8 +101,11 @@ impl Rule {
         Rule {
             label,
             selector,
+            selector_pos: None,
             outcome,
+            outcome_pos: None,
             conditions: Vec::new(),
+            position: None,
         }
     }
 
@@ -188,4 +194,11 @@ impl RuleSet {
 
         score
     }
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct SourcePosition {
+    pub line: usize,
+    pub start: usize,
+    pub end: usize,
 }
