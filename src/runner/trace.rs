@@ -54,5 +54,13 @@ pub struct RuleReferenceTrace {
     pub rule_name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub referenced_rule_outcome: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub property_check: Option<PropertyCheckTrace>,
     pub result: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PropertyCheckTrace {
+    pub property_name: String,
+    pub property_value: serde_json::Value,
 }

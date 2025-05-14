@@ -51,3 +51,46 @@ pub fn transform_property_name(name: &str) -> String {
 
     result
 }
+
+pub fn infer_possible_properties(rule_name: &str) -> Vec<String> {
+    let mut properties = Vec::new();
+
+    // Remove common qualification phrases
+    let qualification_phrases = [
+        "passes the", "passes", "qualifies for the", "qualifies for", "qualifies",
+        "meets the", "meets", "satisfies the", "satisfies", "is eligible for the",
+        "is eligible for", "is eligible", "has passed the", "has passed",
+        "has qualified for the", "has qualified for", "has qualified",
+        "is approved for the", "is approved for", "is approved"
+    ];
+
+    let mut cleaned = rule_name.to_string();
+    for phrase in &qualification_phrases {
+        cleaned = cleaned.replace(phrase, "");
+    }
+    cleaned = cleaned.trim().to_string();
+
+    // Generate camelCase version
+    let base_property = transform_property_name(&cleaned);
+
+    // Add various suffixes that might indicate status
+    properties.push(base_property.clone());
+    properties.push(format!("{}Passed", base_property));
+    properties.push(format!("{}Qualified", base_property));
+    properties.push(format!("{}Eligible", base_property));
+    properties.push(format!("{}Approved", base_property));
+    properties.push(format!("{}Status", base_property));
+
+    // Also try with just the last word if it's a compound phrase
+    if let Some(last_word) = cleaned.split_whitespace().last() {
+        let last_word_property = transform_property_name(last_word);
+        properties.push(last_word_property.clone());
+        properties.push(format!("{}Passed", last_word_property));
+        properties.push(format!("{}Qualified", last_word_property));
+        properties.push(format!("{}Eligible", last_word_property));
+        properties.push(format!("{}Approved", last_word_property));
+        properties.push(format!("{}Status", last_word_property));
+    }
+
+    properties
+}

@@ -164,11 +164,13 @@ fn parse_rule_reference(pair: Pair<Rule>) -> Result<Condition, RuleError> {
     let selector = selector_text[2..selector_text.len()-2].to_string();
 
     // Skip the verb
-    inner_pairs.next();
+    let verb = inner_pairs.next();
+    println!("Parsing rule reference: selector='{}', verb='{:?}'", selector, verb.map(|v| v.as_str()));
 
     // The reference object might be optional
     let mut rule_name = String::new();
     for part in inner_pairs {
+        println!("  Rule name part: '{}'", part.as_str().trim());
         rule_name.push_str(part.as_str().trim());
     }
 
@@ -178,6 +180,7 @@ fn parse_rule_reference(pair: Pair<Rule>) -> Result<Condition, RuleError> {
         rule_name
     };
 
+    println!("  Final rule name: '{}'", rule_name);
     Ok(Condition::RuleReference {
         selector,
         rule_name,
@@ -217,8 +220,6 @@ fn parse_predicate(pair: Pair<Rule>) -> Result<(ComparisonOperator, RuleValue), 
     } else {
         parse_value(value_pair.clone())?
     };
-
-    println!("Parsed value: {:?}", value);
 
     Ok((operator, value))
 }

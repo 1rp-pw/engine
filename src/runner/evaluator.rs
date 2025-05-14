@@ -1,8 +1,16 @@
 use crate::runner::error::RuleError;
 use crate::runner::model::{Condition, ComparisonOperator, Rule, RuleSet, RuleValue};
-use crate::runner::trace::{RuleSetTrace, RuleTrace, ConditionTrace, ComparisonTrace, ComparisonEvaluationTrace, RuleReferenceTrace};
+use crate::runner::trace::{
+    RuleSetTrace, 
+    RuleTrace, 
+    ConditionTrace, 
+    ComparisonTrace, 
+    ComparisonEvaluationTrace, 
+    RuleReferenceTrace,
+    PropertyCheckTrace,
+};
 
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 
 pub fn evaluate_rule_set(
@@ -92,6 +100,119 @@ fn evaluate_condition(
     rule_set: &RuleSet
 ) -> Result<(bool, ConditionTrace), RuleError> {
     match condition {
+        Condition::RuleReference { selector, rule_name } => {
+            let selector_exists = json.get(selector).is_some();
+            let effective_selector = if selector_exists {
+                selector.clone()
+            } else {
+                let transformed = transform_selector_name(selector);
+                if json.get(&transformed).is_some() {
+                    transformed
+                } else {
+                    return Ok((false, ConditionTrace::RuleReference(RuleReferenceTrace {
+                        selector: selector.clone(),
+                        rule_name: rule_name.clone(),
+                        referenced_rule_outcome: None,
+                        property_check: None,
+                        result: false,
+                    })));
+                }
+            };
+
+            // Process just this specific rule reference
+            let part = rule_name.trim();
+            let mut overall_result = true;
+            let mut referenced_outcome = None;
+            let mut property_check = None;
+
+            // Try to find a matching rule by exact outcome match first
+            if let Some(referenced_rule) = rule_set.get_rule(part) {
+                let (referenced_result, _) = evaluate_rule(referenced_rule, json, rule_set)?;
+                if !referenced_result {
+                    overall_result = false;
+                }
+                referenced_outcome = Some(referenced_rule.outcome.to_string());
+            } else {
+                // If no exact match, try to find a rule with similar description
+                if let Some(referenced_rule) = rule_set.find_matching_rule(selector, part) {
+                    let (referenced_result, _) = evaluate_rule(referenced_rule, json, rule_set)?;
+                    if !referenced_result {
+                        overall_result = false;
+                    }
+                    referenced_outcome = Some(referenced_rule.outcome.clone());
+                } else {
+                    // If we still can't find a matching rule, try to infer a property
+                    let possible_properties = crate::runner::utils::infer_possible_properties(part);
+                    let mut property_found = false;
+
+                    if let Some(obj) = json.get(&effective_selector) {
+                        for property in &possible_properties {
+                            if let Some(property_value) = obj.get(property) {
+                                property_found = true;
+
+                                // Check the property value
+                                if let Some(value_bool) = property_value.as_bool() {
+                                    if !value_bool {
+                                        overall_result = false;
+                                    }
+                                    // Store the property check details
+                                    property_check = Some(PropertyCheckTrace {
+                                        property_name: property.clone(),
+                                        property_value: json!({ "Boolean": value_bool }),
+                                    });
+                                } else if let Some(value_str) = property_value.as_str() {
+                                    // For string values, consider "pass", "true", "yes", etc. as passing
+                                    let lower_value = value_str.to_lowercase();
+                                    let passes = lower_value == "pass" || lower_value == "true" ||
+                                        lower_value == "yes" || lower_value == "passed";
+                                    if !passes {
+                                        overall_result = false;
+                                    }
+                                    // Store the property check details
+                                    property_check = Some(PropertyCheckTrace {
+                                        property_name: property.clone(),
+                                        property_value: json!({ "String": value_str }),
+                                    });
+                                } else if let Some(value_num) = property_value.as_f64() {
+                                    // For numeric values, consider non-zero as passing
+                                    if value_num == 0.0 {
+                                        overall_result = false;
+                                    }
+                                    // Store the property check details
+                                    property_check = Some(PropertyCheckTrace {
+                                        property_name: property.clone(),
+                                        property_value: json!({ "Number": value_num }),
+                                    });
+                                } else {
+                                    // For other types, just store the raw value
+                                    property_check = Some(PropertyCheckTrace {
+                                        property_name: property.clone(),
+                                        property_value: property_value.clone(),
+                                    });
+                                }
+
+                                break;
+                            }
+                        }
+                    }
+
+                    if !property_found {
+                        // If we can't find any corresponding property, assume true
+                        println!("Warning: No matching rule or property found for '{}' with description '{}', assuming true", selector, part);
+                    }
+                }
+            }
+
+            let rule_reference_trace = RuleReferenceTrace {
+                selector: selector.clone(),
+                rule_name: rule_name.clone(),
+                referenced_rule_outcome: referenced_outcome,
+                property_check: property_check,
+                result: overall_result,
+            };
+
+            Ok((overall_result, ConditionTrace::RuleReference(rule_reference_trace)))
+        },
         Condition::Comparison { selector, property, operator, value } => {
             // Try exact match first
             let selector_exists = json.get(selector).is_some();
@@ -152,7 +273,7 @@ fn evaluate_condition(
                     (false, None)
                 }
             };
-            
+
             let comparison_trace = ComparisonTrace {
                 selector: selector.clone(),
                 selector_pos: None,
@@ -164,80 +285,8 @@ fn evaluate_condition(
                 result: comparison_result,
                 position: None,
             };
-            
+
             Ok((comparison_result, ConditionTrace::Comparison(comparison_trace)))
-        },
-        Condition::RuleReference { selector, rule_name } => {
-            let selector_exists = json.get(selector).is_some();
-            if !selector_exists && json.get(&transform_selector_name(selector)).is_none() {
-                return Ok((false, ConditionTrace::RuleReference(RuleReferenceTrace {
-                    selector: selector.clone(),
-                    rule_name: rule_name.clone(),
-                    referenced_rule_outcome: None,
-                    result: false,
-                })));
-            }
-
-            let rule_parts: Vec<&str> = rule_name.split(" and ").collect();
-            let mut overall_result = true;
-            let mut referenced_outcomes = Vec::new();
-
-            for part in &rule_parts {
-                let part = part.trim();
-
-                // Try to find a matching rule
-                if let Some(referenced_rule) = rule_set.get_rule(part) {
-                    let (referenced_result, _) = evaluate_rule(referenced_rule, json, rule_set)?;
-                    if !referenced_result {
-                        overall_result = false;
-                    }
-                    referenced_outcomes.push(part.to_string())
-                } else {
-                    match rule_set.find_matching_rule(selector, part) {
-                        Some(referenced_rule) => {
-                            let (referenced_result, _) = evaluate_rule(referenced_rule, json, rule_set)?;
-                            if !referenced_result {
-                                overall_result = false;
-                            }
-                            referenced_outcomes.push(referenced_rule.outcome.clone());
-                        },
-                        None => {
-                            let property_name = part;
-                            if let Some(obj) = json.get(selector) {
-                                if let Some(property_value) = obj.get(&property_name) {
-                                    if let Some(value_bool) = property_value.as_bool() {
-                                        if !value_bool {
-                                            overall_result = false;
-                                        }
-                                    } else {}
-                                } else {
-                                    let camel_property = crate::runner::utils::transform_property_name(&property_name);
-                                    if let Some(property_value) = obj.get(&camel_property) {
-                                        if let Some(value_bool) = property_value.as_bool() {
-                                            if !value_bool {
-                                                overall_result = false;
-                                            }
-                                        } else {
-                                            println!("Warning: No matching rule found for '{}' with description '{}', assuming true", selector, part);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            let referenced_outcome = referenced_outcomes.first().cloned();
-
-            let rule_reference_trace = RuleReferenceTrace {
-                selector: selector.clone(),
-                rule_name: rule_name.clone(),
-                referenced_rule_outcome: referenced_outcome,
-                result: overall_result,
-            };
-            
-            Ok((overall_result, ConditionTrace::RuleReference(rule_reference_trace)))
         },
     }
 }
