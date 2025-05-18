@@ -165,12 +165,12 @@ fn parse_rule_reference(pair: Pair<Rule>) -> Result<Condition, RuleError> {
 
     // Skip the verb
     let verb = inner_pairs.next();
-    println!("Parsing rule reference: selector='{}', verb='{:?}'", selector, verb.map(|v| v.as_str()));
+    //println!("Parsing rule reference: selector='{}', verb='{:?}'", selector, verb.map(|v| v.as_str()));
 
     // The reference object might be optional
     let mut rule_name = String::new();
     for part in inner_pairs {
-        println!("  Rule name part: '{}'", part.as_str().trim());
+        //println!("  Rule name part: '{}'", part.as_str().trim());
         rule_name.push_str(part.as_str().trim());
     }
 
@@ -180,7 +180,7 @@ fn parse_rule_reference(pair: Pair<Rule>) -> Result<Condition, RuleError> {
         rule_name
     };
 
-    println!("  Final rule name: '{}'", rule_name);
+    //println!("  Final rule name: '{}'", rule_name);
     Ok(Condition::RuleReference {
         selector,
         rule_name,
@@ -254,7 +254,7 @@ fn parse_value(pair: Pair<Rule>) -> Result<RuleValue, RuleError> {
         },
         Rule::date_literal => {
             let date_str = pair.as_str();
-            println!("Parsing date literal: {}", date_str);
+            // println!("Parsing date literal: {}", date_str);
 
             // Check if it's in date() format or plain format
             let date_part = if date_str.starts_with("date(") && date_str.ends_with(")") {
@@ -265,12 +265,12 @@ fn parse_value(pair: Pair<Rule>) -> Result<RuleValue, RuleError> {
                 date_str
             };
 
-            println!("Extracted date part: {}", date_part);
+            // println!("Extracted date part: {}", date_part);
 
             let date = NaiveDate::parse_from_str(date_part, "%Y-%m-%d")
                 .map_err(|e| RuleError::ParseError(format!("Invalid date: {}", e)))?;
 
-            println!("Parsed date: {}", date);
+            // println!("Parsed date: {}", date);
             Ok(RuleValue::Date(date))
         },
         Rule::boolean => {
