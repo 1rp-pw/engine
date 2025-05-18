@@ -1,11 +1,11 @@
 use crate::runner::error::RuleError;
 use crate::runner::model::{Condition, ComparisonOperator, Rule, RuleSet, RuleValue};
 use crate::runner::trace::{
-    RuleSetTrace, 
-    RuleTrace, 
-    ConditionTrace, 
-    ComparisonTrace, 
-    ComparisonEvaluationTrace, 
+    RuleSetTrace,
+    RuleTrace,
+    ConditionTrace,
+    ComparisonTrace,
+    ComparisonEvaluationTrace,
     RuleReferenceTrace,
     PropertyCheckTrace,
 };
@@ -198,7 +198,7 @@ fn evaluate_condition(
 
                     if !property_found {
                         // If we can't find any corresponding property, assume true
-                        println!("Warning: No matching rule or property found for '{}' with description '{}', assuming true", selector, part);
+                        // println!("Warning: No matching rule or property found for '{}' with description '{}', assuming true", selector, part);
                     }
                 }
             }
@@ -269,7 +269,7 @@ fn evaluate_condition(
                     (res, Some(details))
                 },
                 Err(e) => {
-                    println!("Comparison Error {}", e);
+                    // println!("Comparison Error {}", e);
                     (false, None)
                 }
             };
@@ -319,14 +319,14 @@ fn extract_value_from_json(
         Value::String(s) => {
             // Try to parse as date if it looks like a date (YYYY-MM-DD format)
             if s.len() == 10 && s.chars().nth(4) == Some('-') && s.chars().nth(7) == Some('-') {
-                println!("Attempting to parse date: {}", s);
+                // println!("Attempting to parse date: {}", s);
                 match chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d") {
                     Ok(date) => {
-                        println!("Successfully parsed date: {}", date);
+                        // println!("Successfully parsed date: {}", date);
                         Ok(RuleValue::Date(date))
                     },
                     Err(e) => {
-                        println!("Failed to parse date '{}': {}", s, e);
+                        // println!("Failed to parse date '{}': {}", s, e);
                         Ok(RuleValue::String(s.clone()))
                     }
                 }
@@ -412,7 +412,7 @@ fn evaluate_comparison(
         ComparisonOperator::LaterThan => {
             match (left, right) {
                 (RuleValue::Date(l), RuleValue::Date(r)) => {
-                    println!("Comparing dates: {} > {}", l, r);
+                    // println!("Comparing dates: {} > {}", l, r);
                     Ok(l > r)
                 },
                 _ => Err(RuleError::TypeError("LaterThan only works with dates".to_string())),
@@ -421,7 +421,7 @@ fn evaluate_comparison(
         ComparisonOperator::EarlierThan => {
             match (left, right) {
                 (RuleValue::Date(l), RuleValue::Date(r)) => {
-                    println!("Comparing dates: {} < {}", l, r);
+                    // println!("Comparing dates: {} < {}", l, r);
                     Ok(l < r)
                 },
                 _ => Err(RuleError::TypeError(format!("EarlierThan only works with dates {} {}", left, right))),

@@ -194,11 +194,11 @@ impl RuleSet {
     //     None
     // }
     pub fn find_matching_rule(&self, selector: &str, description: &str) -> Option<&Rule> {
-        println!("Finding rule for selector: '{}', description: '{}'", selector, description);
+        //println!("Finding rule for selector: '{}', description: '{}'", selector, description);
 
         // First try exact match on outcome
         if let Some(rule) = self.get_rule(description) {
-            println!("  Found exact match: {}", rule.outcome);
+            //println!("  Found exact match: {}", rule.outcome);
             return Some(rule);
         }
 
@@ -209,14 +209,14 @@ impl RuleSet {
                 // Check if the rule's outcome contains the description as a substring
                 // or vice versa
                 if rule.outcome.contains(description) || description.contains(&rule.outcome) {
-                    println!("  Found substring match: {}", rule.outcome);
+                    //println!("  Found substring match: {}", rule.outcome);
                     return Some(rule);
                 }
             }
         }
 
         // If we get here, no match was found
-        println!("  No match found for '{}'", description);
+        //println!("  No match found for '{}'", description);
         None
     }
 

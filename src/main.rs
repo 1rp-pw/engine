@@ -1,15 +1,16 @@
 mod runner;
 
 use std::collections::HashMap;
+use std::env;
 use runner::parser::parse_rules;
 use runner::evaluator::evaluate_rule_set;
 use runner::model::{Condition, RuleSet};
 use runner::trace::RuleSetTrace;
-
+use flags_rs::{Auth, Client};
 use serde_json::Value;
 use serde::{Deserialize, Serialize};
 use axum::{
-    extract::Json,
+    extract::{Json, State},
     http::StatusCode,
     routing::post,
     Router,
@@ -34,11 +35,30 @@ struct EvaluationResponse {
     data: Value,
 }
 
+#[derive(Clone)]
+struct AppState {
+    flags_client: Client,
+}
+
 #[tokio::main]
 async fn main() {
+    let flags_client = Client::builder()
+        .with_memory_cache()
+        .with_auth(Auth {
+            environment_id: env::var("FF_ENV_ID").unwrap(),
+            agent_id: env::var("FF_AGENT_ID").unwrap(),
+            project_id: env::var("FF_PROJECT_ID").unwrap(),
+        })
+        .build();
+
+    let state = AppState {
+        flags_client,
+    };
+
     let app = Router::new()
-        .route("/run", post(handle_evaluation));
-    
+        .route("/run", post(handle_run))
+        .with_state(state);
+
     let port: u16 = std::env::var("PORT")
         .unwrap_or_else(|_| "3000".to_string())
         .parse()
@@ -49,12 +69,26 @@ async fn main() {
     axum::serve(addr, app).await.unwrap();
 }
 
-async fn handle_evaluation(Json(package): Json<RuleDataPackage>) -> (StatusCode, Json<EvaluationResponse>) {
+async fn handle_run(
+    State(state): State<AppState>,
+    Json(package): Json<RuleDataPackage>
+) -> (StatusCode, Json<EvaluationResponse>) {
+    if !state.flags_client.is("run_v1").enabled().await {
+        return (StatusCode::NOT_IMPLEMENTED, Json(EvaluationResponse{
+            result: false,
+            error: None,
+            trace: None,
+            labels: None,
+            text: Vec::new(),
+            data: Value::Null,
+        }));
+    }
+
     match parse_rules(&package.rule) {
         Ok(rule_set) => match evaluate_rule_set(&rule_set, &package.data) {
             Ok((results, trace)) => {
-                print_rules(&rule_set);
-                
+                //print_rules(&rule_set);
+
                 let mut labels = HashMap::new();
                 for rule_trace in &trace.execution {
                     if let Some(label) = &rule_trace.label {
@@ -68,7 +102,7 @@ async fn handle_evaluation(Json(package): Json<RuleDataPackage>) -> (StatusCode,
                     result,
                     error: None,
                     trace: Some(trace),
-                    labels: if labels.is_empty() { 
+                    labels: if labels.is_empty() {
                         None
                     } else {
                         Some(labels)
