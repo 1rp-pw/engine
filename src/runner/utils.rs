@@ -6,6 +6,7 @@ fn find_referenced_outcomes(rules: &[Rule]) -> std::collections::HashSet<String>
     for rule in rules {
         for cond in &rule.conditions {
             if let Condition::RuleReference { selector: _, rule_name } = cond {
+                // println!("Found referenced rule {}", rule_name);
                 for other_rule in rules {
                     let label_match = other_rule.label.as_ref()
                         .map_or(false, |label| label == rule_name);
@@ -13,6 +14,7 @@ fn find_referenced_outcomes(rules: &[Rule]) -> std::collections::HashSet<String>
                     let outcome_match = other_rule.outcome == *rule_name;
                     
                     if label_match || outcome_match {
+                        // println!("Found referenced rule outcome {}", other_rule.outcome);
                         referenced.insert(other_rule.outcome.clone());
                     }
                 }
@@ -45,7 +47,7 @@ pub fn transform_property_name(name: &str) -> String {
     if words.is_empty() {
         return String::new();
     }
-    
+
     if words.len() == 1 {
         return words[0].to_string();
     }

@@ -256,7 +256,6 @@ fn evaluate_condition(
                     value: value.clone(),
                     value_pos: value_pos.clone(),
                     evaluation_details: None,
-                    result: false,
                 })))
             };
 
@@ -271,7 +270,6 @@ fn evaluate_condition(
                     value: value.clone(),
                     value_pos: value_pos.clone(),
                     evaluation_details: None,
-                    result: false,
                 })))
             }
 
@@ -300,7 +298,6 @@ fn evaluate_condition(
                 value: value.clone(),
                 value_pos: value_pos.clone(),
                 evaluation_details: None,
-                result: false,
             };
 
             Ok((comparison_result, ConditionTrace::Comparison(comparison_trace)))

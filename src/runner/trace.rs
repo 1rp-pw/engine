@@ -37,7 +37,6 @@ pub struct ComparisonTrace {
     pub value: RuleValue,
     pub value_pos: SourcePosition,
     pub evaluation_details: Option<ComparisonEvaluationTrace>,
-    pub result: bool,
 }
 
 #[derive(Debug, Serialize)]
