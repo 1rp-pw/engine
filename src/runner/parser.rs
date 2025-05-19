@@ -3,7 +3,6 @@ use chrono::NaiveDate;
 use pest::Parser;
 use pest_derive::Parser;
 use pest::iterators::Pair;
-use serde::de::Unexpected::Str;
 use crate::runner::model::{ComparisonOperator, RuleSet, RuleValue, Condition, SourcePosition};
 
 #[derive(Parser)]
@@ -131,7 +130,7 @@ fn parse_property_condition(pair: Pair<Rule>) -> Result<Condition, RuleError> {
 
     let prop_span = property_pair.as_span();
     let (prop_line_start, prop_word_start) = prop_span.start_pos().line_col();
-    let (prop_line_end, prop_word_end) = prop_span.end_pos().line_col();
+    let (_, prop_word_end) = prop_span.end_pos().line_col();
     let prop_pos = Some(SourcePosition {
         line: prop_line_start,
         start: prop_word_start,
@@ -190,7 +189,7 @@ fn parse_rule_reference(pair: Pair<Rule>) -> Result<Condition, RuleError> {
     let selector = selector_text[2..selector_text.len()-2].to_string();
 
     // Skip the verb
-    let verb = inner_pairs.next();
+    // let verb = inner_pairs.next();
     //println!("Parsing rule reference: selector='{}', verb='{:?}'", selector, verb.map(|v| v.as_str()));
 
     // The reference object might be optional
@@ -219,7 +218,7 @@ fn parse_label_reference(pair: Pair<Rule>) -> Result<Condition, RuleError> {
         .ok_or_else(|| RuleError::ParseError("Missing label in label reference".to_string()))?;
 
     let label_name = label_name_pair.as_str().to_string();
-    let predicate = inner_pairs.next();
+    // let predicate = inner_pairs.next();
 
     Ok(Condition::RuleReference {
         selector: String::new(),
@@ -257,7 +256,7 @@ fn parse_predicate(pair: Pair<Rule>) -> Result<(ComparisonOperator, RuleValue, S
 
     let value_span = value_pair.as_span();
     let (val_line_start, val_word_start) = value_span.start_pos().line_col();
-    let (val_line_end, val_word_end) = value_span.end_pos().line_col();
+    let (_, val_word_end) = value_span.end_pos().line_col();
     let val_pos = SourcePosition{
         line: val_line_start,
         start: val_word_start,

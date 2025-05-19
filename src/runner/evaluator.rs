@@ -332,7 +332,7 @@ fn extract_value_from_json(
                         // println!("Successfully parsed date: {}", date);
                         Ok(RuleValue::Date(date))
                     },
-                    Err(e) => {
+                    Err(_) => {
                         // println!("Failed to parse date '{}': {}", s, e);
                         Ok(RuleValue::String(s.clone()))
                     }
