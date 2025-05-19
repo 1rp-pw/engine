@@ -29,8 +29,10 @@ condition = {
     label_reference
 }
 
+selector_chain = { "the"? ~ object_selector ~ (("of" ~ "the"? ~ object_selector))* }
+
 property_condition = {
-    "the" ~ property ~ "of" ~ "the" ~ object_selector ~ predicate
+    "the" ~ property ~ "of" ~ selector_chain ~ predicate
 }
 
 rule_reference = {

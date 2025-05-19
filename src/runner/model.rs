@@ -74,7 +74,7 @@ impl fmt::Display for RuleValue {
 #[derive(Debug, Clone)]
 pub enum Condition {
     Comparison {
-        selector: String,
+        selector_chain: Vec<String>,
         selector_pos: SourcePosition,
         property: String,
         property_pos: SourcePosition,

@@ -138,28 +138,30 @@ fn parse_property_condition(pair: Pair<Rule>) -> Result<Condition, RuleError> {
         end: prop_word_end,
     });
 
-    // Extract the property name from between the double underscores
+    // Extract property name from between double underscores
     let property_text = property_pair.as_str();
     let property_name = property_text[2..property_text.len()-2].to_string();
-
-    // Transform property name with spaces to camelCase
     let property = crate::runner::utils::transform_property_name(&property_name);
 
-    let object_selector_pair = inner_pairs.next()
-        .ok_or_else(|| RuleError::ParseError("Missing object selector".to_string()))?;
+    let selector_chain_pair = inner_pairs.next()
+        .ok_or_else(|| RuleError::ParseError("Missing selector chain".to_string()))?;
 
-    let selector_span = object_selector_pair.as_span();
-    let (sel_line_start, sel_word_start) = selector_span.start_pos().line_col();
-    let (sel_line_end, sel_word_end) = selector_span.end_pos().line_col();
-    let sel_pos = Some(SourcePosition {
-        line: sel_line_start,
-        start: sel_word_start,
-        end: sel_word_end,
+    let selector_chain = parse_selector_chain(selector_chain_pair.clone());
+
+    // For selector_pos, use the span of the first selector in the chain
+    let first_selector_span = selector_chain_pair.into_inner()
+        .next()
+        .map(|p| p.as_span());
+
+    let selector_pos = first_selector_span.map(|span| {
+        let (line, start) = span.start_pos().line_col();
+        let (_, end) = span.end_pos().line_col();
+        SourcePosition {
+            line,
+            start,
+            end,
+        }
     });
-
-    // Extract the selector from between the double asterisks
-    let selector_text = object_selector_pair.as_str();
-    let selector = selector_text[2..selector_text.len()-2].to_string();
 
     let predicate = inner_pairs.next()
         .ok_or_else(|| RuleError::ParseError("Missing predicate".to_string()))?;
@@ -167,8 +169,8 @@ fn parse_property_condition(pair: Pair<Rule>) -> Result<Condition, RuleError> {
     let (operator, value, value_pos) = parse_predicate(predicate)?;
 
     Ok(Condition::Comparison {
-        selector,
-        selector_pos: sel_pos.unwrap(),
+        selector_chain,
+        selector_pos: selector_pos.unwrap_or(SourcePosition { line: 0, start: 0, end: 0 }),
         property,
         property_pos: prop_pos.unwrap(),
         operator,
@@ -326,4 +328,15 @@ fn parse_value(pair: Pair<Rule>) -> Result<RuleValue, RuleError> {
         },
         _ => Err(RuleError::ParseError(format!("Unknown value type: {:?}", pair.as_rule())))
     }
+}
+
+fn parse_selector_chain(pair: Pair<Rule>) -> Vec<String> {
+    let mut selectors = Vec::new();
+    for inner in pair.into_inner() {
+        if inner.as_rule() == Rule::object_selector {
+            let text = inner.as_str();
+            selectors.push(text[2..text.len()-2].to_string());
+        }
+    }
+    selectors
 }
