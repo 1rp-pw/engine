@@ -12,4 +12,4 @@ chrono = { version = "0.4.41", features = ["serde"] }
 thiserror = "2.0.12"
 axum = {  version = "0.8.4", features = ["tracing", "macros"] }
 tokio = { version = "1.45.0", features = ["full"]}
-flags-rs = "0.1.3"
+flags-rs = "0.1.4"

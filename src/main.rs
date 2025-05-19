@@ -138,26 +138,34 @@ async fn handle_run(
     }
 }
 
-fn print_rules(rule_set: &RuleSet) {
-    for (i, rule) in rule_set.rules.iter().enumerate() {
-        if let Some(label) = &rule.label {
-            println!("  {}. [{}] **{}** gets {}", i + 1, label, rule.selector, rule.outcome);
-        } else {
-            println!("  {}. **{}** gets {}", i + 1, rule.selector, rule.outcome);
-        }
-
-        // Print conditions for each rule
-        for (j, condition) in rule.conditions.iter().enumerate() {
-            match condition {
-                Condition::Comparison { selector, property, operator, value } => {
-                    println!("     Comparison Condition {}: the __{}__ of the **{}** {} {}",
-                             j + 1, property, selector, operator, value);
-                },
-                Condition::RuleReference { selector, rule_name } => {
-                    println!("     Rule Condition {}: the **{}** passes {}",
-                             j + 1, selector, rule_name);
-                },
-            }
-        }
-    }
-}
+// fn print_rules(rule_set: &RuleSet) {
+//     for (i, rule) in rule_set.rules.iter().enumerate() {
+//         if let Some(label) = &rule.label {
+//             println!("  {}. [{}] **{}** gets {}", i + 1, label, rule.selector, rule.outcome);
+//         } else {
+//             println!("  {}. **{}** gets {}", i + 1, rule.selector, rule.outcome);
+//         }
+//
+//         // Print conditions for each rule
+//         for (j, condition) in rule.conditions.iter().enumerate() {
+//             match condition {
+//                 Condition::Comparison {
+//                     selector_chain,
+//                     selector_pos_chain,
+//                     property,
+//                     property_pos,
+//                     operator,
+//                     value,
+//                     value_pos,
+//                 } => {
+//                     println!("     Comparison Condition {}: the __{}__ of the **{}** {} {}",
+//                              j + 1, property, selector_chain, operator, value);
+//                 },
+//                 Condition::RuleReference { selector, rule_name } => {
+//                     println!("     Rule Condition {}: the **{}** passes {}",
+//                              j + 1, selector, rule_name);
+//                 },
+//             }
+//         }
+//     }
+// }

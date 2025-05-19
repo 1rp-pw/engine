@@ -17,7 +17,6 @@ pub struct RuleTrace {
     pub outcome: String,
     pub outcome_pos: Option<SourcePosition>,
     pub conditions: Vec<ConditionTrace>,
-    pub position: Option<SourcePosition>,
     pub result: bool,
 }
 
@@ -31,14 +30,13 @@ pub enum ConditionTrace {
 #[derive(Debug, Serialize)]
 pub struct ComparisonTrace {
     pub selector: String,
-    pub selector_pos: Option<SourcePosition>,
+    pub selector_pos: SourcePosition,
     pub property: String,
-    pub property_pos: Option<SourcePosition>,
+    pub property_pos: SourcePosition,
     pub operator: ComparisonOperator,
     pub value: RuleValue,
+    pub value_pos: SourcePosition,
     pub evaluation_details: Option<ComparisonEvaluationTrace>,
-    pub result: bool,
-    pub position: Option<SourcePosition>,
 }
 
 #[derive(Debug, Serialize)]

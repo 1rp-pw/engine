@@ -87,7 +87,6 @@ pub fn evaluate_rule(
         outcome: model_rule.outcome.clone(),
         outcome_pos: None,
         conditions: condition_traces,
-        position: None,
         result: rule_result,
     };
     
@@ -101,7 +100,9 @@ fn evaluate_condition(
 ) -> Result<(bool, ConditionTrace), RuleError> {
     match condition {
         Condition::RuleReference { selector, rule_name } => {
-            let selector_exists = json.get(selector).is_some();
+            let selector_value = json.get(selector)
+                .or_else(|| get_json_value_case_insensitive(json, selector));
+            let selector_exists = selector_value.is_some();
             let effective_selector = if selector_exists {
                 selector.clone()
             } else {
@@ -132,7 +133,13 @@ fn evaluate_condition(
                     overall_result = false;
                 }
                 referenced_outcome = Some(referenced_rule.outcome.to_string());
-            } else {
+            } else if let Some(referenced_rule) = rule_set.get_rule_by_label(part) {
+                let (referenced_result, _) = evaluate_rule(referenced_rule, json, rule_set)?;
+                if !referenced_result {
+                    overall_result = false;
+                }
+                referenced_outcome = Some(referenced_rule.outcome.clone());
+        } else {
                 // If no exact match, try to find a rule with similar description
                 if let Some(referenced_rule) = rule_set.find_matching_rule(selector, part) {
                     let (referenced_result, _) = evaluate_rule(referenced_rule, json, rule_set)?;
@@ -213,52 +220,58 @@ fn evaluate_condition(
 
             Ok((overall_result, ConditionTrace::RuleReference(rule_reference_trace)))
         },
-        Condition::Comparison { selector, property, operator, value } => {
-            // Try exact match first
-            let selector_exists = json.get(selector).is_some();
+        Condition::Comparison {
+            selector_chain,
+            selector_pos,
+            property,
+            property_pos,
+            operator,
+            value,
+            value_pos
+        } => {
+            // Traverse JSON using selector chain
+            let obj_opt = get_value_from_selector_chain(json, selector_chain);
 
-            // If exact match fails, try transformed selector
-            let transformed_selector = if !selector_exists {
-                transform_selector_name(selector)
-            } else {
-                selector.clone()
-            };
-
-            // If neither selector exists in the JSON, return false
-            let effective_selector = if selector_exists {
-                selector
-            } else if json.get(&transformed_selector).is_some() {
-                &transformed_selector
-            } else {
-                return Ok((false, ConditionTrace::Comparison(ComparisonTrace {
-                    selector: selector.clone(),
-                    selector_pos: None,
-                    property: property.clone(),
-                    property_pos: None,
-                    operator: operator.clone(),
-                    value: value.clone(),
-                    evaluation_details: None,
-                    result: false,
-                    position: None,
-                })))
-            };
-
-            // If the property doesn't exist, return false
-            if json[effective_selector].get(property).is_none() {
-                return Ok((false, ConditionTrace::Comparison(ComparisonTrace {
-                    selector: selector.clone(),
-                    selector_pos: None,
-                    property: property.clone(),
-                    property_pos: None,
-                    operator: operator.clone(),
-                    value: value.clone(),
-                    evaluation_details: None,
-                    result: false,
-                    position: None,
-                })))
+            if obj_opt.is_none() {
+                // Selector chain not found in JSON
+                return Ok((
+                    false,
+                    ConditionTrace::Comparison(ComparisonTrace {
+                        selector: selector_chain.join(" of "),
+                        selector_pos: selector_pos.clone(),
+                        property: property.clone(),
+                        property_pos: property_pos.clone(),
+                        operator: operator.clone(),
+                        value: value.clone(),
+                        value_pos: value_pos.clone(),
+                        evaluation_details: None,
+                    }),
+                ));
             }
 
-            let json_value = extract_value_from_json(json, effective_selector, property)?;
+            let obj = obj_opt.unwrap();
+
+            // Check if property exists
+            if obj.get(property).is_none() {
+                return Ok((
+                    false,
+                    ConditionTrace::Comparison(ComparisonTrace {
+                        selector: selector_chain.join(" of "),
+                        selector_pos: selector_pos.clone(),
+                        property: property.clone(),
+                        property_pos: property_pos.clone(),
+                        operator: operator.clone(),
+                        value: value.clone(),
+                        value_pos: value_pos.clone(),
+                        evaluation_details: None,
+                    }),
+                ));
+            }
+
+            // Extract value for comparison
+            let json_value = extract_value_from_json(json, selector_chain, property)?;
+
+            // Evaluate comparison
             let (comparison_result, evaluation_details) = match evaluate_comparison(&json_value, operator, value) {
                 Ok(res) => {
                     let details = ComparisonEvaluationTrace {
@@ -267,23 +280,19 @@ fn evaluate_condition(
                         comparison_result: res,
                     };
                     (res, Some(details))
-                },
-                Err(e) => {
-                    // println!("Comparison Error {}", e);
-                    (false, None)
                 }
+                Err(_) => (false, None),
             };
 
             let comparison_trace = ComparisonTrace {
-                selector: selector.clone(),
-                selector_pos: None,
+                selector: selector_chain.join(" of "),
+                selector_pos: selector_pos.clone(),
                 property: property.clone(),
-                property_pos: None,
+                property_pos: property_pos.clone(),
                 operator: operator.clone(),
                 value: value.clone(),
+                value_pos: value_pos.clone(),
                 evaluation_details,
-                result: comparison_result,
-                position: None,
             };
 
             Ok((comparison_result, ConditionTrace::Comparison(comparison_trace)))
@@ -293,20 +302,18 @@ fn evaluate_condition(
 
 fn extract_value_from_json(
     json: &Value,
-    selector: &str,
+    selector_chain: &[String],
     property: &str
 ) -> Result<RuleValue, RuleError> {
-    let obj = if let Some(obj) = json.get(selector) {
-        obj
-    } else {
-        // Try transformed selector (camelCase)
-        let transformed_selector = transform_selector_name(selector);
-        json.get(&transformed_selector)
-            .ok_or_else(|| RuleError::EvaluationError(format!("Selector '{}' (or '{}') not found in JSON", selector, transformed_selector)))?
-    };
+    let obj = get_value_from_selector_chain(json, selector_chain)
+        .ok_or_else(|| RuleError::EvaluationError(format!(
+            "Selector chain {:?} not found in JSON", selector_chain
+        )))?;
 
     let value = obj.get(property)
-        .ok_or_else(|| RuleError::EvaluationError(format!("Property '{}' not found in selector '{}'", property, selector)))?;
+        .ok_or_else(|| RuleError::EvaluationError(format!(
+            "Property '{}' not found in selector chain {:?}", property, selector_chain
+        )))?;
 
     match value {
         Value::Number(n) => {
@@ -325,7 +332,7 @@ fn extract_value_from_json(
                         // println!("Successfully parsed date: {}", date);
                         Ok(RuleValue::Date(date))
                     },
-                    Err(e) => {
+                    Err(_) => {
                         // println!("Failed to parse date '{}': {}", s, e);
                         Ok(RuleValue::String(s.clone()))
                     }
@@ -510,6 +517,33 @@ fn transform_selector_name(name: &str) -> String {
     }
 
     result
+}
+
+fn get_json_value_case_insensitive<'a>(
+    json: &'a serde_json::Value,
+    key: &str,
+) -> Option<&'a serde_json::Value> {
+    if let Some(obj) = json.as_object() {
+        let key_lower = key.to_lowercase();
+        for (k, v) in obj {
+            if k.to_lowercase() == key_lower {
+                return Some(v);
+            }
+        }
+    }
+    None
+}
+
+fn get_value_from_selector_chain<'a>(
+    json: &'a serde_json::Value,
+    selector_chain: &[String],
+) -> Option<&'a serde_json::Value> {
+    let mut current = json;
+    for selector in selector_chain {
+        let transformed = transform_selector_name(selector);
+        current = get_json_value_case_insensitive(current, &transformed)?;
+    }
+    Some(current)
 }
 
 

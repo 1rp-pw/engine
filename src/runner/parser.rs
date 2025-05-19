@@ -64,7 +64,8 @@ fn parse_rule(pair: Pair<Rule>) -> Result<crate::runner::model::Rule, RuleError>
             Rule::label => {
                 // Remove the trailing ". " from the label
                 let label_text = header_part.as_str();
-                label = Some(label_text[..label_text.len()-2].to_string());
+                let label_text = label_text.trim_end_matches(".").trim();
+                label = Some(label_text[..label_text.len()-1].to_string());
             },
             Rule::object_selector => {
                 // Extract the selector from between the double asterisks
@@ -116,6 +117,7 @@ fn parse_condition(pair: Pair<Rule>) -> Result<Condition, RuleError> {
     match inner_pair.as_rule() {
         Rule::property_condition => parse_property_condition(inner_pair),
         Rule::rule_reference => parse_rule_reference(inner_pair),
+        Rule::label_reference => parse_label_reference(inner_pair),
         _ => Err(RuleError::ParseError(format!("Unknown condition type: {:?}", inner_pair.as_rule())))
     }
 }
@@ -126,30 +128,53 @@ fn parse_property_condition(pair: Pair<Rule>) -> Result<Condition, RuleError> {
     let property_pair = inner_pairs.next()
         .ok_or_else(|| RuleError::ParseError("Missing property".to_string()))?;
 
-    // Extract the property name from between the double underscores
+    let prop_span = property_pair.as_span();
+    let (prop_line_start, prop_word_start) = prop_span.start_pos().line_col();
+    let (_, prop_word_end) = prop_span.end_pos().line_col();
+    let prop_pos = Some(SourcePosition {
+        line: prop_line_start,
+        start: prop_word_start,
+        end: prop_word_end,
+    });
+
+    // Extract property name from between double underscores
     let property_text = property_pair.as_str();
     let property_name = property_text[2..property_text.len()-2].to_string();
-
-    // Transform property name with spaces to camelCase
     let property = crate::runner::utils::transform_property_name(&property_name);
 
-    let object_selector_pair = inner_pairs.next()
-        .ok_or_else(|| RuleError::ParseError("Missing object selector".to_string()))?;
+    let selector_chain_pair = inner_pairs.next()
+        .ok_or_else(|| RuleError::ParseError("Missing selector chain".to_string()))?;
 
-    // Extract the selector from between the double asterisks
-    let selector_text = object_selector_pair.as_str();
-    let selector = selector_text[2..selector_text.len()-2].to_string();
+    let selector_chain = parse_selector_chain(selector_chain_pair.clone());
+
+    // For selector_pos, use the span of the first selector in the chain
+    let first_selector_span = selector_chain_pair.into_inner()
+        .next()
+        .map(|p| p.as_span());
+
+    let selector_pos = first_selector_span.map(|span| {
+        let (line, start) = span.start_pos().line_col();
+        let (_, end) = span.end_pos().line_col();
+        SourcePosition {
+            line,
+            start,
+            end,
+        }
+    });
 
     let predicate = inner_pairs.next()
         .ok_or_else(|| RuleError::ParseError("Missing predicate".to_string()))?;
 
-    let (operator, value) = parse_predicate(predicate)?;
+    let (operator, value, value_pos) = parse_predicate(predicate)?;
 
     Ok(Condition::Comparison {
-        selector,
+        selector_chain,
+        selector_pos: selector_pos.unwrap_or(SourcePosition { line: 0, start: 0, end: 0 }),
         property,
+        property_pos: prop_pos.unwrap(),
         operator,
         value,
+        value_pos,
     })
 }
 
@@ -164,7 +189,7 @@ fn parse_rule_reference(pair: Pair<Rule>) -> Result<Condition, RuleError> {
     let selector = selector_text[2..selector_text.len()-2].to_string();
 
     // Skip the verb
-    let verb = inner_pairs.next();
+    // let verb = inner_pairs.next();
     //println!("Parsing rule reference: selector='{}', verb='{:?}'", selector, verb.map(|v| v.as_str()));
 
     // The reference object might be optional
@@ -187,7 +212,21 @@ fn parse_rule_reference(pair: Pair<Rule>) -> Result<Condition, RuleError> {
     })
 }
 
-fn parse_predicate(pair: Pair<Rule>) -> Result<(ComparisonOperator, RuleValue), RuleError> {
+fn parse_label_reference(pair: Pair<Rule>) -> Result<Condition, RuleError> {
+    let mut inner_pairs = pair.into_inner();
+    let label_name_pair = inner_pairs.next()
+        .ok_or_else(|| RuleError::ParseError("Missing label in label reference".to_string()))?;
+
+    let label_name = label_name_pair.as_str().to_string();
+    // let predicate = inner_pairs.next();
+
+    Ok(Condition::RuleReference {
+        selector: String::new(),
+        rule_name: label_name,
+    })
+}
+
+fn parse_predicate(pair: Pair<Rule>) -> Result<(ComparisonOperator, RuleValue, SourcePosition), RuleError> {
     let inner_pairs = pair.into_inner().collect::<Vec<_>>();
 
     if inner_pairs.len() < 2 {
@@ -215,13 +254,22 @@ fn parse_predicate(pair: Pair<Rule>) -> Result<(ComparisonOperator, RuleValue), 
     let value_pair = &inner_pairs[1];
     //println!("Value pair rule: {:?}, text: {}", value_pair.as_rule(), value_pair.as_str());
 
+    let value_span = value_pair.as_span();
+    let (val_line_start, val_word_start) = value_span.start_pos().line_col();
+    let (_, val_word_end) = value_span.end_pos().line_col();
+    let val_pos = SourcePosition{
+        line: val_line_start,
+        start: val_word_start,
+        end: val_word_end,
+    };
+
     let value = if operator == ComparisonOperator::In || operator == ComparisonOperator::NotIn {
         parse_list_value(value_pair.clone())?
     } else {
         parse_value(value_pair.clone())?
     };
 
-    Ok((operator, value))
+    Ok((operator, value, val_pos))
 }
 
 fn parse_list_value(pair: Pair<Rule>) -> Result<RuleValue, RuleError> {
@@ -279,4 +327,15 @@ fn parse_value(pair: Pair<Rule>) -> Result<RuleValue, RuleError> {
         },
         _ => Err(RuleError::ParseError(format!("Unknown value type: {:?}", pair.as_rule())))
     }
+}
+
+fn parse_selector_chain(pair: Pair<Rule>) -> Vec<String> {
+    let mut selectors = Vec::new();
+    for inner in pair.into_inner() {
+        if inner.as_rule() == Rule::object_selector {
+            let text = inner.as_str();
+            selectors.push(text[2..text.len()-2].to_string());
+        }
+    }
+    selectors
 }

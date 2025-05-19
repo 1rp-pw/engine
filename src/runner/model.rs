@@ -74,10 +74,13 @@ impl fmt::Display for RuleValue {
 #[derive(Debug, Clone)]
 pub enum Condition {
     Comparison {
-        selector: String,
+        selector_chain: Vec<String>,
+        selector_pos: SourcePosition,
         property: String,
+        property_pos: SourcePosition,
         operator: ComparisonOperator,
         value: RuleValue,
+        value_pos: SourcePosition,
     },
     RuleReference {
         selector: String,
@@ -91,7 +94,6 @@ pub struct Rule {
     pub selector: String,
     pub selector_pos: Option<SourcePosition>,
     pub outcome: String,
-    pub outcome_pos: Option<SourcePosition>,
     pub conditions: Vec<Condition>,
     pub position: Option<SourcePosition>,
 }
@@ -103,7 +105,6 @@ impl Rule {
             selector,
             selector_pos: None,
             outcome,
-            outcome_pos: None,
             conditions: Vec::new(),
             position: None,
         }
@@ -118,6 +119,7 @@ impl Rule {
 pub struct RuleSet {
     pub rules: Vec<Rule>,
     rule_map: HashMap<String, usize>,
+    label_map: HashMap<String, usize>
 }
 
 impl RuleSet {
@@ -125,17 +127,25 @@ impl RuleSet {
         RuleSet {
             rules: Vec::new(),
             rule_map: HashMap::new(),
+            label_map: HashMap::new()
         }
     }
 
     pub fn add_rule(&mut self, rule: Rule) {
         let index = self.rules.len();
         self.rule_map.insert(rule.outcome.clone(), index);
+        if let Some(label) = &rule.label {
+            self.label_map.insert(label.clone(), index);
+        }
         self.rules.push(rule);
     }
 
     pub fn get_rule(&self, outcome: &str) -> Option<&Rule> {
         self.rule_map.get(outcome).map(|&index| &self.rules[index])
+    }
+    
+    pub fn get_rule_by_label(&self, label: &str) -> Option<&Rule> {
+        self.label_map.get(label).map(|&index| &self.rules[index])
     }
 
     // pub fn find_matching_rule(&self, selector: &str, description: &str) -> Option<&Rule> {
@@ -221,38 +231,38 @@ impl RuleSet {
     }
 
     // Calculate a simple similarity score between two strings
-    fn calculate_similarity(&self, s1: &str, s2: &str) -> usize {
-        // Convert to lowercase for comparison
-        let s1_lower = s1.to_lowercase();
-        let s2_lower = s2.to_lowercase();
-
-        // Split into words
-        let words1: Vec<&str> = s1_lower.split_whitespace().collect();
-        let words2: Vec<&str> = s2_lower.split_whitespace().collect();
-
-        // Common words to ignore
-        let common_words = ["the", "a", "an", "and", "or", "of", "for", "to", "in", "on", "at", "by", "with"];
-
-        // Count matching significant words
-        let mut score = 0;
-        for word1 in &words1 {
-            if !common_words.contains(word1) && words2.contains(word1) {
-                score += 1;
-            }
-        }
-
-        // If the score is too low relative to the number of significant words, return 0
-        let significant_words1 = words1.iter().filter(|w| !common_words.contains(w)).count();
-        let significant_words2 = words2.iter().filter(|w| !common_words.contains(w)).count();
-        let min_significant = significant_words1.min(significant_words2);
-
-        // Require at least 50% match of significant words
-        if min_significant > 0 && score * 2 < min_significant {
-            return 0;
-        }
-
-        score
-    }
+    // fn calculate_similarity(&self, s1: &str, s2: &str) -> usize {
+    //     // Convert to lowercase for comparison
+    //     let s1_lower = s1.to_lowercase();
+    //     let s2_lower = s2.to_lowercase();
+    //
+    //     // Split into words
+    //     let words1: Vec<&str> = s1_lower.split_whitespace().collect();
+    //     let words2: Vec<&str> = s2_lower.split_whitespace().collect();
+    //
+    //     // Common words to ignore
+    //     let common_words = ["the", "a", "an", "and", "or", "of", "for", "to", "in", "on", "at", "by", "with"];
+    //
+    //     // Count matching significant words
+    //     let mut score = 0;
+    //     for word1 in &words1 {
+    //         if !common_words.contains(word1) && words2.contains(word1) {
+    //             score += 1;
+    //         }
+    //     }
+    //
+    //     // If the score is too low relative to the number of significant words, return 0
+    //     let significant_words1 = words1.iter().filter(|w| !common_words.contains(w)).count();
+    //     let significant_words2 = words2.iter().filter(|w| !common_words.contains(w)).count();
+    //     let min_significant = significant_words1.min(significant_words2);
+    //
+    //     // Require at least 50% match of significant words
+    //     if min_significant > 0 && score * 2 < min_significant {
+    //         return 0;
+    //     }
+    //
+    //     score
+    // }
 }
 
 #[derive(Debug, Serialize, Clone)]

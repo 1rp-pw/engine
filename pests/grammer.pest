@@ -25,16 +25,23 @@ outcome = @{ (!("if" | ".") ~ ANY)+ }
 
 condition = {
     property_condition |
-    rule_reference
+    rule_reference |
+    label_reference
 }
 
+selector_chain = { "the"? ~ object_selector ~ (("of" ~ "the"? ~ object_selector))* }
+
 property_condition = {
-    "the" ~ property ~ "of" ~ "the" ~ object_selector ~ predicate
+    "the" ~ property ~ "of" ~ selector_chain ~ predicate
 }
 
 rule_reference = {
     "the" ~ object_selector ~ reference_verb ~ reference_object?
 }
+
+label_reference = { "§" ~ label_name ~ label_predicate? }
+label_name = @{ (ASCII_ALPHANUMERIC | "_" | "-")+ }
+label_predicate = _{ "is valid" | "is approved" | "has passed" }
 
 reference_verb = {
     "passes" | "meets" | "satisfies" | "qualifies for" | "is eligible for" | "has passed"
