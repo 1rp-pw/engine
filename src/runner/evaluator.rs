@@ -132,7 +132,13 @@ fn evaluate_condition(
                     overall_result = false;
                 }
                 referenced_outcome = Some(referenced_rule.outcome.to_string());
-            } else {
+            } else if let Some(referenced_rule) = rule_set.get_rule_by_label(part) {
+                let (referenced_result, _) = evaluate_rule(referenced_rule, json, rule_set)?;
+                if !referenced_result {
+                    overall_result = false;
+                }
+                referenced_outcome = Some(referenced_rule.outcome.clone());
+        } else {
                 // If no exact match, try to find a rule with similar description
                 if let Some(referenced_rule) = rule_set.find_matching_rule(selector, part) {
                     let (referenced_result, _) = evaluate_rule(referenced_rule, json, rule_set)?;
