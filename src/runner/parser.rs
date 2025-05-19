@@ -129,6 +129,15 @@ fn parse_property_condition(pair: Pair<Rule>) -> Result<Condition, RuleError> {
     let property_pair = inner_pairs.next()
         .ok_or_else(|| RuleError::ParseError("Missing property".to_string()))?;
 
+    let prop_span = property_pair.as_span();
+    let (prop_line_start, prop_word_start) = prop_span.start_pos().line_col();
+    let (prop_line_end, prop_word_end) = prop_span.end_pos().line_col();
+    let prop_pos = Some(SourcePosition {
+        line: prop_line_start,
+        start: prop_word_start,
+        end: prop_word_end,
+    });
+
     // Extract the property name from between the double underscores
     let property_text = property_pair.as_str();
     let property_name = property_text[2..property_text.len()-2].to_string();
@@ -139,6 +148,15 @@ fn parse_property_condition(pair: Pair<Rule>) -> Result<Condition, RuleError> {
     let object_selector_pair = inner_pairs.next()
         .ok_or_else(|| RuleError::ParseError("Missing object selector".to_string()))?;
 
+    let selector_span = object_selector_pair.as_span();
+    let (sel_line_start, sel_word_start) = selector_span.start_pos().line_col();
+    let (sel_line_end, sel_word_end) = selector_span.end_pos().line_col();
+    let sel_pos = Some(SourcePosition {
+        line: sel_line_start,
+        start: sel_word_start,
+        end: sel_word_end,
+    });
+
     // Extract the selector from between the double asterisks
     let selector_text = object_selector_pair.as_str();
     let selector = selector_text[2..selector_text.len()-2].to_string();
@@ -146,13 +164,16 @@ fn parse_property_condition(pair: Pair<Rule>) -> Result<Condition, RuleError> {
     let predicate = inner_pairs.next()
         .ok_or_else(|| RuleError::ParseError("Missing predicate".to_string()))?;
 
-    let (operator, value) = parse_predicate(predicate)?;
+    let (operator, value, value_pos) = parse_predicate(predicate)?;
 
     Ok(Condition::Comparison {
         selector,
+        selector_pos: sel_pos.unwrap(),
         property,
+        property_pos: prop_pos.unwrap(),
         operator,
         value,
+        value_pos,
     })
 }
 
@@ -204,7 +225,7 @@ fn parse_label_reference(pair: Pair<Rule>) -> Result<Condition, RuleError> {
     })
 }
 
-fn parse_predicate(pair: Pair<Rule>) -> Result<(ComparisonOperator, RuleValue), RuleError> {
+fn parse_predicate(pair: Pair<Rule>) -> Result<(ComparisonOperator, RuleValue, SourcePosition), RuleError> {
     let inner_pairs = pair.into_inner().collect::<Vec<_>>();
 
     if inner_pairs.len() < 2 {
@@ -232,13 +253,22 @@ fn parse_predicate(pair: Pair<Rule>) -> Result<(ComparisonOperator, RuleValue), 
     let value_pair = &inner_pairs[1];
     //println!("Value pair rule: {:?}, text: {}", value_pair.as_rule(), value_pair.as_str());
 
+    let value_span = value_pair.as_span();
+    let (val_line_start, val_word_start) = value_span.start_pos().line_col();
+    let (val_line_end, val_word_end) = value_span.end_pos().line_col();
+    let val_pos = SourcePosition{
+        line: val_line_start,
+        start: val_word_start,
+        end: val_word_end,
+    };
+
     let value = if operator == ComparisonOperator::In || operator == ComparisonOperator::NotIn {
         parse_list_value(value_pair.clone())?
     } else {
         parse_value(value_pair.clone())?
     };
 
-    Ok((operator, value))
+    Ok((operator, value, val_pos))
 }
 
 fn parse_list_value(pair: Pair<Rule>) -> Result<RuleValue, RuleError> {

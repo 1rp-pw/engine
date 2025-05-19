@@ -75,9 +75,12 @@ impl fmt::Display for RuleValue {
 pub enum Condition {
     Comparison {
         selector: String,
+        selector_pos: SourcePosition,
         property: String,
+        property_pos: SourcePosition,
         operator: ComparisonOperator,
         value: RuleValue,
+        value_pos: SourcePosition,
     },
     RuleReference {
         selector: String,

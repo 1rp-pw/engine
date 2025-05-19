@@ -149,7 +149,15 @@ fn print_rules(rule_set: &RuleSet) {
         // Print conditions for each rule
         for (j, condition) in rule.conditions.iter().enumerate() {
             match condition {
-                Condition::Comparison { selector, property, operator, value } => {
+                Condition::Comparison {
+                    selector,
+                    selector_pos,
+                    property,
+                    property_pos,
+                    operator,
+                    value,
+                    value_pos,
+                } => {
                     println!("     Comparison Condition {}: the __{}__ of the **{}** {} {}",
                              j + 1, property, selector, operator, value);
                 },

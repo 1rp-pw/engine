@@ -45,6 +45,10 @@ pub fn transform_property_name(name: &str) -> String {
     if words.is_empty() {
         return String::new();
     }
+    
+    if words.len() == 1 {
+        return words[0].to_string();
+    }
 
     let mut result = words[0].to_lowercase();
     for word in &words[1..] {
