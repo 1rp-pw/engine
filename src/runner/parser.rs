@@ -3,7 +3,6 @@ use chrono::NaiveDate;
 use pest::Parser;
 use pest_derive::Parser;
 use pest::iterators::Pair;
-use serde::de::Unexpected::Str;
 use crate::runner::model::{ComparisonOperator, RuleSet, RuleValue, Condition, SourcePosition};
 
 #[derive(Parser)]
@@ -141,31 +140,45 @@ fn parse_property_condition(pair: Pair<Rule>) -> Result<Condition, RuleError> {
 
     let property_pair = inner_pairs.next()
         .ok_or_else(|| RuleError::ParseError("Missing property".to_string()))?;
-
-    // Extract the property name from between the double underscores
     let property_text = property_pair.as_str();
     let property_name = property_text[2..property_text.len()-2].to_string();
-
-    // Transform property name with spaces to camelCase
     let property = crate::runner::utils::transform_property_name(&property_name);
+    let property_span = property_pair.as_span();
+    let (property_line_start, property_word_start) = property_span.start_pos().line_col();
+    let (_, property_word_end) = property_span.end_pos().line_col();
+    let property_pos = Some(SourcePosition {
+        line: property_line_start,
+        start: property_word_start,
+        end: property_word_end,
+    });
 
     let object_selector_pair = inner_pairs.next()
         .ok_or_else(|| RuleError::ParseError("Missing object selector".to_string()))?;
-
-    // Extract the selector from between the double asterisks
+    
     let selector_text = object_selector_pair.as_str();
     let selector = selector_text[2..selector_text.len()-2].to_string();
+    let selector_span = object_selector_pair.as_span();
+    let (selector_line_start, selector_word_start) = selector_span.start_pos().line_col();
+    let (_, selector_word_end) = selector_span.end_pos().line_col();
+    let selector_pos = Some(SourcePosition{
+        line: selector_line_start,
+        start: selector_word_start,
+        end: selector_word_end,
+    });
 
     let predicate = inner_pairs.next()
         .ok_or_else(|| RuleError::ParseError("Missing predicate".to_string()))?;
 
-    let (operator, value) = parse_predicate(predicate)?;
+    let (operator, value, value_pos) = parse_predicate(predicate)?;
 
     Ok(Condition::Comparison {
         selector,
+        selector_pos,
         property,
+        property_pos,
         operator,
         value,
+        value_pos: Some(value_pos),
     })
 }
 
@@ -203,7 +216,7 @@ fn parse_rule_reference(pair: Pair<Rule>) -> Result<Condition, RuleError> {
     })
 }
 
-fn parse_predicate(pair: Pair<Rule>) -> Result<(ComparisonOperator, RuleValue), RuleError> {
+fn parse_predicate(pair: Pair<Rule>) -> Result<(ComparisonOperator, RuleValue, SourcePosition), RuleError> {
     let inner_pairs = pair.into_inner().collect::<Vec<_>>();
 
     if inner_pairs.len() < 2 {
@@ -236,8 +249,17 @@ fn parse_predicate(pair: Pair<Rule>) -> Result<(ComparisonOperator, RuleValue), 
     } else {
         parse_value(value_pair.clone())?
     };
+    
+    let value_span = value_pair.as_span();
+    let (value_line_start, value_word_start) = value_span.start_pos().line_col();
+    let (_, value_word_end) = value_span.end_pos().line_col();
+    let val_pos = SourcePosition{
+        line: value_line_start,
+        start: value_word_start,
+        end: value_word_end,
+    };
 
-    Ok((operator, value))
+    Ok((operator, value, val_pos))
 }
 
 fn parse_list_value(pair: Pair<Rule>) -> Result<RuleValue, RuleError> {

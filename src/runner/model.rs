@@ -87,9 +87,12 @@ pub struct RuleSource {
 pub enum Condition {
     Comparison {
         selector: String,
+        selector_pos: Option<SourcePosition>,
         property: String,
+        property_pos: Option<SourcePosition>,
         operator: ComparisonOperator,
         value: RuleValue,
+        value_pos: Option<SourcePosition>,
     },
     RuleReference {
         selector: String,
