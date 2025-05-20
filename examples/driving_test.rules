@@ -1,8 +1,0 @@
-# Driving Test Rules
-A **Person** gets a full driving license
-  if the __age__ of the **Person** is greater than or equal to 17
-  and the **Person** passes the practical driving test
-  and the **Person** passes the eye test.
-
-A **Person** passes the practical driving test
-  if the __driving test score__ of the **Person** is greater than or equal to 60.

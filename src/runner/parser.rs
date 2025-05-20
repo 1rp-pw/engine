@@ -3,6 +3,7 @@ use chrono::NaiveDate;
 use pest::Parser;
 use pest_derive::Parser;
 use pest::iterators::Pair;
+use serde::de::Unexpected::Str;
 use crate::runner::model::{ComparisonOperator, RuleSet, RuleValue, Condition, SourcePosition};
 
 #[derive(Parser)]
@@ -64,7 +65,7 @@ fn parse_rule(pair: Pair<Rule>) -> Result<crate::runner::model::Rule, RuleError>
             Rule::label => {
                 // Remove the trailing ". " from the label
                 let label_text = header_part.as_str();
-                label = Some(label_text[..label_text.len()-2].to_string());
+                label = Some(label_text[..label_text.len()-1].to_string());
             },
             Rule::object_selector => {
                 // Extract the selector from between the double asterisks
@@ -116,8 +117,23 @@ fn parse_condition(pair: Pair<Rule>) -> Result<Condition, RuleError> {
     match inner_pair.as_rule() {
         Rule::property_condition => parse_property_condition(inner_pair),
         Rule::rule_reference => parse_rule_reference(inner_pair),
+        Rule::label_reference => parse_label_reference(inner_pair),
         _ => Err(RuleError::ParseError(format!("Unknown condition type: {:?}", inner_pair.as_rule())))
     }
+}
+
+fn parse_label_reference(pair: Pair<Rule>) -> Result<Condition, RuleError> {
+    let mut inner_parts = pair.into_inner();
+    let label_name_pair = inner_parts.next()
+        .ok_or_else(|| RuleError::ParseError("Missing label name".to_string()))?;
+    
+    let label_name = label_name_pair.as_str().to_string();
+    let predicate = inner_parts.next();
+    
+    Ok(Condition::RuleReference {
+        selector: String::new(),
+        rule_name: label_name,
+    })
 }
 
 fn parse_property_condition(pair: Pair<Rule>) -> Result<Condition, RuleError> {

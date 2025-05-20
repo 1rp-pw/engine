@@ -1,19 +1,19 @@
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 COMMENT = _{ "#" ~ (!"\n" ~ ANY)* ~ "\n" }
 
-rule_set = { SOI ~ (COMMENT | rule)* ~ EOI }
 
-rule = {
-    rule_header ~ rule_outcome ~
-    "if" ~ condition ~ ("and" ~ condition)* ~ "."
-}
-
-rule_header = { label? ~ "A " ~ object_selector }
 label = @{ (!(". A ") ~ ANY)+ ~ ". " }
 
 object_selector = @{ "**" ~ identifier ~ "**" }
 selector = @{ identifier }
 
+outcome = @{ (!("if" | ".") ~ ANY)+ }
+rule_header = { label? ~ "A " ~ object_selector }
+rule_set = { SOI ~ (COMMENT | rule)* ~ EOI }
+rule = {
+    rule_header ~ rule_outcome ~
+    "if" ~ condition ~ ("and" ~ condition)* ~ "."
+}
 rule_outcome = {
   outcome_verb ~ outcome
 }
@@ -21,11 +21,14 @@ outcome_verb = {
   "gets" | "passes" | "is" | "has" | "receives" | "qualifies for" | "meets" | "satisfies"
 }
 
-outcome = @{ (!("if" | ".") ~ ANY)+ }
+label_name = @{(ASCII_ALPHANUMERIC | "_" | "-")+}
+label_predicate = _{ "is valid" | "is approved" | "has passed" }
+label_reference = { "§" ~ label_name ~ label_predicate? }
 
 condition = {
     property_condition |
-    rule_reference
+    rule_reference |
+    label_reference
 }
 
 property_condition = {

@@ -140,6 +140,12 @@ fn evaluate_condition(
                         overall_result = false;
                     }
                     referenced_outcome = Some(referenced_rule.outcome.clone());
+                } else if let Some(referenced_rule) = rule_set.get_rule_by_label(part) {
+                    let (referenced_result, _) = evaluate_rule(referenced_rule, json, rule_set)?;
+                    if !referenced_result {
+                        overall_result = false;
+                    }
+                    referenced_outcome = Some(referenced_rule.outcome.clone());
                 } else {
                     // If we still can't find a matching rule, try to infer a property
                     let possible_properties = crate::runner::utils::infer_possible_properties(part);

@@ -72,6 +72,18 @@ impl fmt::Display for RuleValue {
 }
 
 #[derive(Debug, Clone)]
+pub struct Source {
+    pub value: String,
+    pub pos: SourcePosition,
+}
+
+#[derive(Debug, Clone)]
+pub struct RuleSource {
+    pub value: RuleValue,
+    pub pos: SourcePosition,
+}
+
+#[derive(Debug, Clone)]
 pub enum Condition {
     Comparison {
         selector: String,
@@ -118,6 +130,7 @@ impl Rule {
 pub struct RuleSet {
     pub rules: Vec<Rule>,
     rule_map: HashMap<String, usize>,
+    label_map: HashMap<String, usize>,
 }
 
 impl RuleSet {
@@ -125,11 +138,16 @@ impl RuleSet {
         RuleSet {
             rules: Vec::new(),
             rule_map: HashMap::new(),
+            label_map: HashMap::new(),
         }
     }
 
     pub fn add_rule(&mut self, rule: Rule) {
         let index = self.rules.len();
+        if let Some(label) = &rule.label {
+            self.label_map.insert(label.clone(), index);
+        }
+        
         self.rule_map.insert(rule.outcome.clone(), index);
         self.rules.push(rule);
     }
@@ -137,7 +155,11 @@ impl RuleSet {
     pub fn get_rule(&self, outcome: &str) -> Option<&Rule> {
         self.rule_map.get(outcome).map(|&index| &self.rules[index])
     }
-
+    
+    pub fn get_rule_by_label(&self, label: &str) -> Option<&Rule> {
+        self.label_map.get(label).map(|&index| &self.rules[index])
+    }
+    
     // pub fn find_matching_rule(&self, selector: &str, description: &str) -> Option<&Rule> {
     //     // First try exact match on outcome
     //     if let Some(rule) = self.get_rule(description) {
