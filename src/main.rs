@@ -56,7 +56,7 @@ async fn main() {
     };
 
     let app = Router::new()
-        .route("/run", post(handle_run))
+        .route("/", post(handle_run))
         .with_state(state);
 
     let port: u16 = std::env::var("PORT")
