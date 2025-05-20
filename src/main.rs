@@ -113,25 +113,28 @@ async fn handle_run(
                 (StatusCode::OK, Json(response))
             }
             Err(error) => {
+                let text = package.rule.lines().map(String::from).collect();
                 let response = EvaluationResponse {
                     result: false,
                     error: Some(error.to_string()),
                     trace: None,
                     labels: None,
-                    text: vec![],
-                    data: Default::default(),
+                    text,
+                    data: package.data.clone(),
                 };
                 (StatusCode::BAD_REQUEST, Json(response))
             }
         },
         Err(error) => {
+            let text = package.rule.lines().map(String::from).collect();
+            
             let response = EvaluationResponse {
                 result: false,
                 error: Some(error.to_string()),
                 trace: None,
                 labels: None,
-                text: vec![],
-                data: Default::default(),
+                text,
+                data: package.data.clone(),
             };
             (StatusCode::BAD_REQUEST, Json(response))
         }
