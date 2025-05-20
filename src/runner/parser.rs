@@ -47,7 +47,6 @@ fn parse_rule(pair: Pair<Rule>) -> Result<crate::runner::model::Rule, RuleError>
 
     let mut inner_pairs = pair.into_inner();
 
-    // Parse rule header (which includes label and selector)
     let header_pair = inner_pairs.next()
         .ok_or_else(|| RuleError::ParseError("Missing rule header".to_string()))?;
 
@@ -62,12 +61,10 @@ fn parse_rule(pair: Pair<Rule>) -> Result<crate::runner::model::Rule, RuleError>
     for header_part in header_pair.into_inner() {
         match header_part.as_rule() {
             Rule::label => {
-                // Remove the trailing ". " from the label
                 let label_text = header_part.as_str();
-                label = Some(label_text[..label_text.len()-1].to_string());
+                label = Some(label_text[..label_text.len()-2].to_string());
             },
             Rule::object_selector => {
-                // Extract the selector from between the double asterisks
                 let span = header_part.as_span();
                 selector_pos = Some(SourcePosition {
                     line: span.start_pos().line_col().0,
@@ -85,11 +82,9 @@ fn parse_rule(pair: Pair<Rule>) -> Result<crate::runner::model::Rule, RuleError>
         return Err(RuleError::ParseError("Missing selector in rule".to_string()));
     }
 
-    // Parse the outcome
     let outcome_pair = inner_pairs.next()
         .ok_or_else(|| RuleError::ParseError("Missing outcome".to_string()))?;
 
-    // Extract the outcome text, ignoring the verb
     let outcome_text = outcome_pair.into_inner().nth(1)
         .ok_or_else(|| RuleError::ParseError("Missing outcome text".to_string()))?
         .as_str().trim().to_string();
@@ -98,7 +93,6 @@ fn parse_rule(pair: Pair<Rule>) -> Result<crate::runner::model::Rule, RuleError>
     rule.position = position;
     rule.selector_pos = selector_pos;
 
-    // Parse conditions
     for condition_pair in inner_pairs {
         if condition_pair.as_rule() == Rule::condition {
             let condition = parse_condition(condition_pair)?;
@@ -127,7 +121,6 @@ fn parse_label_reference(pair: Pair<Rule>) -> Result<Condition, RuleError> {
         .ok_or_else(|| RuleError::ParseError("Missing label name".to_string()))?;
     
     let label_name = label_name_pair.as_str().to_string();
-    let predicate = inner_parts.next();
     
     Ok(Condition::RuleReference {
         selector: String::new(),
@@ -188,18 +181,11 @@ fn parse_rule_reference(pair: Pair<Rule>) -> Result<Condition, RuleError> {
     let object_selector_pair = inner_pairs.next()
         .ok_or_else(|| RuleError::ParseError("Missing object selector in rule reference".to_string()))?;
 
-    // Extract the selector from between the double asterisks
     let selector_text = object_selector_pair.as_str();
     let selector = selector_text[2..selector_text.len()-2].to_string();
 
-    // Skip the verb
-    let verb = inner_pairs.next();
-    //println!("Parsing rule reference: selector='{}', verb='{:?}'", selector, verb.map(|v| v.as_str()));
-
-    // The reference object might be optional
     let mut rule_name = String::new();
     for part in inner_pairs {
-        //println!("  Rule name part: '{}'", part.as_str().trim());
         rule_name.push_str(part.as_str().trim());
     }
 
@@ -209,7 +195,6 @@ fn parse_rule_reference(pair: Pair<Rule>) -> Result<Condition, RuleError> {
         rule_name
     };
 
-    //println!("  Final rule name: '{}'", rule_name);
     Ok(Condition::RuleReference {
         selector,
         rule_name,
@@ -276,7 +261,6 @@ fn parse_list_value(pair: Pair<Rule>) -> Result<RuleValue, RuleError> {
 fn parse_value(pair: Pair<Rule>) -> Result<RuleValue, RuleError> {
     match pair.as_rule() {
         Rule::value => {
-            // If we got a value container, get the first child
             let inner = pair.into_inner().next()
                 .ok_or_else(|| RuleError::ParseError("Empty value".to_string()))?;
             parse_value(inner)
@@ -292,23 +276,17 @@ fn parse_value(pair: Pair<Rule>) -> Result<RuleValue, RuleError> {
         },
         Rule::date_literal => {
             let date_str = pair.as_str();
-            // println!("Parsing date literal: {}", date_str);
 
-            // Check if it's in date() format or plain format
             let date_part = if date_str.starts_with("date(") && date_str.ends_with(")") {
-                // Extract from date() wrapper
                 &date_str[5..date_str.len()-1]
             } else {
-                // It's already in YYYY-MM-DD format
                 date_str
             };
 
-            // println!("Extracted date part: {}", date_part);
 
             let date = NaiveDate::parse_from_str(date_part, "%Y-%m-%d")
                 .map_err(|e| RuleError::ParseError(format!("Invalid date: {}", e)))?;
 
-            // println!("Parsed date: {}", date);
             Ok(RuleValue::Date(date))
         },
         Rule::boolean => {

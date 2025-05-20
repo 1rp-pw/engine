@@ -157,12 +157,10 @@ fn evaluate_condition(
                             if let Some(property_value) = obj.get(property) {
                                 property_found = true;
 
-                                // Check the property value
                                 if let Some(value_bool) = property_value.as_bool() {
                                     if !value_bool {
                                         overall_result = false;
                                     }
-                                    // Store the property check details
                                     property_check = Some(PropertyCheckTrace {
                                         property_name: property.clone(),
                                         property_value: json!({ "Boolean": value_bool }),
@@ -171,11 +169,10 @@ fn evaluate_condition(
                                     // For string values, consider "pass", "true", "yes", etc. as passing
                                     let lower_value = value_str.to_lowercase();
                                     let passes = lower_value == "pass" || lower_value == "true" ||
-                                        lower_value == "yes" || lower_value == "passed";
+                                        lower_value == "yes" || lower_value == "passed" || lower_value == "valid";
                                     if !passes {
                                         overall_result = false;
                                     }
-                                    // Store the property check details
                                     property_check = Some(PropertyCheckTrace {
                                         property_name: property.clone(),
                                         property_value: json!({ "String": value_str }),
@@ -185,13 +182,11 @@ fn evaluate_condition(
                                     if value_num == 0.0 {
                                         overall_result = false;
                                     }
-                                    // Store the property check details
                                     property_check = Some(PropertyCheckTrace {
                                         property_name: property.clone(),
                                         property_value: json!({ "Number": value_num }),
                                     });
                                 } else {
-                                    // For other types, just store the raw value
                                     property_check = Some(PropertyCheckTrace {
                                         property_name: property.clone(),
                                         property_value: property_value.clone(),
@@ -205,7 +200,6 @@ fn evaluate_condition(
 
                     if !property_found {
                         // If we can't find any corresponding property, assume true
-                        // println!("Warning: No matching rule or property found for '{}' with description '{}', assuming true", selector, part);
                     }
                 }
             }
@@ -283,8 +277,7 @@ fn evaluate_condition(
                     };
                     (res, Some(details))
                 },
-                Err(e) => {
-                    // println!("Comparison Error {}", e);
+                Err(_) => {
                     (false, None)
                 }
             };
@@ -314,7 +307,6 @@ fn extract_value_from_json(
     let obj = if let Some(obj) = json.get(selector) {
         obj
     } else {
-        // Try transformed selector (camelCase)
         let transformed_selector = transform_selector_name(selector);
         json.get(&transformed_selector)
             .ok_or_else(|| RuleError::EvaluationError(format!("Selector '{}' (or '{}') not found in JSON", selector, transformed_selector)))?
@@ -332,16 +324,12 @@ fn extract_value_from_json(
             }
         },
         Value::String(s) => {
-            // Try to parse as date if it looks like a date (YYYY-MM-DD format)
             if s.len() == 10 && s.chars().nth(4) == Some('-') && s.chars().nth(7) == Some('-') {
-                // println!("Attempting to parse date: {}", s);
                 match chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d") {
                     Ok(date) => {
-                        // println!("Successfully parsed date: {}", date);
                         Ok(RuleValue::Date(date))
                     },
-                    Err(e) => {
-                        // println!("Failed to parse date '{}': {}", s, e);
+                    Err(_) => {
                         Ok(RuleValue::String(s.clone()))
                     }
                 }
@@ -353,7 +341,6 @@ fn extract_value_from_json(
         Value::Array(arr) => {
             let mut values = Vec::new();
             for item in arr {
-                // This is a simplified conversion - you might want to handle nested arrays differently
                 if let Some(s) = item.as_str() {
                     values.push(RuleValue::String(s.to_string()));
                 } else if let Some(n) = item.as_f64() {
@@ -427,7 +414,6 @@ fn evaluate_comparison(
         ComparisonOperator::LaterThan => {
             match (left, right) {
                 (RuleValue::Date(l), RuleValue::Date(r)) => {
-                    // println!("Comparing dates: {} > {}", l, r);
                     Ok(l > r)
                 },
                 _ => Err(RuleError::TypeError("LaterThan only works with dates".to_string())),
@@ -436,7 +422,6 @@ fn evaluate_comparison(
         ComparisonOperator::EarlierThan => {
             match (left, right) {
                 (RuleValue::Date(l), RuleValue::Date(r)) => {
-                    // println!("Comparing dates: {} < {}", l, r);
                     Ok(l < r)
                 },
                 _ => Err(RuleError::TypeError(format!("EarlierThan only works with dates {} {}", left, right))),
@@ -510,7 +495,6 @@ fn evaluate_comparison(
 }
 
 fn transform_selector_name(name: &str) -> String {
-    // Similar to transform_property_name but keeps first letter capitalized
     let words: Vec<&str> = name.split_whitespace().collect();
     if words.is_empty() {
         return String::new();
