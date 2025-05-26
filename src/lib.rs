@@ -348,7 +348,7 @@ fn test_reference() {
         }
     });
     let (result_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
-    assert!(!result_true["full_driving_test_score"]);
+    assert!(result_true["full_driving_license"]);
 
     let json_false = serde_json::json!({
         "Person": {
