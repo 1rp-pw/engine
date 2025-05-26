@@ -16,7 +16,6 @@ mod tests {
 
         let rule_set = parse_rules(rule_text).unwrap();
 
-        // Test case where condition is true
         let json_true = json!({
             "Person": {
                 "age": 70
@@ -25,7 +24,7 @@ mod tests {
         let (results_true, _trace_true) = evaluate_rule_set(&rule_set, &json_true).unwrap();
         assert!(results_true["senior_discount"]);
 
-        // Test case where condition is false
+
         let json_false = json!({
             "Person": {
                 "age": 60
@@ -44,7 +43,6 @@ mod tests {
 
         let rule_set = parse_rules(rule_text).unwrap();
 
-        // Test case where condition is true
         let json_true = json!({
             "Person": {
                 "age": 10
@@ -53,7 +51,6 @@ mod tests {
         let (results_true, _trace_true) = evaluate_rule_set(&rule_set, &json_true).unwrap();
         assert!(results_true["child_discount"]);
 
-        // Test case where condition is false
         let json_false = json!({
             "Person": {
                 "age": 15
@@ -72,7 +69,6 @@ mod tests {
 
         let rule_set = parse_rules(rule_text).unwrap();
 
-        // Test case where condition is true
         let json_true = json!({
             "Transaction": {
                 "amount": 1337
@@ -81,7 +77,6 @@ mod tests {
         let (results_true, _trace_true) = evaluate_rule_set(&rule_set, &json_true).unwrap();
         assert!(results_true["flagged"]);
 
-        // Test case where condition is false
         let json_false = json!({
             "Transaction": {
                 "amount": 1000
@@ -100,7 +95,6 @@ mod tests {
 
         let rule_set = parse_rules(rule_text).unwrap();
 
-        // Test case where condition is true
         let json_true = json!({
             "Transaction": {
                 "status": "completed"
@@ -109,7 +103,6 @@ mod tests {
         let (results_true, _trace_true) = evaluate_rule_set(&rule_set, &json_true).unwrap();
         assert!(results_true["normal"]);
 
-        // Test case where condition is false
         let json_false = json!({
             "Transaction": {
                 "status": "flagged"
@@ -184,7 +177,6 @@ mod tests {
 
         let rule_set = parse_rules(rule_text).unwrap();
 
-        // Test case where condition is true
         let json_true = json!({
             "Product": {
                 "category": "electronics"
@@ -193,7 +185,6 @@ mod tests {
         let (results_true, _trace_true) = evaluate_rule_set(&rule_set, &json_true).unwrap();
         assert!(results_true["on_sale"]);
 
-        // Test case where condition is false
         let json_false = json!({
             "Product": {
                 "category": "furniture"
@@ -212,7 +203,6 @@ mod tests {
 
         let rule_set = parse_rules(rule_text).unwrap();
 
-        // Test case where condition is true
         let json_true = json!({
             "Product": {
                 "category": "furniture"
@@ -221,7 +211,6 @@ mod tests {
         let (results_true, _trace_true) = evaluate_rule_set(&rule_set, &json_true).unwrap();
         assert!(results_true["full_price"]);
 
-        // Test case where condition is false
         let json_false = json!({
             "Product": {
                 "category": "electronics"
@@ -234,27 +223,25 @@ mod tests {
     #[test]
     fn test_contains() {
         let rule_text = r#"
-    A **Message** gets flagged
-      if the __content__ of the **Message** contains "urgent".
-    "#;
+            A **Message** gets flagged
+              if the __content__ of the **Message** contains "urgent".
+            "#;
 
         let rule_set = parse_rules(rule_text).unwrap();
 
-        // Test case where condition is true
         let json_true = json!({
-        "Message": {
-            "content": "This is an urgent message"
-        }
-    });
+            "Message": {
+                "content": "This is an urgent message"
+            }
+        });
         let (results_true, _trace_true) = evaluate_rule_set(&rule_set, &json_true).unwrap();
         assert!(results_true["flagged"]);
 
-        // Test case where condition is false
         let json_false = json!({
-        "Message": {
-            "content": "This is a normal message"
-        }
-    });
+            "Message": {
+                "content": "This is a normal message"
+            }
+        });
         let (results_false, _trace_false) = evaluate_rule_set(&rule_set, &json_false).unwrap();
         assert!(!results_false["flagged"]);
     }
@@ -270,7 +257,6 @@ mod tests {
         assert_eq!(rule_set.rules.len(), 1);
         assert_eq!(rule_set.rules[0].label, Some("senior.discount".to_string()));
 
-        // Test case where condition is true
         let json_true = json!({
             "Person": {
                 "age": 70
@@ -278,6 +264,13 @@ mod tests {
         });
         let (results_true, _trace_true) = evaluate_rule_set(&rule_set, &json_true).unwrap();
         assert!(results_true["senior_discount"]);
+
+        let json_false = json!({
+            "Person": {
+                "age": 60            }
+        });
+        let (results_false, _trace_false) = evaluate_rule_set(&rule_set, &json_false).unwrap();
+        assert!(!results_false["senior_discount"]);
     }
 }
 
@@ -290,7 +283,6 @@ fn test_property_name_transformation() {
 
     let rule_set = runner::parser::parse_rules(rule_text).unwrap();
 
-    // Test case where condition is true
     let json_true = serde_json::json!({
         "Person": {
             "firstName": "John"
@@ -299,7 +291,6 @@ fn test_property_name_transformation() {
     let (results_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
     assert!(results_true["discount"]);
 
-    // Test case where condition is false
     let json_false = serde_json::json!({
         "Person": {
             "firstName": "Jane"
@@ -307,5 +298,65 @@ fn test_property_name_transformation() {
     });
     let (results_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
     assert!(!results_false["discount"]);
+}
+
+#[test]
+fn test_super_simple() {
+    let rule_text = r#"
+        # Driving Test Rules
+        A **Person** gets a full driving license
+          if the __age__ of the **Person** is greater than or equal to 17
+          and the __driving test score__ of the **Person** is greater than or equal to 60.
+    "#;
+    let rule_set = runner::parser::parse_rules(rule_text).unwrap();
+    let json_true = serde_json::json!({
+        "Person": {
+            "age": 18,
+            "drivingTestScore": 60
+        }
+    });
+    let (result_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
+    assert!(result_true["full_driving_license"]);
+
+    let json_false = serde_json::json!({
+        "Person": {
+            "age": 18,
+            "drivingTestScore": 59
+        }
+    });
+    let (result_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
+    assert!(!result_false["full_driving_test_score"]);
+}
+
+#[test]
+fn test_reference() {
+    let rule_text = r#"
+        # Driving Test Rules
+        A **Person** gets a full driving license
+          if the __age__ of the **Person** is greater than or equal to 17
+          and the **Person** passes the practical driving test
+          and the **Person** passes the eye test.
+
+        A **Person** passes the practical driving test
+          if the __driving test score__ of the **Person** is greater than or equal to 60.
+    "#;
+    let rule_set = runner::parser::parse_rules(rule_text).unwrap();
+    let json_true = serde_json::json!({
+        "Person": {
+            "age": 18,
+            "drivingTestScore": 60
+        }
+    });
+    let (result_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
+    assert!(result_true["full_driving_license"]);
+
+    let json_false = serde_json::json!({
+        "Person": {
+            "age": 18,
+            "drivingTestScore": 59
+        }
+    });
+    let (result_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
+    assert!(!result_false["full_driving_test_score"]);
 }
 

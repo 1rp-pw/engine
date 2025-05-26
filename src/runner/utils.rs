@@ -78,7 +78,6 @@ pub fn infer_possible_properties(rule_name: &str) -> Vec<String> {
     }
     cleaned = cleaned.trim().to_string();
 
-    // Generate camelCase version
     let base_property = transform_property_name(&cleaned);
 
     // Add various suffixes that might indicate status
