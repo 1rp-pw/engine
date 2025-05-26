@@ -62,7 +62,7 @@ fn parse_rule(pair: Pair<Rule>) -> Result<crate::runner::model::Rule, RuleError>
         match header_part.as_rule() {
             Rule::label => {
                 let label_text = header_part.as_str();
-                label = Some(label_text[..label_text.len()-2].to_string());
+                label = Some(label_text.strip_suffix(". ").unwrap_or(label_text).to_string());
             },
             Rule::object_selector => {
                 let span = header_part.as_span();
