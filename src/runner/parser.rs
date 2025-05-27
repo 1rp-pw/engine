@@ -220,17 +220,30 @@ fn parse_property_condition(pair: Pair<Rule>) -> Result<Condition, RuleError> {
 }
 
 fn parse_rule_reference(pair: Pair<Rule>) -> Result<Condition, RuleError> {
-    let mut inner = pair.into_inner();
-    let sel = inner.next()
-        .ok_or_else(|| RuleError::ParseError("Missing object selector".to_string()))?; // object_selector
-    let selector = &sel.as_str()[2..sel.as_str().len()-2];
-    let name_pair = inner.next()
-        .ok_or_else(|| RuleError::ParseError("Missing reference name".to_string()))?; // reference_name
-    let rule_name = name_pair.as_str().trim().to_string();
-    Ok(Condition::RuleReference {
-        selector: selector.to_string(),
-        rule_name,
-    })
+    let mut selector = None;
+    let mut rule_name = None;
+
+    for inner in pair.into_inner() {
+        match inner.as_rule() {
+            Rule::object_selector => {
+                let s = inner.as_str();
+                selector = Some(s[2..s.len()-2].to_string());
+            }
+            Rule::reference_name => {
+                rule_name = Some(inner.as_str().trim().to_string());
+            }
+            _ => {
+                // this will catch the optional "the" literal — just ignore it
+            }
+        }
+    }
+
+    let selector = selector
+        .ok_or_else(|| RuleError::ParseError("Missing selector in rule‐ref".into()))?;
+    // default name if none captured
+    let rule_name = rule_name.unwrap_or_else(|| "requirement".into());
+
+    Ok(Condition::RuleReference { selector, rule_name })
 }
 
 fn parse_predicate(pair: Pair<Rule>) -> Result<(ComparisonOperator, RuleValue, SourcePosition), RuleError> {

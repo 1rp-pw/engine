@@ -34,10 +34,10 @@ condition = {
 }
 
 property_condition = {
-    "the" ~ property ~ "of" ~ "the" ~ object_selector ~ predicate
+    ("the")? ~ property ~ "of" ~ ("the")? ~ object_selector ~ predicate
 }
 
-rule_reference = { "the" ~ object_selector ~ reference_name }
+rule_reference = { ("the")? ~ object_selector ~ reference_name }
 reference_name  = @{ (!("and" | ".") ~ ANY)+ }
 
 predicate = {

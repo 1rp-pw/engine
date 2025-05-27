@@ -425,6 +425,45 @@ A **Document** is archived
         let (result_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
         assert!(!result_false["a full driving license"]);
     }
+    
+    #[test]
+    fn test_wierd_ref() {
+        let rule_text = r#"
+        # Driving Test Rules
+        An **employee** is Zoom Setup Aligned
+          if **employee** is covered by at least one rule.
+          
+        An **employee** is covered by at least one rule
+          if **employee** satisfies rule 1 - No Zoom Profile.
+          
+        An  **employee** satisfies rule 1 - No Zoom Profile
+          if __ZoomSetup__ of the **employee** is equal to "No Zoom Account".
+        "#;
+        let rule_set = runner::parser::parse_rules(rule_text).unwrap();
+        let json_true = serde_json::json!({
+          "employee": {
+            "soeId": "JM78873",
+            "name": "Joey",
+            "ZoomProfile": "Recorded Zoom",
+            "BankerModelList": "No",
+            "ZoomSetup": "No Zoom Account",
+          }
+        });
+        let (result_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
+        assert!(result_true["Zoom Setup Aligned"]);
+
+        let json_false = serde_json::json!({
+          "employee": {
+            "soeId": "JM78873",
+            "name": "Joey",
+            "ZoomProfile": "Recorded Zoom",
+            "BankerModelList": "No",
+            "ZoomSetup": "Beep",
+          }
+        });
+        let (result_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
+        assert!(!result_false["Zoom Setup Aligned"]);
+    }
 }
 
 
