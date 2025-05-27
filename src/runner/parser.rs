@@ -221,9 +221,11 @@ fn parse_property_condition(pair: Pair<Rule>) -> Result<Condition, RuleError> {
 
 fn parse_rule_reference(pair: Pair<Rule>) -> Result<Condition, RuleError> {
     let mut inner = pair.into_inner();
-    let sel = inner.next().unwrap();              // object_selector
+    let sel = inner.next()
+        .ok_or_else(|| RuleError::ParseError("Missing object selector".to_string()))?; // object_selector
     let selector = &sel.as_str()[2..sel.as_str().len()-2];
-    let name_pair = inner.next().unwrap();         // reference_name
+    let name_pair = inner.next()
+        .ok_or_else(|| RuleError::ParseError("Missing reference name".to_string()))?; // reference_name
     let rule_name = name_pair.as_str().trim().to_string();
     Ok(Condition::RuleReference {
         selector: selector.to_string(),
