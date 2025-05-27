@@ -239,10 +239,6 @@ fn evaluate_condition(
                         }
                     }
 
-                    // if !property_found {
-                    //     // If we can't find any corresponding property, assume false for missing rule
-                    //     overall_result = false;
-                    // }
                 }
             }
 
