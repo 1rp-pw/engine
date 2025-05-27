@@ -1,0 +1,63 @@
+name: Release Drafter
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  pull-requests: write
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --all-features
+  #  qodana:
+  #    runs-on: ubuntu-latest
+  #    permissions:
+  #      contents: write
+  #      pull-requests: write
+  #      checks: write
+  #    steps:
+  #      - uses: actions/checkout@v4
+  #        with:
+  #          persist-credentials: false
+  #          ref: ${{ github.event.pull_request.head.sha }}  # to check out the actual pull request commit, not the merge commit
+  #          fetch-depth: 0  # a full history is required for pull request analysis
+  #      - name: 'Qodana Scan'
+  #        uses: JetBrains/qodana-action@v2025.1
+  #        env:
+  #          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN_1031901934 }}
+  #          QODANA_ENDPOINT: 'https://qodana.cloud'
+  #        with:
+  #          pr-mode: false
+  auto-merge:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: write
+    needs:
+      - test
+    steps:
+      - uses: fastify/github-action-merge-dependabot@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+  update_release_draft:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    needs:
+      - test
+    steps:
+      - uses: release-drafter/release-drafter@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
