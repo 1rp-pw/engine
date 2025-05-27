@@ -1,18 +1,20 @@
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 COMMENT = _{ "#" ~ (!"\n" ~ ANY)* ~ "\n" }
 
-
-label = @{ (!(". A ") ~ ANY)+ ~ ". " }
+rule_start = {"A " | "An "}
+label = @{ (!(". " ~ rule_start)  ~ ANY)+ ~ ". " }
 
 object_selector = @{ "**" ~ identifier ~ "**" }
 selector = @{ identifier }
 
+condition_operator = {"and" | "or"}
+
 outcome = @{ (!("if" | ".") ~ ANY)+ }
-rule_header = { label? ~ "A " ~ object_selector }
+rule_header = { label? ~ rule_start ~ object_selector }
 rule_set = { SOI ~ (COMMENT | rule)* ~ EOI }
 rule = {
     rule_header ~ rule_outcome ~
-    "if" ~ condition ~ ("and" ~ condition)* ~ "."
+    "if" ~ condition ~ (condition_operator ~ condition)* ~ "."
 }
 rule_outcome = {
   outcome_verb ~ outcome
