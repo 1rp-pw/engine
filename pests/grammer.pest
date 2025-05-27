@@ -1,21 +1,23 @@
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 COMMENT = _{ "#" ~ (!"\n" ~ ANY)* ~ "\n" }
 
-
-label = @{ (!(". A ") ~ ANY)+ ~ ". " }
+rule_start = {"A " | "An "}
+label = @{ (!(". " ~ rule_start)  ~ ANY)+ ~ ". " }
 
 object_selector = @{ "**" ~ identifier ~ "**" }
 selector = @{ identifier }
 
+condition_operator = {"and" | "or"}
+
 outcome = @{ (!("if" | ".") ~ ANY)+ }
-rule_header = { label? ~ "A " ~ object_selector }
+rule_header = { label? ~ rule_start ~ object_selector }
 rule_set = { SOI ~ (COMMENT | rule)* ~ EOI }
 rule = {
     rule_header ~ rule_outcome ~
-    "if" ~ condition ~ ("and" ~ condition)* ~ "."
+    "if" ~ condition ~ (condition_operator ~ condition)* ~ "."
 }
 rule_outcome = {
-  outcome_verb ~ outcome
+  outcome_verb? ~ outcome
 }
 outcome_verb = {
   "gets" | "passes" | "is" | "has" | "receives" | "qualifies for" | "meets" | "satisfies"
@@ -27,23 +29,16 @@ label_reference = { "§" ~ label_name ~ label_predicate? }
 
 condition = {
     property_condition |
-    rule_reference |
-    label_reference
+    label_reference |
+    rule_reference
 }
 
 property_condition = {
-    "the" ~ property ~ "of" ~ "the" ~ object_selector ~ predicate
+    ("the")? ~ property ~ "of" ~ ("the")? ~ object_selector ~ predicate
 }
 
-rule_reference = {
-    "the" ~ object_selector ~ reference_verb ~ reference_object?
-}
-
-reference_verb = {
-    "passes" | "meets" | "satisfies" | "qualifies for" | "is eligible for" | "has passed"
-}
-
-reference_object = @{ (!(" and " | ".") ~ ANY)+ }
+rule_reference = { "the"? ~ object_selector ~ reference_name }
+reference_name = @{ (!("." | "and" | "or" | "\n") ~ ANY)+ }
 
 predicate = {
     comparison_operator ~ value |

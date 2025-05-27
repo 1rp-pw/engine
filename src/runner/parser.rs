@@ -3,7 +3,7 @@ use chrono::NaiveDate;
 use pest::Parser;
 use pest_derive::Parser;
 use pest::iterators::Pair;
-use crate::runner::model::{ComparisonOperator, RuleSet, RuleValue, Condition, SourcePosition};
+use crate::runner::model::{ComparisonOperator, RuleSet, RuleValue, Condition, SourcePosition, ConditionOperator};
 
 #[derive(Parser)]
 #[grammar = "pests/grammer.pest"]
@@ -35,45 +35,42 @@ pub fn parse_rules(input: &str) -> Result<RuleSet, RuleError> {
 }
 
 fn parse_rule(pair: Pair<Rule>) -> Result<crate::runner::model::Rule, RuleError> {
+    // capture source position for the whole rule
     let span = pair.as_span();
-    let line = span.start_pos().line_col().0;
+    let (line, _) = span.start_pos().line_col();
     let start = span.start();
-    let end = span.end();
-    let position = Some(SourcePosition {
-        line,
-        start,
-        end,
-    });
+    let end   = span.end();
+    let position = Some(SourcePosition { line, start, end });
 
     let mut inner_pairs = pair.into_inner();
 
-    let header_pair = inner_pairs.next()
+    // 1) parse the header: optional label + selector
+    let header_pair = inner_pairs
+        .next()
         .ok_or_else(|| RuleError::ParseError("Missing rule header".to_string()))?;
 
-    let mut label = None;
+    let mut label: Option<String> = None;
     let mut selector = String::new();
-    let mut selector_pos = Some(SourcePosition {
-        line: 0,
-        start: 0,
-        end: 0,
-    });
+    let mut selector_pos: Option<SourcePosition> = None;
 
     for header_part in header_pair.into_inner() {
         match header_part.as_rule() {
             Rule::label => {
-                let label_text = header_part.as_str();
-                label = Some(label_text.strip_suffix(". ").unwrap_or(label_text).to_string());
-            },
+                let txt = header_part.as_str().strip_suffix(". ").unwrap_or_else(|| header_part.as_str());
+                label = Some(txt.to_string());
+            }
             Rule::object_selector => {
                 let span = header_part.as_span();
+                let (l, _) = span.start_pos().line_col();
                 selector_pos = Some(SourcePosition {
-                    line: span.start_pos().line_col().0,
+                    line: l,
                     start: span.start(),
                     end: span.end(),
                 });
-                let selector_text = header_part.as_str();
-                selector = selector_text[2..selector_text.len()-2].to_string();
-            },
+                // strip the `**` markup
+                let s = header_part.as_str();
+                selector = s[2..s.len() - 2].to_string();
+            }
             _ => {}
         }
     }
@@ -82,25 +79,72 @@ fn parse_rule(pair: Pair<Rule>) -> Result<crate::runner::model::Rule, RuleError>
         return Err(RuleError::ParseError("Missing selector in rule".to_string()));
     }
 
-    let outcome_pair = inner_pairs.next()
+    // 2) parse the (now optional‐verb) outcome
+    let outcome_pair = inner_pairs
+        .next()
         .ok_or_else(|| RuleError::ParseError("Missing outcome".to_string()))?;
 
-    let outcome_text = outcome_pair.into_inner().nth(1)
-        .ok_or_else(|| RuleError::ParseError("Missing outcome text".to_string()))?
-        .as_str().trim().to_string();
+    // flatten its children: [ maybe verb , outcome_text ]
+    let mut oi = outcome_pair.into_inner();
+    let first = oi
+        .next()
+        .ok_or_else(|| RuleError::ParseError("Empty outcome".to_string()))?
+        .as_str()
+        .trim()
+        .to_string();
+    // if a second piece exists, that's the real outcome; otherwise first *is* the outcome
+    let outcome_text = if let Some(second) = oi.next() {
+        second.as_str().trim().to_string()
+    } else {
+        first
+    };
 
-    let mut rule = crate::runner::model::Rule::new(label, selector, outcome_text);
+    // 3) build the Rule
+    let mut rule =
+        crate::runner::model::Rule::new(label.clone(), selector.clone(), outcome_text.clone());
     rule.position = position;
     rule.selector_pos = selector_pos;
 
-    for condition_pair in inner_pairs {
-        if condition_pair.as_rule() == Rule::condition {
-            let condition = parse_condition(condition_pair)?;
-            rule.add_condition(condition);
+    // 4) now parse all following conditions (with their and/or operators)
+    let remaining_pairs: Vec<_> = inner_pairs.collect();
+    let mut i = 0;
+    while i < remaining_pairs.len() {
+        if remaining_pairs[i].as_rule() == Rule::condition {
+            // parse the condition itself
+            let cond = parse_condition(remaining_pairs[i].clone())?;
+
+            // decide if it has an operator (None for the very first)
+            let op = if rule.conditions.is_empty() {
+                None
+            } else {
+                // look backwards for the nearest condition_operator
+                let mut found: Option<ConditionOperator> = None;
+                for j in (0..i).rev() {
+                    if remaining_pairs[j].as_rule() == Rule::condition_operator {
+                        found = Some(parse_condition_operator(
+                            remaining_pairs[j].clone(),
+                        )?);
+                        break;
+                    }
+                }
+                // default to AND if none was written
+                found.or(Some(ConditionOperator::And))
+            };
+
+            rule.add_condition(cond, op);
         }
+        i += 1;
     }
 
     Ok(rule)
+}
+
+fn parse_condition_operator(pair: Pair<Rule>) -> Result<ConditionOperator, RuleError> {
+    match pair.as_str() {
+        "and" => Ok(ConditionOperator::And),
+        "or" => Ok(ConditionOperator::Or),
+        _ => Err(RuleError::ParseError(format!("Unknown condition operator: {}", pair.as_str())))
+    }
 }
 
 fn parse_condition(pair: Pair<Rule>) -> Result<Condition, RuleError> {
@@ -119,9 +163,9 @@ fn parse_label_reference(pair: Pair<Rule>) -> Result<Condition, RuleError> {
     let mut inner_parts = pair.into_inner();
     let label_name_pair = inner_parts.next()
         .ok_or_else(|| RuleError::ParseError("Missing label name".to_string()))?;
-    
+
     let label_name = label_name_pair.as_str().to_string();
-    
+
     Ok(Condition::RuleReference {
         selector: String::new(),
         rule_name: label_name,
@@ -147,7 +191,7 @@ fn parse_property_condition(pair: Pair<Rule>) -> Result<Condition, RuleError> {
 
     let object_selector_pair = inner_pairs.next()
         .ok_or_else(|| RuleError::ParseError("Missing object selector".to_string()))?;
-    
+
     let selector_text = object_selector_pair.as_str();
     let selector = selector_text[2..selector_text.len()-2].to_string();
     let selector_span = object_selector_pair.as_span();
@@ -176,29 +220,30 @@ fn parse_property_condition(pair: Pair<Rule>) -> Result<Condition, RuleError> {
 }
 
 fn parse_rule_reference(pair: Pair<Rule>) -> Result<Condition, RuleError> {
-    let mut inner_pairs = pair.into_inner();
+    let mut selector = None;
+    let mut rule_name = None;
 
-    let object_selector_pair = inner_pairs.next()
-        .ok_or_else(|| RuleError::ParseError("Missing object selector in rule reference".to_string()))?;
-
-    let selector_text = object_selector_pair.as_str();
-    let selector = selector_text[2..selector_text.len()-2].to_string();
-
-    let mut rule_name = String::new();
-    for part in inner_pairs {
-        rule_name.push_str(part.as_str().trim());
+    for inner in pair.into_inner() {
+        match inner.as_rule() {
+            Rule::object_selector => {
+                let s = inner.as_str();
+                selector = Some(s[2..s.len()-2].to_string());
+            }
+            Rule::reference_name => {
+                rule_name = Some(inner.as_str().trim().to_string());
+            }
+            _ => {
+                // this will catch the optional "the" literal — just ignore it
+            }
+        }
     }
 
-    let rule_name = if rule_name.is_empty() {
-        "requirement".to_string()
-    } else {
-        rule_name
-    };
+    let selector = selector
+        .ok_or_else(|| RuleError::ParseError("Missing selector in rule‐ref".into()))?;
+    // default name if none captured
+    let rule_name = rule_name.unwrap_or_else(|| "requirement".into());
 
-    Ok(Condition::RuleReference {
-        selector,
-        rule_name,
-    })
+    Ok(Condition::RuleReference { selector, rule_name })
 }
 
 fn parse_predicate(pair: Pair<Rule>) -> Result<(ComparisonOperator, RuleValue, SourcePosition), RuleError> {
@@ -234,7 +279,7 @@ fn parse_predicate(pair: Pair<Rule>) -> Result<(ComparisonOperator, RuleValue, S
     } else {
         parse_value(value_pair.clone())?
     };
-    
+
     let value_span = value_pair.as_span();
     let (value_line_start, value_word_start) = value_span.start_pos().line_col();
     let (_, value_word_end) = value_span.end_pos().line_col();

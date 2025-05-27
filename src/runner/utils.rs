@@ -4,13 +4,13 @@ use crate::runner::model::{Condition, Rule};
 fn find_referenced_outcomes(rules: &[Rule]) -> std::collections::HashSet<String> {
     let mut referenced = std::collections::HashSet::new();
     for rule in rules {
-        for cond in &rule.conditions {
-            if let Condition::RuleReference { selector: _, rule_name } = cond {
+        for condition_group in &rule.conditions {
+            if let Condition::RuleReference { selector: _, rule_name } = &condition_group.condition {
                 for other_rule in rules {
                     let label_match = other_rule.label.as_ref()
                         .map_or(false, |label| label == rule_name);
                     let outcome_match = other_rule.outcome == *rule_name;
-                    
+
                     if other_rule.outcome.contains(rule_name) || rule_name.contains(&other_rule.outcome) || label_match || outcome_match {
                         referenced.insert(other_rule.outcome.clone());
                     }
@@ -44,7 +44,7 @@ pub fn transform_property_name(name: &str) -> String {
     if words.is_empty() {
         return String::new();
     }
-    
+
     if words.len() == 1 {
         return words[0].to_string();
     }

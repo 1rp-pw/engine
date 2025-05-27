@@ -1,5 +1,5 @@
 use crate::runner::error::RuleError;
-use crate::runner::model::{Condition, ComparisonOperator, Rule, RuleSet, RuleValue};
+use crate::runner::model::{Condition, ComparisonOperator, Rule, RuleSet, RuleValue, ConditionOperator};
 use crate::runner::trace::{
     RuleSetTrace,
     RuleTrace,
@@ -12,6 +12,7 @@ use crate::runner::trace::{
 
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
+use chrono::NaiveDate;
 
 pub fn evaluate_rule_set(
     rule_set: &RuleSet,
@@ -56,7 +57,7 @@ pub fn evaluate_rule_set(
 
         i += 1;
     }
-    
+
     let rule_set_trace = RuleSetTrace {
         execution: all_traces,
     };
@@ -69,27 +70,56 @@ pub fn evaluate_rule(
     json: &Value,
     rule_set: &RuleSet
 ) -> Result<(bool, RuleTrace), RuleError> {
+    // 1) evaluate each condition, collect its bool and its trace
+    let mut results = Vec::new();
+    let mut ops     = Vec::new();
     let mut condition_traces = Vec::new();
-    let mut rule_result = true;
-    
-    for condition in &model_rule.conditions {
-        let (condition_result, condition_trace) = evaluate_condition(condition, json, rule_set)?;
-        condition_traces.push(condition_trace);
-        if !condition_result {
-            rule_result = false;
+
+    for (i, cg) in model_rule.conditions.iter().enumerate() {
+        let (res, trace) = evaluate_condition(&cg.condition, json, rule_set)?;
+        results.push(res);
+        condition_traces.push(trace);
+
+        // record the operator that *follows* this condition (None for first)
+        if let Some(op) = &cg.operator {
+            ops.push(op.clone());
+        } else if i != 0 {
+            // fallback to AND if parser didn’t provide one
+            ops.push(ConditionOperator::And);
         }
     }
-    
+
+    // 2) collapse all ANDs first
+    let mut i = 0;
+    while i < ops.len() {
+        if ops[i] == ConditionOperator::And {
+            // combine results[i] AND results[i+1] into results[i]
+            results[i] = results[i] && results[i + 1];
+            // drop results[i+1] and ops[i]
+            results.remove(i + 1);
+            ops.remove(i);
+            // do not advance i, maybe there’s another AND here
+        } else {
+            i += 1;
+        }
+    }
+
+    // 3) now fold OR across what remains
+    let rule_result = results
+        .into_iter()
+        .fold(false, |acc, next| acc || next);
+
+    // 4) build your trace object exactly as before
     let rule_trace = RuleTrace {
-        label: model_rule.label.clone(),
+        label:    model_rule.label.clone(),
         selector: model_rule.selector.clone(),
-        selector_pos: None,
-        outcome: model_rule.outcome.clone(),
-        outcome_pos: None,
+        selector_pos: model_rule.selector_pos.clone(),
+        outcome:  model_rule.outcome.clone(),
+        outcome_pos: model_rule.position.clone(), // or wherever you keep it
         conditions: condition_traces,
-        result: rule_result,
+        result:   rule_result,
     };
-    
+
     Ok((rule_result, rule_trace))
 }
 
@@ -126,22 +156,33 @@ fn evaluate_condition(
             let mut referenced_outcome = None;
             let mut property_check = None;
 
-            // Try to find a matching rule by exact outcome match first
+            // Try exact outcome match first
             if let Some(referenced_rule) = rule_set.get_rule(part) {
                 let (referenced_result, _) = evaluate_rule(referenced_rule, json, rule_set)?;
                 if !referenced_result {
                     overall_result = false;
                 }
                 referenced_outcome = Some(referenced_rule.outcome.to_string());
+            } else if let Some(referenced_rule) = rule_set.get_rule_by_label(part) {
+                // Try exact label match
+                let (referenced_result, _) = evaluate_rule(referenced_rule, json, rule_set)?;
+                if !referenced_result {
+                    overall_result = false;
+                }
+                referenced_outcome = Some(referenced_rule.outcome.clone());
             } else {
-                // If no exact match, try to find a rule with similar description
-                if let Some(referenced_rule) = rule_set.find_matching_rule(selector, part) {
-                    let (referenced_result, _) = evaluate_rule(referenced_rule, json, rule_set)?;
-                    if !referenced_result {
-                        overall_result = false;
+                // Try to find a rule with matching outcome (case insensitive, partial match)
+                let mut found_rule = None;
+                for rule in &rule_set.rules {
+                    if rule.outcome.to_lowercase() == part.to_lowercase() ||
+                        rule.outcome.to_lowercase().contains(&part.to_lowercase()) ||
+                        part.to_lowercase().contains(&rule.outcome.to_lowercase()) {
+                        found_rule = Some(rule);
+                        break;
                     }
-                    referenced_outcome = Some(referenced_rule.outcome.clone());
-                } else if let Some(referenced_rule) = rule_set.get_rule_by_label(part) {
+                }
+
+                if let Some(referenced_rule) = found_rule {
                     let (referenced_result, _) = evaluate_rule(referenced_rule, json, rule_set)?;
                     if !referenced_result {
                         overall_result = false;
@@ -150,13 +191,10 @@ fn evaluate_condition(
                 } else {
                     // If we still can't find a matching rule, try to infer a property
                     let possible_properties = crate::runner::utils::infer_possible_properties(part);
-                    let mut property_found = false;
 
                     if let Some(obj) = json.get(&effective_selector) {
                         for property in &possible_properties {
                             if let Some(property_value) = obj.get(property) {
-                                property_found = true;
-
                                 if let Some(value_bool) = property_value.as_bool() {
                                     if !value_bool {
                                         overall_result = false;
@@ -198,9 +236,6 @@ fn evaluate_condition(
                         }
                     }
 
-                    if !property_found {
-                        // If we can't find any corresponding property, assume true
-                    }
                 }
             }
 
@@ -357,140 +392,177 @@ fn extract_value_from_json(
     }
 }
 
+// Main comparison dispatcher
 fn evaluate_comparison(
     left: &RuleValue,
     operator: &ComparisonOperator,
     right: &RuleValue
 ) -> Result<bool, RuleError> {
+    use ComparisonOperator::*;
+
     match operator {
-        ComparisonOperator::GreaterThanOrEqual => {
-            match (left, right) {
-                (RuleValue::Number(l), RuleValue::Number(r)) => Ok(l >= r),
-                _ => Err(RuleError::TypeError("GreaterThanOrEqual only works with numbers".to_string())),
+        // Numeric comparisons
+        GreaterThanOrEqual => compare_numbers_gte(left, right),
+        LessThanOrEqual => compare_numbers_lte(left, right),
+        GreaterThan => compare_numbers_gt(left, right),
+        LessThan => compare_numbers_lt(left, right),
+
+        // Equality comparisons
+        EqualTo => compare_equal(left, right),
+        NotEqualTo => compare_not_equal(left, right),
+        SameAs => compare_equal(left, right), // Same logic as EqualTo
+        NotSameAs => compare_not_equal(left, right), // Same logic as NotEqualTo
+
+        // Date comparisons
+        LaterThan => compare_dates_later(left, right),
+        EarlierThan => compare_dates_earlier(left, right),
+
+        // List operations
+        In => compare_in_list(left, right),
+        NotIn => compare_not_in_list(left, right),
+        Contains => compare_contains(left, right),
+    }
+}
+
+// Helper function to try to convert a string to a date
+fn try_parse_date(value: &RuleValue) -> Option<NaiveDate> {
+    if let RuleValue::String(s) = value {
+        if s.len() == 10 && s.chars().nth(4) == Some('-') && s.chars().nth(7) == Some('-') {
+            NaiveDate::parse_from_str(s, "%Y-%m-%d").ok()
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+// Coerce values to dates if possible
+fn coerce_to_dates(left: &RuleValue, right: &RuleValue) -> Option<(NaiveDate, NaiveDate)> {
+    let left_date = match left {
+        RuleValue::Date(d) => Some(*d),
+        _ => try_parse_date(left),
+    };
+
+    let right_date = match right {
+        RuleValue::Date(d) => Some(*d),
+        _ => try_parse_date(right),
+    };
+
+    match (left_date, right_date) {
+        (Some(l), Some(r)) => Some((l, r)),
+        _ => None,
+    }
+}
+
+// Numeric comparison functions
+fn compare_numbers_gte(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleError> {
+    match (left, right) {
+        (RuleValue::Number(l), RuleValue::Number(r)) => Ok(l >= r),
+        _ => Err(RuleError::TypeError("GreaterThanOrEqual only works with numbers".to_string())),
+    }
+}
+
+fn compare_numbers_lte(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleError> {
+    match (left, right) {
+        (RuleValue::Number(l), RuleValue::Number(r)) => Ok(l <= r),
+        _ => Err(RuleError::TypeError("LessThanOrEqual only works with numbers".to_string())),
+    }
+}
+
+fn compare_numbers_gt(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleError> {
+    match (left, right) {
+        (RuleValue::Number(l), RuleValue::Number(r)) => Ok(l > r),
+        _ => Err(RuleError::TypeError("GreaterThan only works with numbers".to_string())),
+    }
+}
+
+fn compare_numbers_lt(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleError> {
+    match (left, right) {
+        (RuleValue::Number(l), RuleValue::Number(r)) => Ok(l < r),
+        _ => Err(RuleError::TypeError("LessThan only works with numbers".to_string())),
+    }
+}
+
+// Equality comparison functions
+fn compare_equal(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleError> {
+    match (left, right) {
+        (RuleValue::Number(l), RuleValue::Number(r)) => Ok(l == r),
+        (RuleValue::String(l), RuleValue::String(r)) => Ok(l == r),
+        (RuleValue::Date(l), RuleValue::Date(r)) => Ok(l == r),
+        (RuleValue::Boolean(l), RuleValue::Boolean(r)) => Ok(l == r),
+        _ => Err(RuleError::TypeError(format!("Cannot compare {:?} and {:?} for equality", left, right))),
+    }
+}
+
+fn compare_not_equal(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleError> {
+    compare_equal(left, right).map(|result| !result)
+}
+
+// Date comparison functions
+fn compare_dates_later(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleError> {
+    if let Some((l, r)) = coerce_to_dates(left, right) {
+        Ok(l > r)
+    } else {
+        Err(RuleError::TypeError(format!("LaterThan requires date values, got {:?} and {:?}", left, right)))
+    }
+}
+
+fn compare_dates_earlier(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleError> {
+    if let Some((l, r)) = coerce_to_dates(left, right) {
+        Ok(l < r)
+    } else {
+        Err(RuleError::TypeError(format!("EarlierThan requires date values, got {:?} and {:?}", left, right)))
+    }
+}
+
+// List operation functions
+fn compare_in_list(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleError> {
+    match right {
+        RuleValue::List(items) => {
+            for item in items {
+                if is_equal(left, item) {
+                    return Ok(true);
+                }
             }
+            Ok(false)
         },
-        ComparisonOperator::LessThanOrEqual => {
-            match (left, right) {
-                (RuleValue::Number(l), RuleValue::Number(r)) => Ok(l <= r),
-                _ => Err(RuleError::TypeError("LessThanOrEqual only works with numbers".to_string())),
-            }
-        },
-        ComparisonOperator::EqualTo => {
-            match (left, right) {
-                (RuleValue::Number(l), RuleValue::Number(r)) => Ok(l == r),
-                (RuleValue::String(l), RuleValue::String(r)) => Ok(l == r),
-                (RuleValue::Date(l), RuleValue::Date(r)) => Ok(l == r),
-                (RuleValue::Boolean(l), RuleValue::Boolean(r)) => Ok(l == r),
-                _ => Err(RuleError::TypeError(format!("Cannot compare {:?} and {:?} with EqualTo", left, right))),
-            }
-        },
-        ComparisonOperator::NotEqualTo => {
-            match (left, right) {
-                (RuleValue::Number(l), RuleValue::Number(r)) => Ok(l != r),
-                (RuleValue::String(l), RuleValue::String(r)) => Ok(l != r),
-                (RuleValue::Date(l), RuleValue::Date(r)) => Ok(l != r),
-                (RuleValue::Boolean(l), RuleValue::Boolean(r)) => Ok(l != r),
-                _ => Err(RuleError::TypeError(format!("Cannot compare {:?} and {:?} with NotEqualTo", left, right))),
-            }
-        },
-        ComparisonOperator::SameAs => {
-            match (left, right) {
-                (RuleValue::Number(l), RuleValue::Number(r)) => Ok(l == r),
-                (RuleValue::String(l), RuleValue::String(r)) => Ok(l == r),
-                (RuleValue::Date(l), RuleValue::Date(r)) => Ok(l == r),
-                (RuleValue::Boolean(l), RuleValue::Boolean(r)) => Ok(l == r),
-                _ => Err(RuleError::TypeError(format!("Cannot compare {:?} and {:?} with SameAs", left, right))),
-            }
-        },
-        ComparisonOperator::NotSameAs => {
-            match (left, right) {
-                (RuleValue::Number(l), RuleValue::Number(r)) => Ok(l != r),
-                (RuleValue::String(l), RuleValue::String(r)) => Ok(l != r),
-                (RuleValue::Date(l), RuleValue::Date(r)) => Ok(l != r),
-                (RuleValue::Boolean(l), RuleValue::Boolean(r)) => Ok(l != r),
-                _ => Err(RuleError::TypeError(format!("Cannot compare {:?} and {:?} with NotSameAs", left, right))),
-            }
-        },
-        ComparisonOperator::LaterThan => {
-            match (left, right) {
-                (RuleValue::Date(l), RuleValue::Date(r)) => {
-                    Ok(l > r)
-                },
-                _ => Err(RuleError::TypeError("LaterThan only works with dates".to_string())),
-            }
-        },
-        ComparisonOperator::EarlierThan => {
-            match (left, right) {
-                (RuleValue::Date(l), RuleValue::Date(r)) => {
-                    Ok(l < r)
-                },
-                _ => Err(RuleError::TypeError(format!("EarlierThan only works with dates {} {}", left, right))),
-            }
-        },
-        ComparisonOperator::GreaterThan => {
-            match (left, right) {
-                (RuleValue::Number(l), RuleValue::Number(r)) => Ok(l > r),
-                _ => Err(RuleError::TypeError("GreaterThan only works with numbers".to_string())),
-            }
-        },
-        ComparisonOperator::LessThan => {
-            match (left, right) {
-                (RuleValue::Number(l), RuleValue::Number(r)) => Ok(l < r),
-                _ => Err(RuleError::TypeError("LessThan only works with numbers".to_string())),
-            }
-        },
-        ComparisonOperator::In => {
+        _ => Err(RuleError::TypeError("Right operand of 'is in' must be a list".to_string())),
+    }
+}
+
+fn compare_not_in_list(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleError> {
+    compare_in_list(left, right).map(|result| !result)
+}
+
+fn compare_contains(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleError> {
+    match left {
+        RuleValue::String(l) => {
             match right {
-                RuleValue::List(items) => {
-                    for item in items {
-                        match (left, item) {
-                            (RuleValue::Number(l), RuleValue::Number(r)) if l == r => return Ok(true),
-                            (RuleValue::String(l), RuleValue::String(r)) if l == r => return Ok(true),
-                            (RuleValue::Date(l), RuleValue::Date(r)) if l == r => return Ok(true),
-                            (RuleValue::Boolean(l), RuleValue::Boolean(r)) if l == r => return Ok(true),
-                            _ => continue,
-                        }
-                    }
-                    Ok(false)
-                },
-                _ => Err(RuleError::TypeError("Right operand of 'is in' must be a list".to_string())),
+                RuleValue::String(r) => Ok(l.contains(r)),
+                _ => Err(RuleError::TypeError("String contains only works with string values".to_string())),
             }
         },
-        ComparisonOperator::NotIn => {
-            match right {
-                RuleValue::List(items) => {
-                    for item in items {
-                        match (left, item) {
-                            (RuleValue::Number(l), RuleValue::Number(r)) if l == r => return Ok(false),
-                            (RuleValue::String(l), RuleValue::String(r)) if l == r => return Ok(false),
-                            (RuleValue::Date(l), RuleValue::Date(r)) if l == r => return Ok(false),
-                            (RuleValue::Boolean(l), RuleValue::Boolean(r)) if l == r => return Ok(false),
-                            _ => continue,
-                        }
-                    }
-                    Ok(true)
-                },
-                _ => Err(RuleError::TypeError("Right operand of 'is not in' must be a list".to_string())),
+        RuleValue::List(items) => {
+            for item in items {
+                if is_equal(item, right) {
+                    return Ok(true);
+                }
             }
+            Ok(false)
         },
-        ComparisonOperator::Contains => {
-            match (left, right) {
-                (RuleValue::String(l), RuleValue::String(r)) => Ok(l.contains(r)),
-                (RuleValue::List(items), _) => {
-                    for item in items {
-                        match (item, right) {
-                            (RuleValue::Number(l), RuleValue::Number(r)) if l == r => return Ok(true),
-                            (RuleValue::String(l), RuleValue::String(r)) if l == r => return Ok(true),
-                            (RuleValue::Date(l), RuleValue::Date(r)) if l == r => return Ok(true),
-                            (RuleValue::Boolean(l), RuleValue::Boolean(r)) if l == r => return Ok(true),
-                            _ => continue,
-                        }
-                    }
-                    Ok(false)
-                },
-                _ => Err(RuleError::TypeError("Contains only works with strings or lists".to_string())),
-            }
-        },
+        _ => Err(RuleError::TypeError("Contains only works with strings or lists".to_string())),
+    }
+}
+
+// Helper function to check equality without returning Result
+fn is_equal(left: &RuleValue, right: &RuleValue) -> bool {
+    match (left, right) {
+        (RuleValue::Number(l), RuleValue::Number(r)) => l == r,
+        (RuleValue::String(l), RuleValue::String(r)) => l == r,
+        (RuleValue::Date(l), RuleValue::Date(r)) => l == r,
+        (RuleValue::Boolean(l), RuleValue::Boolean(r)) => l == r,
+        _ => false,
     }
 }
 
@@ -521,4 +593,59 @@ fn get_json_value_insensative<'a>(json: &'a serde_json::Value, key: &str) -> Opt
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_compare_numbers() {
+        let five = RuleValue::Number(5.0);
+        let ten = RuleValue::Number(10.0);
+
+        assert_eq!(compare_numbers_gt(&ten, &five).unwrap(), true);
+        assert_eq!(compare_numbers_gt(&five, &ten).unwrap(), false);
+        assert_eq!(compare_numbers_gte(&five, &five).unwrap(), true);
+        assert_eq!(compare_numbers_lt(&five, &ten).unwrap(), true);
+        assert_eq!(compare_numbers_lte(&ten, &ten).unwrap(), true);
+    }
+
+    #[test]
+    fn test_compare_dates() {
+        let date1 = RuleValue::Date(NaiveDate::from_ymd_opt(2020, 1, 1).unwrap());
+        let date2 = RuleValue::Date(NaiveDate::from_ymd_opt(2021, 1, 1).unwrap());
+        let date_str = RuleValue::String("2020-06-15".to_string());
+
+        assert_eq!(compare_dates_earlier(&date1, &date2).unwrap(), true);
+        assert_eq!(compare_dates_later(&date2, &date1).unwrap(), true);
+        assert_eq!(compare_dates_earlier(&date_str, &date2).unwrap(), true);
+    }
+
+    #[test]
+    fn test_compare_equality() {
+        let str1 = RuleValue::String("hello".to_string());
+        let str2 = RuleValue::String("hello".to_string());
+        let str3 = RuleValue::String("world".to_string());
+
+        assert_eq!(compare_equal(&str1, &str2).unwrap(), true);
+        assert_eq!(compare_equal(&str1, &str3).unwrap(), false);
+        assert_eq!(compare_not_equal(&str1, &str3).unwrap(), true);
+    }
+
+    #[test]
+    fn test_list_operations() {
+        let value = RuleValue::String("apple".to_string());
+        let list = RuleValue::List(vec![
+            RuleValue::String("apple".to_string()),
+            RuleValue::String("banana".to_string()),
+        ]);
+
+        assert_eq!(compare_in_list(&value, &list).unwrap(), true);
+        assert_eq!(compare_contains(&list, &value).unwrap(), true);
+
+        let missing = RuleValue::String("orange".to_string());
+        assert_eq!(compare_in_list(&missing, &list).unwrap(), false);
+        assert_eq!(compare_not_in_list(&missing, &list).unwrap(), true);
+    }
 }

@@ -112,61 +112,55 @@ mod tests {
         assert!(!results_false["normal"]);
     }
 
-    // #[test]
-    // fn test_later_than() {
-    //     let rule_text = r#"
-    //     A **Subscription** is active
-    //       if the __expiryDate__ of the **Subscription** is later than 2023-01-01.
-    //     "#;
-    //
-    //     let rule_set = parse_rules(rule_text).unwrap();
-    //
-    //     // Test case where condition is true
-    //     let json_true = json!({
-    //         "Subscription": {
-    //             "expiryDate": "2023-12-31"
-    //         }
-    //     });
-    //     let (results_true, _trace_true) = evaluate_rule_set(&rule_set, &json_true).unwrap();
-    //     assert!(results_true["active"]);
-    //
-    //     // Test case where condition is false
-    //     let json_false = json!({
-    //         "Subscription": {
-    //             "expiryDate": "2022-12-31"
-    //         }
-    //     });
-    //     let (results_false, _trace_false) = evaluate_rule_set(&rule_set, &json_false).unwrap();
-    //     assert!(!results_false["active"]);
-    // }
+    #[test]
+    fn test_later_than() {
+        let rule_text = r#"
+        A **Subscription** is active
+          if the __expiry date__ of the **Subscription** is later than "2023-01-01".
+        "#;
 
-    // #[test]
-    // fn test_earlier_than() {
-    //     let rule_text = r#"
-    //     A Document is archived
-    //       if the __creationDate__ of the **Document** is earlier than 2020-01-01.
-    //     "#;
-    //
-    //     let rule_set = parse_rules(rule_text).expect("Parse error: failed to parse rules");
-    //
-    //     // Test case where condition is true
-    //     let json_true = json!({
-    //         "document": {
-    //             "creationDate": "2019-06-15"
-    //         }
-    //     });
-    //     let (results_true, _trace_true) = evaluate_rule_set(&rule_set, &json_true).unwrap();
-    //     assert!(results_true["archived"]);
-    //
-    //     // Test case where condition is false
-    //     let json_false = json!({
-    //         "document": {
-    //             "creationDate": "2022-03-10"
-    //         }
-    //     });
-    //     let (results_false, _trace_false) = evaluate_rule_set(&rule_set, &json_false).unwrap();
-    //     assert!(!results_false["archived"]);
-    // }
+        let rule_set = parse_rules(rule_text).unwrap();
+
+        // Test case where condition is true
+        let json_true = json!({
+            "Subscription": {
+                "expiryDate": "2023-12-31"
+            }
+        });
+        let (results_true, _trace_true) = evaluate_rule_set(&rule_set, &json_true).unwrap();
+        assert!(results_true["active"]);
+
+        // Test case where condition is false
+        let json_false = json!({
+            "Subscription": {
+                "expiryDate": "2022-12-31"
+            }
+        });
+        let (results_false, _trace_false) = evaluate_rule_set(&rule_set, &json_false).unwrap();
+        assert!(!results_false["active"]);
+    }
+
+    #[test]
+    fn test_earlier_than() {
+        let rule_text = r#"
+A **Document** is archived
+  if the __creation date__ of the **Document** is earlier than "2020-01-01".
+"#;
+
+        let rule_set = parse_rules(rule_text).expect("Parse error: failed to parse rules");
+
+        // Test case where condition is true  
+        let json_true = json!({
+            "Document": {
+                "creationDate": "2019-06-15"
+            }
+        });
+        let (results_true, _trace_true) = evaluate_rule_set(&rule_set, &json_true).unwrap();
+
+        //println!("Trace: {:#?}", trace_true);
+
+        assert!(results_true["archived"]);
+    }
 
     #[test]
     fn test_is_in() {
@@ -267,70 +261,70 @@ mod tests {
 
         let json_false = json!({
             "Person": {
-                "age": 60            }
+                "age": 60
+            }
         });
         let (results_false, _trace_false) = evaluate_rule_set(&rule_set, &json_false).unwrap();
         assert!(!results_false["senior_discount"]);
     }
-}
 
-#[test]
-fn test_property_name_transformation() {
-    let rule_text = r#"
+    #[test]
+    fn test_property_name_transformation() {
+        let rule_text = r#"
     A **Person** gets discount
       if the __first name__ of the **Person** is equal to "John".
     "#;
 
-    let rule_set = runner::parser::parse_rules(rule_text).unwrap();
+        let rule_set = runner::parser::parse_rules(rule_text).unwrap();
 
-    let json_true = serde_json::json!({
-        "Person": {
-            "firstName": "John"
-        }
-    });
-    let (results_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
-    assert!(results_true["discount"]);
+        let json_true = serde_json::json!({
+            "Person": {
+                "firstName": "John"
+            }
+        });
+        let (results_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
+        assert!(results_true["discount"]);
 
-    let json_false = serde_json::json!({
-        "Person": {
-            "firstName": "Jane"
-        }
-    });
-    let (results_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
-    assert!(!results_false["discount"]);
-}
+        let json_false = serde_json::json!({
+            "Person": {
+                "firstName": "Jane"
+            }
+        });
+        let (results_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
+        assert!(!results_false["discount"]);
+    }
 
-#[test]
-fn test_super_simple() {
-    let rule_text = r#"
+    #[test]
+    fn test_super_simple() {
+        let rule_text = r#"
         # Driving Test Rules
         A **Person** gets a full driving license
           if the __age__ of the **Person** is greater than or equal to 17
           and the __driving test score__ of the **Person** is greater than or equal to 60.
     "#;
-    let rule_set = runner::parser::parse_rules(rule_text).unwrap();
-    let json_true = serde_json::json!({
+        let rule_set = runner::parser::parse_rules(rule_text).unwrap();
+        let json_true = serde_json::json!({
         "Person": {
             "age": 18,
             "drivingTestScore": 60
         }
     });
-    let (result_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
-    assert!(result_true["full_driving_license"]);
+        let (result_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
+        assert!(result_true["a full driving license"]);
 
-    let json_false = serde_json::json!({
-        "Person": {
-            "age": 18,
-            "drivingTestScore": 59
-        }
-    });
-    let (result_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
-    assert!(!result_false["full_driving_test_score"]);
-}
+        let json_false = serde_json::json!({
+            "Person": {
+                "age": 18,
+                "drivingTestScore": 59
+            }
+        });
+        let (result_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
+        assert!(!result_false["a full driving license"]);
+    }
 
-#[test]
-fn test_reference() {
-    let rule_text = r#"
+    #[test]
+    fn test_reference() {
+        let rule_text = r#"
         # Driving Test Rules
         A **Person** gets a full driving license
           if the __age__ of the **Person** is greater than or equal to 17
@@ -340,23 +334,167 @@ fn test_reference() {
         A **Person** passes the practical driving test
           if the __driving test score__ of the **Person** is greater than or equal to 60.
     "#;
-    let rule_set = runner::parser::parse_rules(rule_text).unwrap();
-    let json_true = serde_json::json!({
-        "Person": {
-            "age": 18,
-            "drivingTestScore": 60
-        }
-    });
-    let (result_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
-    assert!(result_true["full_driving_license"]);
+        let rule_set = runner::parser::parse_rules(rule_text).unwrap();
+        let json_true = serde_json::json!({
+            "Person": {
+                "age": 18,
+                "drivingTestScore": 60
+            }
+        });
+        let (result_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
+        assert!(result_true["a full driving license"]);
 
-    let json_false = serde_json::json!({
-        "Person": {
-            "age": 18,
-            "drivingTestScore": 59
-        }
-    });
-    let (result_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
-    assert!(!result_false["full_driving_test_score"]);
+        let json_false = serde_json::json!({
+            "Person": {
+                "age": 18,
+                "drivingTestScore": 59
+            }
+        });
+        let (result_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
+        assert!(!result_false["a full driving license"]);
+    }
+
+    #[test]
+    fn test_or() {
+        let rule_text = r#"
+        # Driving Test Rules
+        A **Person** gets a full driving license
+          if the __age__ of the **Person** is greater than or equal to 17
+          or the **Person** passes the practical driving test
+          and the **Person** passes the eye test.
+
+        A **Person** passes the practical driving test
+          if the __driving test score__ of the **Person** is greater than or equal to 60.
+    "#;
+        let rule_set = runner::parser::parse_rules(rule_text).unwrap();
+        let json_true = serde_json::json!({
+            "Person": {
+                "age": 18,
+                "drivingTestScore": 60
+            }
+        });
+        let (result_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
+        assert!(result_true["a full driving license"]);
+
+        let json_true_or = serde_json::json!({
+            "Person": {
+                "age": 18,
+                "drivingTestScore": 50
+            }
+        });
+        let (result_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true_or).unwrap();
+        assert!(result_true["a full driving license"]);
+
+        let json_false = serde_json::json!({
+            "Person": {
+                "age": 16,
+                "drivingTestScore": 59
+            }
+        });
+        let (result_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
+        assert!(!result_false["a full driving license"]);
+    }
+
+    #[test]
+    fn test_random_ref() {
+        let rule_text = r#"
+        # Driving Test Rules
+        A **Person** gets a full driving license
+          if the __age__ of the **Person** is greater than or equal to 17
+          and the **Person** bob.
+
+        A **Person** bob
+          if the __driving test score__ of the **Person** is greater than or equal to 60.
+    "#;
+        let rule_set = runner::parser::parse_rules(rule_text).unwrap();
+        let json_true = serde_json::json!({
+            "Person": {
+                "age": 18,
+                "drivingTestScore": 60
+            }
+        });
+        let (result_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
+        assert!(result_true["a full driving license"]);
+
+        let json_false = serde_json::json!({
+            "Person": {
+                "age": 18,
+                "drivingTestScore": 59
+            }
+        });
+        let (result_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
+        assert!(!result_false["a full driving license"]);
+    }
+
+    // #[test]
+    // fn test_wierd_ref() {
+    //     let rule_text = r#"
+    //     An **employee** is Zoom Setup Aligned
+    //       if **employee** is covered by at least one rule.
+    //
+    //     An **employee** is covered by at least one rule
+    //       if **employee** satisfies rule 1 - No Zoom Profile
+    //       or **employee** satisfies next-Criteria 2.
+    //
+    //     An  **employee** satisfies rule 1 - No Zoom Profile
+    //       if __zoom setup__ of the **employee** is equal to "No Zoom Account".
+    //
+    //     1.Banker.Model. An **employee** satisfies next-Criteria 2
+    //       if **employee** satisfies rule 2 - Banker Model
+    //       or **employee** satisfies next-Criteria 3.
+    //
+    //     An **employee** satisfies rule 2 - Banker Model
+    //       if __banker model list__ of the **employee** is equal to "Yes".
+    //
+    //     An **employee** satisfies next-Criteria 3
+    //       if **employee** satisfies rule 3 - Recorded Zoom
+    //       or **employee** satisfies next-Criteria 4.
+    //
+    //     An **employee** satisfies rule 3 - Recorded Zoom
+    //       if __zoom setup__ of the **employee** is equal to "Recorded Zoom"
+    //       and __zoom profile__ of the **employee** is equal to "Recorded Zoom".
+    //
+    //     An **employee** satisfies next-Criteria 4
+    //       if **employee** satisfies rule 4 - Standard Zoom
+    //       or **employee** satisfies next-Criteria 5.
+    //
+    //     An **employee** satisfies rule 4 - Standard Zoom
+    //       if __zoom setup__ of the **employee** is equal to "Standard Zoom"
+    //       and __zoom profile__ of the **employee** is equal to "Standard Zoom".
+    //
+    //     An **employee** satisfies next-Criteria 5
+    //       if **employee** satisfies rule 5 - Disclaimer Zoom.
+    //
+    //     An **employee** satisfies rule 5 - Disclaimer Zoom
+    //       if __zoom setup__ of the **employee** is equal to "Disclaimer Zoom"
+    //       and __zoom profile__ of the **employee** is equal to "Disclaimer Zoom".
+    //     "#;
+    //     let rule_set = runner::parser::parse_rules(rule_text).unwrap();
+    //     let json_true = serde_json::json!({
+    //       "employee": {
+    //         "soeId": "JM78873",
+    //         "name": "Joey",
+    //         "ZoomProfile": "Recorded Zoom",
+    //         "BankerModelList": "No",
+    //         "ZoomSetup": "No Zoom Account",
+    //       }
+    //     });
+    //     let (result_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
+    //     assert!(result_true["Zoom Setup Aligned"]);
+    //
+    //     let json_false = serde_json::json!({
+    //       "employee": {
+    //         "soeId": "JM78873",
+    //         "name": "Joey",
+    //         "ZoomProfile": "Recorded Zoom",
+    //         "BankerModelList": "No",
+    //         "ZoomSetup": "Beep",
+    //       }
+    //     });
+    //     let (result_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
+    //     assert!(!result_false["Zoom Setup Aligned"]);
+    // }
 }
+
+
 

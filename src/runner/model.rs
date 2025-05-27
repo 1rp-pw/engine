@@ -40,6 +40,11 @@ impl fmt::Display for ComparisonOperator {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub enum ConditionOperator {
+    And,
+    Or,
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum RuleValue {
@@ -71,17 +76,17 @@ impl fmt::Display for RuleValue {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Source {
-    pub value: String,
-    pub pos: SourcePosition,
-}
-
-#[derive(Debug, Clone)]
-pub struct RuleSource {
-    pub value: RuleValue,
-    pub pos: SourcePosition,
-}
+// #[derive(Debug, Clone)]
+// pub struct Source {
+//     pub value: String,
+//     pub pos: SourcePosition,
+// }
+//
+// #[derive(Debug, Clone)]
+// pub struct RuleSource {
+//     pub value: RuleValue,
+//     pub pos: SourcePosition,
+// }
 
 #[derive(Debug, Clone)]
 pub enum Condition {
@@ -101,12 +106,18 @@ pub enum Condition {
 }
 
 #[derive(Debug, Clone)]
+pub struct ConditionGroup {
+    pub condition: Condition,
+    pub operator: Option<ConditionOperator>, // None for the first condition, Some for subsequent ones
+}
+
+#[derive(Debug, Clone)]
 pub struct Rule {
     pub label: Option<String>,
     pub selector: String,
     pub selector_pos: Option<SourcePosition>,
     pub outcome: String,
-    pub conditions: Vec<Condition>,
+    pub conditions: Vec<ConditionGroup>, // Changed from Vec<Condition>
     pub position: Option<SourcePosition>,
 }
 
@@ -122,8 +133,11 @@ impl Rule {
         }
     }
 
-    pub fn add_condition(&mut self, condition: Condition) {
-        self.conditions.push(condition);
+    pub fn add_condition(&mut self, condition: Condition, operator: Option<ConditionOperator>) {
+        self.conditions.push(ConditionGroup {
+            condition,
+            operator,
+        });
     }
 }
 
@@ -148,7 +162,7 @@ impl RuleSet {
         if let Some(label) = &rule.label {
             self.label_map.insert(label.clone(), index);
         }
-        
+
         self.rule_map.insert(rule.outcome.clone(), index);
         self.rules.push(rule);
     }
@@ -156,26 +170,33 @@ impl RuleSet {
     pub fn get_rule(&self, outcome: &str) -> Option<&Rule> {
         self.rule_map.get(outcome).map(|&index| &self.rules[index])
     }
-    
+
     pub fn get_rule_by_label(&self, label: &str) -> Option<&Rule> {
         self.label_map.get(label).map(|&index| &self.rules[index])
     }
-    
-    pub fn find_matching_rule(&self, selector: &str, description: &str) -> Option<&Rule> {
-        if let Some(rule) = self.get_rule(description) {
-            return Some(rule);
-        }
 
-        for rule in &self.rules {
-            if rule.selector == selector {
-                if rule.outcome.contains(description) || description.contains(&rule.outcome) {
-                    return Some(rule);
-                }
-            }
-        }
-        
-        None
-    }
+//     pub fn find_matching_rule(&self, selector: &str, description: &str) -> Option<&Rule> {
+//         // First try exact outcome match
+//         if let Some(rule) = self.get_rule(description) {
+//             return Some(rule);
+//         }
+//
+//         // Then try exact label match
+//         if let Some(rule) = self.get_rule_by_label(description) {
+//             return Some(rule);
+//         }
+//
+//         // Finally try partial matching
+//         for rule in &self.rules {
+//             if rule.selector == selector {
+//                 if rule.outcome.contains(description) || description.contains(&rule.outcome) {
+//                     return Some(rule);
+//                 }
+//             }
+//         }
+//
+//         None
+//     }
 }
 
 #[derive(Debug, Serialize, Clone)]
