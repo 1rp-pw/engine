@@ -310,7 +310,7 @@ A **Document** is archived
         }
     });
         let (result_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
-        assert!(result_true["full driving license"]);
+        assert!(result_true["a full driving license"]);
 
         let json_false = serde_json::json!({
             "Person": {
@@ -319,7 +319,7 @@ A **Document** is archived
             }
         });
         let (result_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
-        assert!(!result_false["full driving license"]);
+        assert!(!result_false["a full driving license"]);
     }
 
     #[test]
@@ -376,14 +376,23 @@ A **Document** is archived
         let (result_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
         assert!(result_true["a full driving license"]);
 
-        let json_false = serde_json::json!({
+        let json_true_or = serde_json::json!({
             "Person": {
                 "age": 18,
+                "drivingTestScore": 50
+            }
+        });
+        let (result_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true_or).unwrap();
+        assert!(result_true["a full driving license"]);
+
+        let json_false = serde_json::json!({
+            "Person": {
+                "age": 16,
                 "drivingTestScore": 59
             }
         });
         let (result_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
-        assert!(!result_false["full driving license"]);
+        assert!(!result_false["a full driving license"]);
     }
 
     #[test]
@@ -405,7 +414,7 @@ A **Document** is archived
             }
         });
         let (result_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
-        assert!(result_true["full_driving_license"]);
+        assert!(result_true["a full driving license"]);
 
         let json_false = serde_json::json!({
             "Person": {
@@ -414,7 +423,7 @@ A **Document** is archived
             }
         });
         let (result_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
-        assert!(!result_false["full_driving_test_score"]);
+        assert!(!result_false["a full driving license"]);
     }
 }
 

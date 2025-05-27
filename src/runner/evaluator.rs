@@ -70,45 +70,54 @@ pub fn evaluate_rule(
     json: &Value,
     rule_set: &RuleSet
 ) -> Result<(bool, RuleTrace), RuleError> {
+    // 1) evaluate each condition, collect its bool and its trace
+    let mut results = Vec::new();
+    let mut ops     = Vec::new();
     let mut condition_traces = Vec::new();
 
-    // Handle AND/OR logic properly
-    let mut rule_result = true;
-    let mut current_group_result = true;
-    let mut last_operator: Option<ConditionOperator> = None;
+    for (i, cg) in model_rule.conditions.iter().enumerate() {
+        let (res, trace) = evaluate_condition(&cg.condition, json, rule_set)?;
+        results.push(res);
+        condition_traces.push(trace);
 
-    for (i, condition_group) in model_rule.conditions.iter().enumerate() {
-        let (condition_result, condition_trace) = evaluate_condition(&condition_group.condition, json, rule_set)?;
-        condition_traces.push(condition_trace);
-
-        if i == 0 {
-            // First condition sets the initial result
-            current_group_result = condition_result;
-        } else {
-            // Apply the operator from the previous condition
-            match last_operator {
-                Some(ConditionOperator::And) | None => {
-                    current_group_result = current_group_result && condition_result;
-                },
-                Some(ConditionOperator::Or) => {
-                    current_group_result = current_group_result || condition_result;
-                },
-            }
+        // record the operator that *follows* this condition (None for first)
+        if let Some(op) = &cg.operator {
+            ops.push(op.clone());
+        } else if i != 0 {
+            // fallback to AND if parser didn’t provide one
+            ops.push(ConditionOperator::And);
         }
-
-        last_operator = condition_group.operator.clone();
     }
 
-    rule_result = current_group_result;
+    // 2) collapse all ANDs first
+    let mut i = 0;
+    while i < ops.len() {
+        if ops[i] == ConditionOperator::And {
+            // combine results[i] AND results[i+1] into results[i]
+            results[i] = results[i] && results[i + 1];
+            // drop results[i+1] and ops[i]
+            results.remove(i + 1);
+            ops.remove(i);
+            // do not advance i, maybe there’s another AND here
+        } else {
+            i += 1;
+        }
+    }
 
+    // 3) now fold OR across what remains
+    let mut rule_result = results
+        .into_iter()
+        .fold(false, |acc, next| acc || next);
+
+    // 4) build your trace object exactly as before
     let rule_trace = RuleTrace {
-        label: model_rule.label.clone(),
+        label:    model_rule.label.clone(),
         selector: model_rule.selector.clone(),
-        selector_pos: None,
-        outcome: model_rule.outcome.clone(),
-        outcome_pos: None,
+        selector_pos: model_rule.selector_pos.clone(),
+        outcome:  model_rule.outcome.clone(),
+        outcome_pos: model_rule.position.clone(), // or wherever you keep it
         conditions: condition_traces,
-        result: rule_result,
+        result:   rule_result,
     };
 
     Ok((rule_result, rule_trace))
@@ -230,10 +239,10 @@ fn evaluate_condition(
                         }
                     }
 
-                    if !property_found {
-                        // If we can't find any corresponding property, assume false for missing rule
-                        overall_result = false;
-                    }
+                    // if !property_found {
+                    //     // If we can't find any corresponding property, assume false for missing rule
+                    //     overall_result = false;
+                    // }
                 }
             }
 

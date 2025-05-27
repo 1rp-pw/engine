@@ -17,7 +17,7 @@ rule = {
     "if" ~ condition ~ (condition_operator ~ condition)* ~ "."
 }
 rule_outcome = {
-  outcome_verb ~ outcome
+  outcome_verb? ~ outcome
 }
 outcome_verb = {
   "gets" | "passes" | "is" | "has" | "receives" | "qualifies for" | "meets" | "satisfies"
@@ -37,15 +37,8 @@ property_condition = {
     "the" ~ property ~ "of" ~ "the" ~ object_selector ~ predicate
 }
 
-rule_reference = {
-    "the" ~ object_selector ~ reference_verb ~ reference_object?
-}
-
-reference_verb = {
-    "passes" | "meets" | "satisfies" | "qualifies for" | "is eligible for" | "has passed"
-}
-
-reference_object = @{ (!(" and " | ".") ~ ANY)+ }
+rule_reference = { "the" ~ object_selector ~ reference_name }
+reference_name  = @{ (!("and" | ".") ~ ANY)+ }
 
 predicate = {
     comparison_operator ~ value |
