@@ -105,7 +105,7 @@ pub fn evaluate_rule(
     }
 
     // 3) now fold OR across what remains
-    let mut rule_result = results
+    let rule_result = results
         .into_iter()
         .fold(false, |acc, next| acc || next);
 
@@ -191,13 +191,10 @@ fn evaluate_condition(
                 } else {
                     // If we still can't find a matching rule, try to infer a property
                     let possible_properties = crate::runner::utils::infer_possible_properties(part);
-                    let mut property_found = false;
 
                     if let Some(obj) = json.get(&effective_selector) {
                         for property in &possible_properties {
                             if let Some(property_value) = obj.get(property) {
-                                property_found = true;
-
                                 if let Some(value_bool) = property_value.as_bool() {
                                     if !value_bool {
                                         overall_result = false;

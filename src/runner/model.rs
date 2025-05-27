@@ -76,17 +76,17 @@ impl fmt::Display for RuleValue {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Source {
-    pub value: String,
-    pub pos: SourcePosition,
-}
-
-#[derive(Debug, Clone)]
-pub struct RuleSource {
-    pub value: RuleValue,
-    pub pos: SourcePosition,
-}
+// #[derive(Debug, Clone)]
+// pub struct Source {
+//     pub value: String,
+//     pub pos: SourcePosition,
+// }
+//
+// #[derive(Debug, Clone)]
+// pub struct RuleSource {
+//     pub value: RuleValue,
+//     pub pos: SourcePosition,
+// }
 
 #[derive(Debug, Clone)]
 pub enum Condition {
@@ -175,28 +175,28 @@ impl RuleSet {
         self.label_map.get(label).map(|&index| &self.rules[index])
     }
 
-    pub fn find_matching_rule(&self, selector: &str, description: &str) -> Option<&Rule> {
-        // First try exact outcome match
-        if let Some(rule) = self.get_rule(description) {
-            return Some(rule);
-        }
-
-        // Then try exact label match
-        if let Some(rule) = self.get_rule_by_label(description) {
-            return Some(rule);
-        }
-
-        // Finally try partial matching
-        for rule in &self.rules {
-            if rule.selector == selector {
-                if rule.outcome.contains(description) || description.contains(&rule.outcome) {
-                    return Some(rule);
-                }
-            }
-        }
-
-        None
-    }
+//     pub fn find_matching_rule(&self, selector: &str, description: &str) -> Option<&Rule> {
+//         // First try exact outcome match
+//         if let Some(rule) = self.get_rule(description) {
+//             return Some(rule);
+//         }
+//
+//         // Then try exact label match
+//         if let Some(rule) = self.get_rule_by_label(description) {
+//             return Some(rule);
+//         }
+//
+//         // Finally try partial matching
+//         for rule in &self.rules {
+//             if rule.selector == selector {
+//                 if rule.outcome.contains(description) || description.contains(&rule.outcome) {
+//                     return Some(rule);
+//                 }
+//             }
+//         }
+//
+//         None
+//     }
 }
 
 #[derive(Debug, Serialize, Clone)]
