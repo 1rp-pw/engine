@@ -29,16 +29,16 @@ label_reference = { "§" ~ label_name ~ label_predicate? }
 
 condition = {
     property_condition |
-    rule_reference |
-    label_reference
+    label_reference |
+    rule_reference
 }
 
 property_condition = {
     ("the")? ~ property ~ "of" ~ ("the")? ~ object_selector ~ predicate
 }
 
-rule_reference = { ("the")? ~ object_selector ~ reference_name }
-reference_name  = @{ (!("and" | ".") ~ ANY)+ }
+rule_reference = { "the"? ~ object_selector ~ reference_name }
+reference_name = @{ (!("." | "and" | "or" | "\n") ~ ANY)+ }
 
 predicate = {
     comparison_operator ~ value |
