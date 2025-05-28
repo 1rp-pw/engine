@@ -1,3 +1,5 @@
+mod lib;
+
 use crate::runner::error::RuleError;
 use crate::runner::model::{Condition, ComparisonOperator, Rule, RuleSet, RuleValue, ConditionOperator, ComparisonCondition, RuleReferenceCondition, PropertyChainElement};
 use crate::runner::trace::{RuleSetTrace, RuleTrace, ConditionTrace, ComparisonTrace, ComparisonEvaluationTrace, RuleReferenceTrace, PropertyCheckTrace, PropertyTrace, TypedValue, SelectorTrace, OutcomeTrace};
@@ -1004,59 +1006,4 @@ fn get_json_value_insensitive<'a>(json: &'a serde_json::Value, key: &str) -> Opt
         }
     }
     None
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_compare_numbers() {
-        let five = RuleValue::Number(5.0);
-        let ten = RuleValue::Number(10.0);
-
-        assert_eq!(compare_numbers_gt(&ten, &five).unwrap(), true);
-        assert_eq!(compare_numbers_gt(&five, &ten).unwrap(), false);
-        assert_eq!(compare_numbers_gte(&five, &five).unwrap(), true);
-        assert_eq!(compare_numbers_lt(&five, &ten).unwrap(), true);
-        assert_eq!(compare_numbers_lte(&ten, &ten).unwrap(), true);
-    }
-
-    #[test]
-    fn test_compare_dates() {
-        let date1 = RuleValue::Date(NaiveDate::from_ymd_opt(2020, 1, 1).unwrap());
-        let date2 = RuleValue::Date(NaiveDate::from_ymd_opt(2021, 1, 1).unwrap());
-        let date_str = RuleValue::String("2020-06-15".to_string());
-
-        assert_eq!(compare_dates_earlier(&date1, &date2).unwrap(), true);
-        assert_eq!(compare_dates_later(&date2, &date1).unwrap(), true);
-        assert_eq!(compare_dates_earlier(&date_str, &date2).unwrap(), true);
-    }
-
-    #[test]
-    fn test_compare_equality() {
-        let str1 = RuleValue::String("hello".to_string());
-        let str2 = RuleValue::String("hello".to_string());
-        let str3 = RuleValue::String("world".to_string());
-
-        assert_eq!(compare_equal(&str1, &str2).unwrap(), true);
-        assert_eq!(compare_equal(&str1, &str3).unwrap(), false);
-        assert_eq!(compare_not_equal(&str1, &str3).unwrap(), true);
-    }
-
-    #[test]
-    fn test_list_operations() {
-        let value = RuleValue::String("apple".to_string());
-        let list = RuleValue::List(vec![
-            RuleValue::String("apple".to_string()),
-            RuleValue::String("banana".to_string()),
-        ]);
-
-        assert_eq!(compare_in_list(&value, &list).unwrap(), true);
-        assert_eq!(compare_contains(&list, &value).unwrap(), true);
-
-        let missing = RuleValue::String("orange".to_string());
-        assert_eq!(compare_in_list(&missing, &list).unwrap(), false);
-        assert_eq!(compare_not_in_list(&missing, &list).unwrap(), true);
-    }
 }

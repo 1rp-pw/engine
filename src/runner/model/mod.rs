@@ -183,8 +183,8 @@ impl Rule {
 #[derive(Debug, Default)]
 pub struct RuleSet {
     pub rules: Vec<Rule>,
-    rule_map: HashMap<String, usize>,
-    label_map: HashMap<String, usize>,
+    pub(crate) rule_map: HashMap<String, usize>,
+    pub(crate) label_map: HashMap<String, usize>,
 }
 
 impl RuleSet {
