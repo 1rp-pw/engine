@@ -59,11 +59,12 @@ fn parse_rule(pair: Pair<Rule>) -> Result<crate::runner::model::Rule, RuleError>
             }
             Rule::object_selector => {
                 let span = header_part.as_span();
-                let (l, _) = span.start_pos().line_col();
+                let (l, start_col) = span.start_pos().line_col();
+                let (_, end_col) = span.end_pos().line_col();
                 selector_pos = Some(SourcePosition {
                     line: l,
-                    start: span.start(),
-                    end: span.end(),
+                    start: start_col,
+                    end: end_col,
                 });
                 let s = header_part.as_str();
                 selector = s[2..s.len() - 2].to_string();
@@ -159,11 +160,12 @@ fn parse_label_reference(pair: Pair<Rule>) -> Result<RuleReferenceCondition, Rul
         .ok_or_else(|| RuleError::ParseError("Missing label name".to_string()))?;
 
     let span = label_name_pair.as_span();
-    let (line, _) = span.start_pos().line_col();
+    let (line, start_col) = span.start_pos().line_col();
+    let (_, end_col) = span.end_pos().line_col();
     let pos = Some(SourcePosition {
         line,
-        start: span.start(),
-        end: span.end(),
+        start: start_col,
+        end: end_col,
     });
 
     let label_name = PositionedValue::with_position(
@@ -231,24 +233,30 @@ fn parse_property_condition(pair: Pair<Rule>) -> Result<ComparisonCondition, Rul
         Rule::property_access => {
             let right_path = parse_property_access(right_pair)?;
             let value_span = rp.as_span();
-            let (value_line, _) = value_span.start_pos().line_col();
+            let (value_line, start_col) = value_span.start_pos().line_col();
+            let (_, end_col) = value_span.end_pos().line_col();
             let val_pos = Some(SourcePosition{
                 line: value_line,
-                start: value_span.start(),
-                end: value_span.end(),
+                start: start_col,
+                end: end_col,
             });
+            let property_path_string = format!("$.{}.{}",
+                                               right_path.selector,
+                                               right_path.properties.join(".")
+            );
             (
-                PositionedValue::with_position(RuleValue::String("property_access_placeholder".to_string()), val_pos),
+                PositionedValue::with_position(RuleValue::String(property_path_string), val_pos),
                 Some(right_path)
             )
         }
         Rule::list_value => {
             let value_span = right_pair.as_span();
-            let (value_line, _) = value_span.start_pos().line_col();
+            let (value_line, start_col) = value_span.start_pos().line_col();
+            let (_, end_col) = value_span.end_pos().line_col();
             let val_pos = Some(SourcePosition{
                 line: value_line,
-                start: value_span.start(),
-                end: value_span.end(),
+                start: start_col,
+                end: end_col,
             });
             (
                 PositionedValue::with_position(parse_list_value(right_pair)?, val_pos),
@@ -257,11 +265,12 @@ fn parse_property_condition(pair: Pair<Rule>) -> Result<ComparisonCondition, Rul
         }
         Rule::value => {
             let value_span = right_pair.as_span();
-            let (value_line, _) = value_span.start_pos().line_col();
+            let (value_line, start_col) = value_span.start_pos().line_col();
+            let (_, end_col) = value_span.end_pos().line_col();
             let val_pos = Some(SourcePosition{
                 line: value_line,
-                start: value_span.start(),
-                end: value_span.end(),
+                start: start_col,
+                end: end_col,
             });
             (
                 PositionedValue::with_position(parse_value(right_pair)?, val_pos),
@@ -316,11 +325,12 @@ fn parse_rule_reference(pair: Pair<Rule>) -> Result<RuleReferenceCondition, Rule
         match inner.as_rule() {
             Rule::object_selector => {
                 let span = inner.as_span();
-                let (line, _) = span.start_pos().line_col();
+                let (line, start_col) = span.start_pos().line_col();
+                let(_, end_col) = span.end_pos().line_col();
                 let pos = Some(SourcePosition {
                     line,
-                    start: span.start(),
-                    end: span.end(),
+                    start: start_col,
+                    end: end_col,
                 });
                 let s = inner.as_str();
                 let name = s[2..s.len()-2].to_string();
@@ -328,11 +338,12 @@ fn parse_rule_reference(pair: Pair<Rule>) -> Result<RuleReferenceCondition, Rule
             }
             Rule::reference_name => {
                 let span = inner.as_span();
-                let (line, _) = span.start_pos().line_col();
+                let (line, start_col) = span.start_pos().line_col();
+                let (_, end_col) = span.end_pos().line_col();
                 let pos = Some(SourcePosition {
                     line,
-                    start: span.start(),
-                    end: span.end(),
+                    start: start_col,
+                    end: end_col,
                 });
                 let name = inner.as_str().trim().to_string();
                 rule_name = Some(PositionedValue::with_position(name, pos));
