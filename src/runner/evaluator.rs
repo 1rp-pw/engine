@@ -1,5 +1,5 @@
 use crate::runner::error::RuleError;
-use crate::runner::model::{Condition, ComparisonOperator, Rule, RuleSet, RuleValue, ConditionOperator, SourcePosition, ComparisonCondition, RuleReferenceCondition};
+use crate::runner::model::{Condition, ComparisonOperator, Rule, RuleSet, RuleValue, ConditionOperator, ComparisonCondition, RuleReferenceCondition, PropertyChainElement};
 use crate::runner::trace::{RuleSetTrace, RuleTrace, ConditionTrace, ComparisonTrace, ComparisonEvaluationTrace, RuleReferenceTrace, PropertyCheckTrace, PropertyTrace, TypedValue, SelectorTrace, OutcomeTrace};
 
 use serde_json::{json, Value};
@@ -362,7 +362,17 @@ fn evaluate_comparison_condition(
     condition: &ComparisonCondition,
     json: &Value
 ) -> Result<(bool, ConditionTrace), RuleError> {
-    // Find the effective selector
+    // Check if this is a cross-object comparison
+    if let Some(left_path) = &condition.left_property_path {
+        return evaluate_cross_object_comparison(condition, left_path, json);
+    }
+
+    // Check if this is a chained property access
+    if let Some(property_chain) = &condition.property_chain {
+        return evaluate_chained_comparison_condition(condition, property_chain, json);
+    }
+
+    // Original simple property condition logic
     let effective_selector = match find_effective_selector(&condition.selector.value, json)? {
         Some(sel) => sel,
         None => {
@@ -403,6 +413,243 @@ fn evaluate_comparison_condition(
     };
 
     Ok((comparison_result, ConditionTrace::Comparison(comparison_trace)))
+}
+
+fn evaluate_cross_object_comparison(
+    condition: &ComparisonCondition,
+    left_path: &crate::runner::model::PropertyPath,
+    json: &Value
+) -> Result<(bool, ConditionTrace), RuleError> {
+    // Resolve left property path
+    let (left_value, left_path_str) = resolve_property_path(left_path, json)?;
+
+    if left_value.is_none() {
+        return Ok((false, create_failed_comparison_trace_with_path(condition, &left_path_str)));
+    }
+
+    let left_rule_value = convert_json_to_rule_value(left_value.unwrap())?;
+
+    let (comparison_result, evaluation_details) = if let Some(right_path) = &condition.right_property_path {
+        // Property-to-property comparison
+        let (right_value, _right_path_str) = resolve_property_path(right_path, json)?;
+
+        if right_value.is_none() {
+            return Ok((false, create_failed_comparison_trace_with_path(condition, &left_path_str)));
+        }
+
+        let right_rule_value = convert_json_to_rule_value(right_value.unwrap())?;
+        perform_comparison(&left_rule_value, &condition.operator, &right_rule_value)?
+    } else {
+        // Property-to-value comparison
+        perform_comparison(&left_rule_value, &condition.operator, &condition.value.value)?
+    };
+
+    // Build the trace
+    let comparison_trace = ComparisonTrace {
+        selector: SelectorTrace {
+            value: left_path.selector.clone(),
+            pos: None,
+        },
+        property: PropertyTrace {
+            value: left_value.unwrap().clone(),
+            path: left_path_str.clone(),
+        },
+        operator: condition.operator.clone(),
+        value: condition.value.value.to_value_trace(condition.value.pos.clone()),
+        evaluation_details,
+        result: comparison_result,
+    };
+
+    Ok((comparison_result, ConditionTrace::Comparison(comparison_trace)))
+}
+
+fn resolve_property_path<'a>(
+    path: &crate::runner::model::PropertyPath,
+    json: &'a Value
+) -> Result<(Option<&'a Value>, String), RuleError> {
+    let mut path_parts = vec![path.selector.clone()];
+
+    // Find effective selector
+    let effective_selector = find_effective_selector(&path.selector, json)?;
+
+    if effective_selector.is_none() {
+        return Ok((None, format!("$.{}", path.selector)));
+    }
+
+    let final_selector = effective_selector.unwrap();
+    let mut current_value = json.get(&final_selector)
+        .ok_or_else(|| RuleError::EvaluationError(format!("Selector '{}' not found", final_selector)))?;
+
+    path_parts[0] = final_selector; // Use the actual key from JSON
+
+    // Follow the property chain - properties are in reverse order
+    // For "__id__ of __group__ of **user**", we get properties: ["id", "group"]
+    // But we need to traverse: user -> group -> id
+    for property in path.properties.iter().rev() {
+        if let Some(prop_value) = current_value.get(property) {
+            current_value = prop_value;
+            path_parts.push(property.clone());
+        } else if let Some(prop_value) = get_json_value_insensitive(current_value, property) {
+            current_value = prop_value;
+            path_parts.push(property.clone());
+        } else {
+            return Ok((None, format!("$.{}", path_parts.join("."))));
+        }
+    }
+
+    let path_str = format!("$.{}", path_parts.join("."));
+    Ok((Some(current_value), path_str))
+}
+
+fn evaluate_chained_comparison_condition(
+    condition: &ComparisonCondition,
+    property_chain: &[PropertyChainElement],
+    json: &Value
+) -> Result<(bool, ConditionTrace), RuleError> {
+    // Resolve the chained property access
+    let (final_value, path) = resolve_chained_property_access(
+        &condition.property.value,
+        &condition.selector.value,
+        property_chain,
+        json
+    )?;
+
+    if final_value.is_none() {
+        return Ok((false, create_failed_comparison_trace_with_path(condition, &path)));
+    }
+
+    // Extract and evaluate the comparison
+    let json_value = convert_json_to_rule_value(final_value.unwrap())?;
+    let (comparison_result, evaluation_details) = perform_comparison(
+        &json_value,
+        &condition.operator,
+        &condition.value.value
+    )?;
+
+    // Build the trace
+    let comparison_trace = ComparisonTrace {
+        selector: SelectorTrace {
+            value: condition.selector.value.clone(),
+            pos: condition.selector.pos.clone(),
+        },
+        property: PropertyTrace {
+            value: final_value.unwrap().clone(),
+            path: path.clone(),
+        },
+        operator: condition.operator.clone(),
+        value: condition.value.value.to_value_trace(condition.value.pos.clone()),
+        evaluation_details,
+        result: comparison_result,
+    };
+
+    Ok((comparison_result, ConditionTrace::Comparison(comparison_trace)))
+}
+
+fn resolve_chained_property_access<'a>(
+    first_property: &str,
+    final_selector: &str,
+    chain: &[PropertyChainElement],
+    json: &'a Value
+) -> Result<(Option<&'a Value>, String), RuleError> {
+    let mut path_parts = Vec::new();
+
+    // Start with the final selector
+    let effective_selector = find_effective_selector(final_selector, json)?;
+
+    if effective_selector.is_none() {
+        return Ok((None, format!("$.{}", final_selector)));
+    }
+
+    let final_sel = effective_selector.unwrap();
+    let mut current_value = json.get(&final_sel)
+        .ok_or_else(|| RuleError::EvaluationError(format!("Selector '{}' not found", final_sel)))?;
+
+    path_parts.push(final_sel);
+
+    // Follow the chain
+    for element in chain {
+        match element {
+            PropertyChainElement::Property(property) => {
+                if let Some(prop_value) = current_value.get(property) {
+                    current_value = prop_value;
+                    path_parts.push(property.clone());
+                } else if let Some(prop_value) = get_json_value_insensitive(current_value, property) {
+                    current_value = prop_value;
+                    path_parts.push(property.clone());
+                } else {
+                    return Ok((None, format!("$.{}", path_parts.join("."))));
+                }
+            }
+            PropertyChainElement::Selector(selector) => {
+                if let Some(sel_value) = current_value.get(selector) {
+                    current_value = sel_value;
+                    path_parts.push(selector.clone());
+                } else if let Some(sel_value) = get_json_value_insensitive(current_value, selector) {
+                    current_value = sel_value;
+                    path_parts.push(selector.clone());
+                } else {
+                    return Ok((None, format!("$.{}", path_parts.join("."))));
+                }
+            }
+        }
+    }
+
+    // Finally, get the first property
+    if let Some(final_prop_value) = current_value.get(first_property) {
+        current_value = final_prop_value;
+        path_parts.push(first_property.to_string());
+    } else if let Some(final_prop_value) = get_json_value_insensitive(current_value, first_property) {
+        current_value = final_prop_value;
+        path_parts.push(first_property.to_string());
+    } else {
+        return Ok((None, format!("$.{}", path_parts.join("."))));
+    }
+
+    let path = format!("$.{}", path_parts.join("."));
+    Ok((Some(current_value), path))
+}
+
+fn convert_json_to_rule_value(value: &Value) -> Result<RuleValue, RuleError> {
+    match value {
+        Value::Number(n) => {
+            if let Some(num) = n.as_f64() {
+                Ok(RuleValue::Number(num))
+            } else {
+                Err(RuleError::TypeError(format!("Could not convert number to f64: {:?}", n)))
+            }
+        },
+        Value::String(s) => {
+            if s.len() == 10 && s.chars().nth(4) == Some('-') && s.chars().nth(7) == Some('-') {
+                match chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d") {
+                    Ok(date) => {
+                        Ok(RuleValue::Date(date))
+                    },
+                    Err(_) => {
+                        Ok(RuleValue::String(s.clone()))
+                    }
+                }
+            } else {
+                Ok(RuleValue::String(s.clone()))
+            }
+        },
+        Value::Bool(b) => Ok(RuleValue::Boolean(*b)),
+        Value::Array(arr) => {
+            let mut values = Vec::new();
+            for item in arr {
+                if let Some(s) = item.as_str() {
+                    values.push(RuleValue::String(s.to_string()));
+                } else if let Some(n) = item.as_f64() {
+                    values.push(RuleValue::Number(n));
+                } else if let Some(b) = item.as_bool() {
+                    values.push(RuleValue::Boolean(b));
+                } else {
+                    return Err(RuleError::TypeError(format!("Unsupported array item type: {:?}", item)));
+                }
+            }
+            Ok(RuleValue::List(values))
+        },
+        _ => Err(RuleError::TypeError(format!("Unsupported JSON value type: {:?}", value))),
+    }
 }
 
 fn perform_comparison(
@@ -499,6 +746,26 @@ fn create_failed_comparison_trace(
     })
 }
 
+fn create_failed_comparison_trace_with_path(
+    condition: &ComparisonCondition,
+    path: &str
+) -> ConditionTrace {
+    ConditionTrace::Comparison(ComparisonTrace {
+        selector: SelectorTrace {
+            value: condition.selector.value.clone(),
+            pos: condition.selector.pos.clone(),
+        },
+        property: PropertyTrace {
+            value: Value::Null,
+            path: path.to_string(),
+        },
+        operator: condition.operator.clone(),
+        value: condition.value.value.to_value_trace(condition.value.pos.clone()),
+        evaluation_details: None,
+        result: false,
+    })
+}
+
 fn extract_value_from_json(
     json: &Value,
     selector: &str,
@@ -533,50 +800,10 @@ fn extract_value_from_json(
         ));
     };
 
-    // Rest of the function remains the same...
-    match value {
-        Value::Number(n) => {
-            if let Some(num) = n.as_f64() {
-                Ok(RuleValue::Number(num))
-            } else {
-                Err(RuleError::TypeError(format!("Could not convert number to f64: {:?}", n)))
-            }
-        },
-        Value::String(s) => {
-            if s.len() == 10 && s.chars().nth(4) == Some('-') && s.chars().nth(7) == Some('-') {
-                match chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d") {
-                    Ok(date) => {
-                        Ok(RuleValue::Date(date))
-                    },
-                    Err(_) => {
-                        Ok(RuleValue::String(s.clone()))
-                    }
-                }
-            } else {
-                Ok(RuleValue::String(s.clone()))
-            }
-        },
-        Value::Bool(b) => Ok(RuleValue::Boolean(*b)),
-        Value::Array(arr) => {
-            let mut values = Vec::new();
-            for item in arr {
-                if let Some(s) = item.as_str() {
-                    values.push(RuleValue::String(s.to_string()));
-                } else if let Some(n) = item.as_f64() {
-                    values.push(RuleValue::Number(n));
-                } else if let Some(b) = item.as_bool() {
-                    values.push(RuleValue::Boolean(b));
-                } else {
-                    return Err(RuleError::TypeError(format!("Unsupported array item type: {:?}", item)));
-                }
-            }
-            Ok(RuleValue::List(values))
-        },
-        _ => Err(RuleError::TypeError(format!("Unsupported JSON value type: {:?}", value))),
-    }
+    convert_json_to_rule_value(value)
 }
 
-// Main comparison dispatcher
+// Rest of the comparison functions remain exactly the same as before...
 fn evaluate_comparison(
     left: &RuleValue,
     operator: &ComparisonOperator,

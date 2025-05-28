@@ -33,16 +33,22 @@ condition = {
     rule_reference
 }
 
+// Property condition now handles chained access
 property_condition = {
-    ("the")? ~ property ~ "of" ~ ("the")? ~ object_selector ~ predicate
+    ("the")? ~ property_access ~ predicate
+}
+
+// Property access can be chained: __prop__ of __prop__ of **obj**
+property_access = {
+    property ~ ("of" ~ ("the")? ~ property)* ~ "of" ~ ("the")? ~ object_selector
 }
 
 rule_reference = { "the"? ~ object_selector ~ reference_name }
 reference_name = @{ (!("." | "and" | "or" | "\n") ~ ANY)+ }
 
 predicate = {
-    comparison_operator ~ value |
-    list_operator ~ list_value
+    comparison_operator ~ (property_access | value) |
+    list_operator ~ (property_access | list_value)
 }
 
 list_operator = {
