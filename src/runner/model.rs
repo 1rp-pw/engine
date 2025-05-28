@@ -76,33 +76,53 @@ impl fmt::Display for RuleValue {
     }
 }
 
-// #[derive(Debug, Clone)]
-// pub struct Source {
-//     pub value: String,
-//     pub pos: SourcePosition,
-// }
-//
-// #[derive(Debug, Clone)]
-// pub struct RuleSource {
-//     pub value: RuleValue,
-//     pub pos: SourcePosition,
-// }
-
 #[derive(Debug, Clone)]
 pub enum Condition {
-    Comparison {
-        selector: String,
-        selector_pos: Option<SourcePosition>,
-        property: String,
-        property_pos: Option<SourcePosition>,
-        operator: ComparisonOperator,
-        value: RuleValue,
-        value_pos: Option<SourcePosition>,
-    },
-    RuleReference {
-        selector: String,
-        rule_name: String,
-    },
+    Comparison(ComparisonCondition),
+    RuleReference(RuleReferenceCondition),
+}
+
+#[derive(Debug, Clone)]
+pub struct ComparisonCondition {
+    pub selector: PositionedValue<String>,
+    pub property: PositionedValue<String>,
+    pub operator: ComparisonOperator,
+    pub value: PositionedValue<RuleValue>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RuleReferenceCondition {
+    pub selector: PositionedValue<String>,
+    pub rule_name: PositionedValue<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PositionedValue<T> {
+    pub value: T,
+    pub pos: Option<SourcePosition>,
+}
+
+impl<T> PositionedValue<T> {
+    pub fn new(value: T) -> Self {
+        Self { value, pos: None }
+    }
+
+    pub fn with_position(value: T, pos: Option<SourcePosition>) -> Self {
+        Self { value, pos }
+    }
+}
+
+// For convenience, you might want to add From implementations:
+impl From<String> for PositionedValue<String> {
+    fn from(value: String) -> Self {
+        Self::new(value)
+    }
+}
+
+impl From<RuleValue> for PositionedValue<RuleValue> {
+    fn from(value: RuleValue) -> Self {
+        Self::new(value)
+    }
 }
 
 #[derive(Debug, Clone)]

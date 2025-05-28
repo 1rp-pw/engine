@@ -22,7 +22,7 @@ struct RuleDataPackage {
     data: Value,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 struct EvaluationResponse {
     result: bool,
     #[serde(skip_serializing_if="Option::is_none")]
@@ -110,6 +110,7 @@ async fn handle_run(
                     text,
                     data: package.data.clone(),
                 };
+                //eprintln!("response: {:?}", response);
                 (StatusCode::OK, Json(response))
             }
             Err(error) => {
