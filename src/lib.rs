@@ -426,6 +426,44 @@ A **Document** is archived
         assert!(!result_false["a full driving license"]);
     }
 
+    #[test]
+    fn object_against_object() {
+        let rule_text = r#"
+        # Driving Test Rules
+        A **Person** gets a full driving license
+          if the __age__ of the **Person** is greater than or equal to 17
+          and the **Person** passes the practical driving test
+          and the **Person** passes the eye test.
+
+        A **Person** passes the practical driving test
+          if the __driving test__ of the **scores** is greater than or equal to 60.
+    "#;
+        let rule_set = runner::parser::parse_rules(rule_text).unwrap();
+        let json_true = serde_json::json!({
+            "Person": {
+                "age": 18
+            },
+            "scores": {
+                "drivingTest": 61,
+                "theory": 5
+            }
+        });
+        let (result_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
+        assert!(result_true["a full driving license"]);
+
+        let json_false = serde_json::json!({
+            "Person": {
+                "age": 18
+            },
+            "scores": {
+                "drivingTest": 59,
+                "theory": 5
+            }
+        });
+        let (result_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
+        assert!(!result_false["a full driving license"]);
+    }
+
     // #[test]
     // fn test_wierd_ref() {
     //     let rule_text = r#"
@@ -494,6 +532,77 @@ A **Document** is archived
     //     let (result_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
     //     assert!(!result_false["Zoom Setup Aligned"]);
     // }
+
+    #[test]
+    fn test_chained_property_access_success() {
+        let rule_text = r#"
+          A **user** can access a system
+            if **user** is part of allowed group.
+
+          A **user** is part of allowed group
+            if __id__ of __group__ of **user** is in __allowed groups__ of __permissions__ of **service**.
+        "#;
+        let rule_set = parse_rules(rule_text).expect("Failed to parse rules");
+
+        let data_true = json!({
+            "user": {
+                "group": {
+                    "id": 1
+                }
+            },
+            "service": {
+                "permissions": {
+                    "allowedGroups": [9, 8, 3, 1]
+                }
+            }
+        });
+
+        // Parse the rules
+        let (result_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &data_true).unwrap();
+        assert!(result_true["can access a system"]);
+
+        let data_false = json!({
+            "user": {
+                "group": {
+                    "id": 5
+                }
+            },
+            "service": {
+                "permissions": {
+                    "allowedGroups": [9, 8, 3, 1]
+                }
+            }
+        });
+
+        // Evaluate the rules
+        let (result_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &data_false).unwrap();
+        assert!(!result_false["can access a system"]);
+    }
+
+    #[test]
+    fn test_backward_compatibility() {
+        // Test that old simple property conditions still work
+        let rule_text = r#"
+          A **user** passes the test
+            if __score__ of **user** is greater than 80.
+        "#;
+
+        let data = json!({
+            "user": {
+                "score": 85
+            }
+        });
+
+        // Parse the rules
+        let rule_set = parse_rules(rule_text).expect("Failed to parse rules");
+
+        // Evaluate the rules
+        let (results, _trace) = evaluate_rule_set(&rule_set, &data)
+            .expect("Failed to evaluate rules");
+
+        // Check that the user passes the test
+        assert!(results.get("the test").unwrap_or(&false), "User should pass the test");
+    }
 }
 
 

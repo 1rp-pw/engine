@@ -82,12 +82,31 @@ pub enum Condition {
     RuleReference(RuleReferenceCondition),
 }
 
+// Keep original structure but add support for property chains
 #[derive(Debug, Clone)]
 pub struct ComparisonCondition {
     pub selector: PositionedValue<String>,
     pub property: PositionedValue<String>,
     pub operator: ComparisonOperator,
     pub value: PositionedValue<RuleValue>,
+    // Add optional property chain for complex access patterns
+    pub property_chain: Option<Vec<PropertyChainElement>>,
+    // Add support for cross-object comparisons
+    pub left_property_path: Option<PropertyPath>,
+    pub right_property_path: Option<PropertyPath>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PropertyPath {
+    pub properties: Vec<String>,
+    pub selector: String,
+}
+
+// Simple enum for property chain elements
+#[derive(Debug, Clone)]
+pub enum PropertyChainElement {
+    Property(String),
+    Selector(String),
 }
 
 #[derive(Debug, Clone)]
@@ -194,29 +213,6 @@ impl RuleSet {
     pub fn get_rule_by_label(&self, label: &str) -> Option<&Rule> {
         self.label_map.get(label).map(|&index| &self.rules[index])
     }
-
-//     pub fn find_matching_rule(&self, selector: &str, description: &str) -> Option<&Rule> {
-//         // First try exact outcome match
-//         if let Some(rule) = self.get_rule(description) {
-//             return Some(rule);
-//         }
-//
-//         // Then try exact label match
-//         if let Some(rule) = self.get_rule_by_label(description) {
-//             return Some(rule);
-//         }
-//
-//         // Finally try partial matching
-//         for rule in &self.rules {
-//             if rule.selector == selector {
-//                 if rule.outcome.contains(description) || description.contains(&rule.outcome) {
-//                     return Some(rule);
-//                 }
-//             }
-//         }
-//
-//         None
-//     }
 }
 
 #[derive(Debug, Serialize, Clone)]
