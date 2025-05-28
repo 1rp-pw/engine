@@ -3,7 +3,7 @@ use chrono::NaiveDate;
 use pest::Parser;
 use pest_derive::Parser;
 use pest::iterators::Pair;
-use crate::runner::model::{ComparisonOperator, RuleSet, RuleValue, Condition, SourcePosition, ConditionOperator};
+use crate::runner::model::{ComparisonOperator, RuleSet, RuleValue, Condition, SourcePosition, ConditionOperator, ComparisonCondition, PositionedValue, RuleReferenceCondition};
 
 #[derive(Parser)]
 #[grammar = "pests/grammer.pest"]
@@ -152,85 +152,123 @@ fn parse_condition(pair: Pair<Rule>) -> Result<Condition, RuleError> {
         .ok_or_else(|| RuleError::ParseError("Empty condition".to_string()))?;
 
     match inner_pair.as_rule() {
-        Rule::property_condition => parse_property_condition(inner_pair),
-        Rule::rule_reference => parse_rule_reference(inner_pair),
-        Rule::label_reference => parse_label_reference(inner_pair),
+        Rule::property_condition => {
+            let comparison = parse_property_condition(inner_pair)?;
+            Ok(Condition::Comparison(comparison))
+        },
+        Rule::rule_reference => {
+            let reference = parse_rule_reference(inner_pair)?;
+            Ok(Condition::RuleReference(reference))
+        },
+        Rule::label_reference => {
+            let reference = parse_label_reference(inner_pair)?;
+            Ok(Condition::RuleReference(reference))
+        },
         _ => Err(RuleError::ParseError(format!("Unknown condition type: {:?}", inner_pair.as_rule())))
     }
 }
 
-fn parse_label_reference(pair: Pair<Rule>) -> Result<Condition, RuleError> {
+fn parse_label_reference(pair: Pair<Rule>) -> Result<RuleReferenceCondition, RuleError> {
     let mut inner_parts = pair.into_inner();
     let label_name_pair = inner_parts.next()
         .ok_or_else(|| RuleError::ParseError("Missing label name".to_string()))?;
 
-    let label_name = label_name_pair.as_str().to_string();
+    let span = label_name_pair.as_span();
+    let (line, _) = span.start_pos().line_col();
+    let pos = Some(SourcePosition {
+        line,
+        start: span.start(),
+        end: span.end(),
+    });
 
-    Ok(Condition::RuleReference {
-        selector: String::new(),
+    let label_name = PositionedValue::with_position(
+        label_name_pair.as_str().to_string(),
+        pos
+    );
+
+    Ok(RuleReferenceCondition {
+        selector: PositionedValue::new(String::new()), // Empty selector for label references
         rule_name: label_name,
     })
 }
 
-fn parse_property_condition(pair: Pair<Rule>) -> Result<Condition, RuleError> {
+fn parse_property_condition(pair: Pair<Rule>) -> Result<ComparisonCondition, RuleError> {
     let mut inner_pairs = pair.into_inner();
 
+    // Parse property
     let property_pair = inner_pairs.next()
         .ok_or_else(|| RuleError::ParseError("Missing property".to_string()))?;
     let property_text = property_pair.as_str();
     let property_name = property_text[2..property_text.len()-2].to_string();
-    let property = crate::runner::utils::transform_property_name(&property_name);
+    let property_transformed = crate::runner::utils::transform_property_name(&property_name);
+
     let property_span = property_pair.as_span();
-    let (property_line_start, property_word_start) = property_span.start_pos().line_col();
-    let (_, property_word_end) = property_span.end_pos().line_col();
+    let (property_line, _) = property_span.start_pos().line_col();
     let property_pos = Some(SourcePosition {
-        line: property_line_start,
-        start: property_word_start,
-        end: property_word_end,
+        line: property_line,
+        start: property_span.start(),
+        end: property_span.end(),
     });
 
-    let object_selector_pair = inner_pairs.next()
+    let property = PositionedValue::with_position(property_transformed, property_pos);
+
+    // Parse selector
+    let selector_pair = inner_pairs.next()
         .ok_or_else(|| RuleError::ParseError("Missing object selector".to_string()))?;
+    let selector_text = selector_pair.as_str();
+    let selector_name = selector_text[2..selector_text.len()-2].to_string();
 
-    let selector_text = object_selector_pair.as_str();
-    let selector = selector_text[2..selector_text.len()-2].to_string();
-    let selector_span = object_selector_pair.as_span();
-    let (selector_line_start, selector_word_start) = selector_span.start_pos().line_col();
-    let (_, selector_word_end) = selector_span.end_pos().line_col();
+    let selector_span = selector_pair.as_span();
+    let (selector_line, _) = selector_span.start_pos().line_col();
     let selector_pos = Some(SourcePosition{
-        line: selector_line_start,
-        start: selector_word_start,
-        end: selector_word_end,
+        line: selector_line,
+        start: selector_span.start(),
+        end: selector_span.end(),
     });
 
+    let selector = PositionedValue::with_position(selector_name, selector_pos);
+
+    // Parse predicate
     let predicate = inner_pairs.next()
         .ok_or_else(|| RuleError::ParseError("Missing predicate".to_string()))?;
+    let (operator, value_with_pos) = parse_predicate(predicate)?;
 
-    let (operator, value, value_pos) = parse_predicate(predicate)?;
-
-    Ok(Condition::Comparison {
+    Ok(ComparisonCondition {
         selector,
-        selector_pos,
         property,
-        property_pos,
         operator,
-        value,
-        value_pos: Some(value_pos),
+        value: value_with_pos,
     })
 }
 
-fn parse_rule_reference(pair: Pair<Rule>) -> Result<Condition, RuleError> {
+fn parse_rule_reference(pair: Pair<Rule>) -> Result<RuleReferenceCondition, RuleError> {
     let mut selector = None;
     let mut rule_name = None;
 
     for inner in pair.into_inner() {
         match inner.as_rule() {
             Rule::object_selector => {
+                let span = inner.as_span();
+                let (line, _) = span.start_pos().line_col();
+                let pos = Some(SourcePosition {
+                    line,
+                    start: span.start(),
+                    end: span.end(),
+                });
                 let s = inner.as_str();
-                selector = Some(s[2..s.len()-2].to_string());
+                let name = s[2..s.len()-2].to_string();
+                selector = Some(PositionedValue::with_position(name, pos));
             }
             Rule::reference_name => {
-                rule_name = Some(inner.as_str().trim().to_string());
+                let span = inner.as_span();
+                let (line, _) = span.start_pos().line_col();
+                let pos = Some(SourcePosition {
+                    line,
+                    start: span.start(),
+                    end: span.end(),
+                });
+                let name = inner.as_str().trim().to_string();
+                rule_name = Some(PositionedValue::with_position(name, pos));
             }
             _ => {
                 // this will catch the optional "the" literal — just ignore it
@@ -240,13 +278,16 @@ fn parse_rule_reference(pair: Pair<Rule>) -> Result<Condition, RuleError> {
 
     let selector = selector
         .ok_or_else(|| RuleError::ParseError("Missing selector in rule‐ref".into()))?;
-    // default name if none captured
-    let rule_name = rule_name.unwrap_or_else(|| "requirement".into());
+    let rule_name = rule_name
+        .unwrap_or_else(|| PositionedValue::new("requirement".to_string()));
 
-    Ok(Condition::RuleReference { selector, rule_name })
+    Ok(RuleReferenceCondition {
+        selector,
+        rule_name,
+    })
 }
 
-fn parse_predicate(pair: Pair<Rule>) -> Result<(ComparisonOperator, RuleValue, SourcePosition), RuleError> {
+fn parse_predicate(pair: Pair<Rule>) -> Result<(ComparisonOperator, PositionedValue<RuleValue>), RuleError> {
     let inner_pairs = pair.into_inner().collect::<Vec<_>>();
 
     if inner_pairs.len() < 2 {
@@ -272,8 +313,6 @@ fn parse_predicate(pair: Pair<Rule>) -> Result<(ComparisonOperator, RuleValue, S
     };
 
     let value_pair = &inner_pairs[1];
-    //println!("Value pair rule: {:?}, text: {}", value_pair.as_rule(), value_pair.as_str());
-
     let value = if operator == ComparisonOperator::In || operator == ComparisonOperator::NotIn {
         parse_list_value(value_pair.clone())?
     } else {
@@ -281,15 +320,14 @@ fn parse_predicate(pair: Pair<Rule>) -> Result<(ComparisonOperator, RuleValue, S
     };
 
     let value_span = value_pair.as_span();
-    let (value_line_start, value_word_start) = value_span.start_pos().line_col();
-    let (_, value_word_end) = value_span.end_pos().line_col();
-    let val_pos = SourcePosition{
-        line: value_line_start,
-        start: value_word_start,
-        end: value_word_end,
-    };
+    let (value_line, _) = value_span.start_pos().line_col();
+    let val_pos = Some(SourcePosition{
+        line: value_line,
+        start: value_span.start(),
+        end: value_span.end(),
+    });
 
-    Ok((operator, value, val_pos))
+    Ok((operator, PositionedValue::with_position(value, val_pos)))
 }
 
 fn parse_list_value(pair: Pair<Rule>) -> Result<RuleValue, RuleError> {

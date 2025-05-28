@@ -3,21 +3,40 @@ use crate::runner::model::{Condition, Rule};
 
 fn find_referenced_outcomes(rules: &[Rule]) -> std::collections::HashSet<String> {
     let mut referenced = std::collections::HashSet::new();
+
     for rule in rules {
         for condition_group in &rule.conditions {
-            if let Condition::RuleReference { selector: _, rule_name } = &condition_group.condition {
-                for other_rule in rules {
-                    let label_match = other_rule.label.as_ref()
-                        .map_or(false, |label| label == rule_name);
-                    let outcome_match = other_rule.outcome == *rule_name;
+            match &condition_group.condition {
+                Condition::RuleReference(ref_condition) => {
+                    let rule_name = &ref_condition.rule_name.value;
 
-                    if other_rule.outcome.contains(rule_name) || rule_name.contains(&other_rule.outcome) || label_match || outcome_match {
-                        referenced.insert(other_rule.outcome.clone());
+                    // Find all rules that this reference might match
+                    for other_rule in rules {
+                        // Check if this rule matches by label
+                        let label_match = other_rule.label.as_ref()
+                            .map_or(false, |label| label == rule_name);
+
+                        // Check if this rule matches by exact outcome
+                        let outcome_match = other_rule.outcome == *rule_name;
+
+                        // Check if this rule matches by partial outcome (case insensitive)
+                        let rule_name_lower = rule_name.to_lowercase();
+                        let outcome_lower = other_rule.outcome.to_lowercase();
+                        let partial_match = outcome_lower.contains(&rule_name_lower) ||
+                            rule_name_lower.contains(&outcome_lower);
+
+                        if label_match || outcome_match || partial_match {
+                            referenced.insert(other_rule.outcome.clone());
+                        }
                     }
+                },
+                Condition::Comparison(_) => {
+                    // Comparison conditions don't reference other rules
                 }
             }
         }
     }
+
     referenced
 }
 
@@ -100,4 +119,22 @@ pub fn infer_possible_properties(rule_name: &str) -> Vec<String> {
     }
 
     properties
+}
+
+// You might also want to add this helper function for selector name transformation
+pub fn transform_selector_name(name: &str) -> String {
+    let words: Vec<&str> = name.split_whitespace().collect();
+    if words.is_empty() {
+        return String::new();
+    }
+
+    let mut result = words[0].to_lowercase();
+    for word in &words[1..] {
+        if !word.is_empty() {
+            result.push_str(&word[0..1].to_uppercase());
+            result.push_str(&word[1..].to_lowercase());
+        }
+    }
+
+    result
 }

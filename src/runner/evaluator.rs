@@ -1,14 +1,6 @@
 use crate::runner::error::RuleError;
-use crate::runner::model::{Condition, ComparisonOperator, Rule, RuleSet, RuleValue, ConditionOperator};
-use crate::runner::trace::{
-    RuleSetTrace,
-    RuleTrace,
-    ConditionTrace,
-    ComparisonTrace,
-    ComparisonEvaluationTrace,
-    RuleReferenceTrace,
-    PropertyCheckTrace,
-};
+use crate::runner::model::{Condition, ComparisonOperator, Rule, RuleSet, RuleValue, ConditionOperator, SourcePosition, ComparisonCondition, RuleReferenceCondition};
+use crate::runner::trace::{RuleSetTrace, RuleTrace, ConditionTrace, ComparisonTrace, ComparisonEvaluationTrace, RuleReferenceTrace, PropertyCheckTrace, PropertyTrace, TypedValue, SelectorTrace, OutcomeTrace};
 
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
@@ -84,7 +76,7 @@ pub fn evaluate_rule(
         if let Some(op) = &cg.operator {
             ops.push(op.clone());
         } else if i != 0 {
-            // fallback to AND if parser didn’t provide one
+            // fallback to AND if parser didn't provide one
             ops.push(ConditionOperator::And);
         }
     }
@@ -98,7 +90,7 @@ pub fn evaluate_rule(
             // drop results[i+1] and ops[i]
             results.remove(i + 1);
             ops.remove(i);
-            // do not advance i, maybe there’s another AND here
+            // do not advance i, maybe there's another AND here
         } else {
             i += 1;
         }
@@ -109,15 +101,19 @@ pub fn evaluate_rule(
         .into_iter()
         .fold(false, |acc, next| acc || next);
 
-    // 4) build your trace object exactly as before
+    // 4) build your trace object with the new structure
     let rule_trace = RuleTrace {
-        label:    model_rule.label.clone(),
-        selector: model_rule.selector.clone(),
-        selector_pos: model_rule.selector_pos.clone(),
-        outcome:  model_rule.outcome.clone(),
-        outcome_pos: model_rule.position.clone(), // or wherever you keep it
+        label: model_rule.label.clone(),
+        selector: SelectorTrace {
+            value: model_rule.selector.clone(),
+            pos: model_rule.selector_pos.clone(),
+        },
+        outcome: OutcomeTrace {
+            value: model_rule.outcome.clone(),
+            pos: model_rule.position.clone(),
+        },
         conditions: condition_traces,
-        result:   rule_result,
+        result: rule_result,
     };
 
     Ok((rule_result, rule_trace))
@@ -129,209 +125,378 @@ fn evaluate_condition(
     rule_set: &RuleSet
 ) -> Result<(bool, ConditionTrace), RuleError> {
     match condition {
-        Condition::RuleReference { selector, rule_name } => {
-            let selector_value = json.get(selector)
-                .or_else(|| get_json_value_insensative(json, selector));
-            let selector_exists = selector_value.is_some();
-            let effective_selector = if selector_exists {
-                selector.clone()
-            } else {
-                let transformed = transform_selector_name(selector);
-                if json.get(&transformed).is_some() {
-                    transformed
-                } else {
-                    return Ok((false, ConditionTrace::RuleReference(RuleReferenceTrace {
-                        selector: selector.clone(),
-                        rule_name: rule_name.clone(),
-                        referenced_rule_outcome: None,
-                        property_check: None,
-                        result: false,
-                    })));
-                }
-            };
-
-            // Process just this specific rule reference
-            let part = rule_name.trim();
-            let mut overall_result = true;
-            let mut referenced_outcome = None;
-            let mut property_check = None;
-
-            // Try exact outcome match first
-            if let Some(referenced_rule) = rule_set.get_rule(part) {
-                let (referenced_result, _) = evaluate_rule(referenced_rule, json, rule_set)?;
-                if !referenced_result {
-                    overall_result = false;
-                }
-                referenced_outcome = Some(referenced_rule.outcome.to_string());
-            } else if let Some(referenced_rule) = rule_set.get_rule_by_label(part) {
-                // Try exact label match
-                let (referenced_result, _) = evaluate_rule(referenced_rule, json, rule_set)?;
-                if !referenced_result {
-                    overall_result = false;
-                }
-                referenced_outcome = Some(referenced_rule.outcome.clone());
-            } else {
-                // Try to find a rule with matching outcome (case insensitive, partial match)
-                let mut found_rule = None;
-                for rule in &rule_set.rules {
-                    if rule.outcome.to_lowercase() == part.to_lowercase() ||
-                        rule.outcome.to_lowercase().contains(&part.to_lowercase()) ||
-                        part.to_lowercase().contains(&rule.outcome.to_lowercase()) {
-                        found_rule = Some(rule);
-                        break;
-                    }
-                }
-
-                if let Some(referenced_rule) = found_rule {
-                    let (referenced_result, _) = evaluate_rule(referenced_rule, json, rule_set)?;
-                    if !referenced_result {
-                        overall_result = false;
-                    }
-                    referenced_outcome = Some(referenced_rule.outcome.clone());
-                } else {
-                    // If we still can't find a matching rule, try to infer a property
-                    let possible_properties = crate::runner::utils::infer_possible_properties(part);
-
-                    if let Some(obj) = json.get(&effective_selector) {
-                        for property in &possible_properties {
-                            if let Some(property_value) = obj.get(property) {
-                                if let Some(value_bool) = property_value.as_bool() {
-                                    if !value_bool {
-                                        overall_result = false;
-                                    }
-                                    property_check = Some(PropertyCheckTrace {
-                                        property_name: property.clone(),
-                                        property_value: json!({ "Boolean": value_bool }),
-                                    });
-                                } else if let Some(value_str) = property_value.as_str() {
-                                    // For string values, consider "pass", "true", "yes", etc. as passing
-                                    let lower_value = value_str.to_lowercase();
-                                    let passes = lower_value == "pass" || lower_value == "true" ||
-                                        lower_value == "yes" || lower_value == "passed" || lower_value == "valid";
-                                    if !passes {
-                                        overall_result = false;
-                                    }
-                                    property_check = Some(PropertyCheckTrace {
-                                        property_name: property.clone(),
-                                        property_value: json!({ "String": value_str }),
-                                    });
-                                } else if let Some(value_num) = property_value.as_f64() {
-                                    // For numeric values, consider non-zero as passing
-                                    if value_num == 0.0 {
-                                        overall_result = false;
-                                    }
-                                    property_check = Some(PropertyCheckTrace {
-                                        property_name: property.clone(),
-                                        property_value: json!({ "Number": value_num }),
-                                    });
-                                } else {
-                                    property_check = Some(PropertyCheckTrace {
-                                        property_name: property.clone(),
-                                        property_value: property_value.clone(),
-                                    });
-                                }
-
-                                break;
-                            }
-                        }
-                    }
-
-                }
-            }
-
-            let rule_reference_trace = RuleReferenceTrace {
-                selector: selector.clone(),
-                rule_name: rule_name.clone(),
-                referenced_rule_outcome: referenced_outcome,
-                property_check: property_check,
-                result: overall_result,
-            };
-
-            Ok((overall_result, ConditionTrace::RuleReference(rule_reference_trace)))
+        Condition::RuleReference(ref_condition) => {
+            evaluate_rule_reference_condition(ref_condition, json, rule_set)
         },
-        Condition::Comparison {
-            selector,
-            selector_pos,
-            property,
-            property_pos,
-            operator,
-            value ,
-            value_pos,
-        } => {
-            // Try exact match first
-            let selector_exists = json.get(selector).is_some();
-
-            // If exact match fails, try transformed selector
-            let transformed_selector = if !selector_exists {
-                transform_selector_name(selector)
-            } else {
-                selector.clone()
-            };
-
-            // If neither selector exists in the JSON, return false
-            let effective_selector = if selector_exists {
-                selector
-            } else if json.get(&transformed_selector).is_some() {
-                &transformed_selector
-            } else {
-                return Ok((false, ConditionTrace::Comparison(ComparisonTrace {
-                    selector: selector.clone(),
-                    selector_pos: selector_pos.clone(),
-                    property: property.clone(),
-                    property_pos: property_pos.clone(),
-                    operator: operator.clone(),
-                    value: value.clone(),
-                    value_pos: value_pos.clone(),
-                    evaluation_details: None,
-                    result: false,
-                })))
-            };
-
-            // If the property doesn't exist, return false
-            if json[effective_selector].get(property).is_none() {
-                return Ok((false, ConditionTrace::Comparison(ComparisonTrace {
-                    selector: selector.clone(),
-                    selector_pos: selector_pos.clone(),
-                    property: property.clone(),
-                    property_pos: property_pos.clone(),
-                    operator: operator.clone(),
-                    value: value.clone(),
-                    value_pos: value_pos.clone(),
-                    evaluation_details: None,
-                    result: false,
-                })))
-            }
-
-            let json_value = extract_value_from_json(json, effective_selector, property)?;
-            let (comparison_result, evaluation_details) = match evaluate_comparison(&json_value, operator, value) {
-                Ok(res) => {
-                    let details = ComparisonEvaluationTrace {
-                        left_value: json_value.clone(),
-                        right_value: value.clone(),
-                        comparison_result: res,
-                    };
-                    (res, Some(details))
-                },
-                Err(_) => {
-                    (false, None)
-                }
-            };
-
-            let comparison_trace = ComparisonTrace {
-                selector: selector.clone(),
-                selector_pos: selector_pos.clone(),
-                property: property.clone(),
-                property_pos: property_pos.clone(),
-                operator: operator.clone(),
-                value: value.clone(),
-                value_pos: value_pos.clone(),
-                evaluation_details,
-                result: comparison_result,
-            };
-
-            Ok((comparison_result, ConditionTrace::Comparison(comparison_trace)))
+        Condition::Comparison(comp_condition) => {
+            evaluate_comparison_condition(comp_condition, json)
         },
     }
+}
+
+fn evaluate_rule_reference_condition(
+    condition: &RuleReferenceCondition,
+    json: &Value,
+    rule_set: &RuleSet
+) -> Result<(bool, ConditionTrace), RuleError> {
+    // Handle empty selector case (for label references)
+    if condition.selector.value.is_empty() {
+        // This is a label reference without a selector
+        let rule_name = condition.rule_name.value.trim();
+
+        // Try to find and evaluate the referenced rule
+        if let Some((result, outcome)) = try_evaluate_by_rule(rule_name, json, rule_set)? {
+            let rule_reference_trace = RuleReferenceTrace {
+                selector: SelectorTrace {
+                    value: String::new(),
+                    pos: None,
+                },
+                rule_name: condition.rule_name.value.clone(),
+                referenced_rule_outcome: Some(outcome),
+                property_check: None,
+                result,
+            };
+            return Ok((result, ConditionTrace::RuleReference(rule_reference_trace)));
+        }
+
+        // If no rule found, return false
+        return Ok((false, create_failed_rule_reference_trace(condition)));
+    }
+
+    // Normal case with selector
+    let effective_selector = find_effective_selector(&condition.selector.value, json)?;
+
+    if effective_selector.is_none() {
+        return Ok((false, create_failed_rule_reference_trace(condition)));
+    }
+
+    let part = condition.rule_name.value.trim();
+    let (result, referenced_outcome, property_check) =
+        evaluate_rule_or_property(part, &effective_selector.unwrap(), json, rule_set)?;
+
+    let rule_reference_trace = RuleReferenceTrace {
+        selector: SelectorTrace {
+            value: condition.selector.value.clone(),
+            pos: condition.selector.pos.clone(),
+        },
+        rule_name: condition.rule_name.value.clone(),
+        referenced_rule_outcome: referenced_outcome,
+        property_check,
+        result,
+    };
+
+    Ok((result, ConditionTrace::RuleReference(rule_reference_trace)))
+}
+
+fn evaluate_rule_or_property(
+    rule_name: &str,
+    effective_selector: &str,
+    json: &Value,
+    rule_set: &RuleSet
+) -> Result<(bool, Option<String>, Option<PropertyCheckTrace>), RuleError> {
+    // Try to find a matching rule first
+    if let Some((result, outcome)) = try_evaluate_by_rule(rule_name, json, rule_set)? {
+        return Ok((result, Some(outcome), None));
+    }
+
+    // If no rule found, try to evaluate as a property
+    if let Some(property_check) = try_evaluate_as_property(rule_name, effective_selector, json)? {
+        let result = evaluate_property_result(&property_check);
+        return Ok((result, None, Some(property_check)));
+    }
+
+    // If neither rule nor property found, assume true (free text condition)
+    // This handles cases like "eye test" where no rule or property exists
+    //eprintln!("Info: No rule or property found for '{}' - assuming true", rule_name);
+    Ok((true, None, None))
+}
+
+fn try_evaluate_by_rule(
+    rule_name: &str,
+    json: &Value,
+    rule_set: &RuleSet
+) -> Result<Option<(bool, String)>, RuleError> {
+    // Try exact outcome match
+    if let Some(rule) = rule_set.get_rule(rule_name) {
+        let (result, _) = evaluate_rule(rule, json, rule_set)?;
+        return Ok(Some((result, rule.outcome.clone())));
+    }
+
+    // Try exact label match
+    if let Some(rule) = rule_set.get_rule_by_label(rule_name) {
+        let (result, _) = evaluate_rule(rule, json, rule_set)?;
+        return Ok(Some((result, rule.outcome.clone())));
+    }
+
+    // Try fuzzy matching
+    if let Some(rule) = find_rule_fuzzy_match(rule_name, rule_set) {
+        let (result, _) = evaluate_rule(rule, json, rule_set)?;
+        return Ok(Some((result, rule.outcome.clone())));
+    }
+
+    Ok(None)
+}
+
+fn find_rule_fuzzy_match<'a>(rule_name: &str, rule_set: &'a RuleSet) -> Option<&'a Rule> {
+    let rule_name_lower = rule_name.to_lowercase();
+
+    // First, try to match rules where the outcome contains key parts of the rule_name
+    // For example: "passes the practical driving test" should match "the practical driving test"
+
+    // Remove common prefixes that might be in the rule_name but not the outcome
+    let prefixes_to_remove = ["passes the", "passes", "has", "has the", "is", "gets", "gets the"];
+    let mut cleaned_rule_name = rule_name_lower.clone();
+
+    for prefix in &prefixes_to_remove {
+        if cleaned_rule_name.starts_with(prefix) {
+            cleaned_rule_name = cleaned_rule_name[prefix.len()..].trim().to_string();
+            break;
+        }
+    }
+
+    // Now try to find a matching rule
+    for rule in &rule_set.rules {
+        let outcome_lower = rule.outcome.to_lowercase();
+
+        // Check if the rule outcome matches the cleaned rule name
+        if outcome_lower == cleaned_rule_name {
+            return Some(rule);
+        }
+
+        // Check if either contains the other
+        if outcome_lower.contains(&cleaned_rule_name) || cleaned_rule_name.contains(&outcome_lower) {
+            return Some(rule);
+        }
+
+        // Original checks with full rule_name
+        if outcome_lower == rule_name_lower ||
+            outcome_lower.contains(&rule_name_lower) ||
+            rule_name_lower.contains(&outcome_lower) {
+            return Some(rule);
+        }
+    }
+
+    None
+}
+
+fn try_evaluate_as_property(
+    rule_name: &str,
+    effective_selector: &str,
+    json: &Value
+) -> Result<Option<PropertyCheckTrace>, RuleError> {
+    let possible_properties = crate::runner::utils::infer_possible_properties(rule_name);
+
+    if let Some(obj) = json.get(effective_selector) {
+        for property in &possible_properties {
+            if let Some(property_value) = obj.get(property) {
+                return Ok(Some(PropertyCheckTrace {
+                    property_name: property.clone(),
+                    property_value: convert_property_value(property_value),
+                }));
+            }
+            // Also try case-insensitive match
+            if let Some(property_value) = get_json_value_insensitive(obj, property) {
+                return Ok(Some(PropertyCheckTrace {
+                    property_name: property.clone(),
+                    property_value: convert_property_value(property_value),
+                }));
+            }
+        }
+    } else if let Some(obj) = get_json_value_insensitive(json, effective_selector) {
+        for property in &possible_properties {
+            if let Some(property_value) = obj.get(property) {
+                return Ok(Some(PropertyCheckTrace {
+                    property_name: property.clone(),
+                    property_value: convert_property_value(property_value),
+                }));
+            }
+            // Also try case-insensitive match
+            if let Some(property_value) = get_json_value_insensitive(obj, property) {
+                return Ok(Some(PropertyCheckTrace {
+                    property_name: property.clone(),
+                    property_value: convert_property_value(property_value),
+                }));
+            }
+        }
+    }
+
+    Ok(None)
+}
+
+fn convert_property_value(value: &Value) -> Value {
+    match value {
+        Value::Bool(b) => json!({ "Boolean": b }),
+        Value::String(s) => json!({ "String": s }),
+        Value::Number(n) => {
+            if let Some(num) = n.as_f64() {
+                json!({ "Number": num })
+            } else {
+                value.clone()
+            }
+        },
+        _ => value.clone(),
+    }
+}
+
+fn evaluate_property_result(property_check: &PropertyCheckTrace) -> bool {
+    match &property_check.property_value {
+        Value::Object(map) => {
+            if let Some(Value::Bool(b)) = map.get("Boolean") {
+                *b
+            } else if let Some(Value::String(s)) = map.get("String") {
+                let lower = s.to_lowercase();
+                matches!(lower.as_str(), "pass" | "true" | "yes" | "passed" | "valid")
+            } else if let Some(Value::Number(n)) = map.get("Number") {
+                n.as_f64().map_or(false, |v| v != 0.0)
+            } else {
+                false
+            }
+        },
+        _ => false,
+    }
+}
+
+// ===== Comparison Evaluation =====
+
+fn evaluate_comparison_condition(
+    condition: &ComparisonCondition,
+    json: &Value
+) -> Result<(bool, ConditionTrace), RuleError> {
+    // Find the effective selector
+    let effective_selector = match find_effective_selector(&condition.selector.value, json)? {
+        Some(sel) => sel,
+        None => {
+            return Ok((false, create_failed_comparison_trace(condition, None)));
+        }
+    };
+
+    // Check if property exists
+    let property_value = json.get(&effective_selector)
+        .and_then(|obj| obj.get(&condition.property.value));
+
+    if property_value.is_none() {
+        return Ok((false, create_failed_comparison_trace(condition, Some(&effective_selector))));
+    }
+
+    // Extract and evaluate the comparison
+    let json_value = extract_value_from_json(json, &effective_selector, &condition.property.value)?;
+    let (comparison_result, evaluation_details) = perform_comparison(
+        &json_value,
+        &condition.operator,
+        &condition.value.value
+    )?;
+
+    // Build the trace
+    let comparison_trace = ComparisonTrace {
+        selector: SelectorTrace {
+            value: condition.selector.value.clone(),
+            pos: condition.selector.pos.clone(),
+        },
+        property: PropertyTrace {
+            value: property_value.unwrap().clone(),
+            path: format!("$.{}.{}", effective_selector, condition.property.value),
+        },
+        operator: condition.operator.clone(),
+        value: condition.value.value.to_value_trace(condition.value.pos.clone()),
+        evaluation_details,
+        result: comparison_result,
+    };
+
+    Ok((comparison_result, ConditionTrace::Comparison(comparison_trace)))
+}
+
+fn perform_comparison(
+    json_value: &RuleValue,
+    operator: &ComparisonOperator,
+    value: &RuleValue
+) -> Result<(bool, Option<ComparisonEvaluationTrace>), RuleError> {
+    match evaluate_comparison(json_value, operator, value) {
+        Ok(result) => {
+            let details = ComparisonEvaluationTrace {
+                left_value: TypedValue::from(json_value),
+                right_value: TypedValue::from(value),
+                comparison_result: result,
+            };
+            Ok((result, Some(details)))
+        },
+        Err(_) => Ok((false, None))
+    }
+}
+
+// ===== Helper Functions =====
+
+fn find_effective_selector(selector: &str, json: &Value) -> Result<Option<String>, RuleError> {
+    // Try exact match first
+    if json.get(selector).is_some() {
+        return Ok(Some(selector.to_string()));
+    }
+
+    // Try case-insensitive match and return the actual key from the JSON
+    if let Some(obj) = json.as_object() {
+        let selector_lower = selector.to_lowercase();
+        for (key, _) in obj {
+            if key.to_lowercase() == selector_lower {
+                return Ok(Some(key.clone())); // Return the actual key from JSON
+            }
+        }
+    }
+
+    // Try transformed selector (camelCase)
+    let transformed = transform_selector_name(selector);
+    if json.get(&transformed).is_some() {
+        return Ok(Some(transformed));
+    }
+
+    // Try case-insensitive match on transformed selector
+    if let Some(obj) = json.as_object() {
+        let transformed_lower = transformed.to_lowercase();
+        for (key, _) in obj {
+            if key.to_lowercase() == transformed_lower {
+                return Ok(Some(key.clone())); // Return the actual key from JSON
+            }
+        }
+    }
+
+    Ok(None)
+}
+
+fn create_failed_rule_reference_trace(condition: &RuleReferenceCondition) -> ConditionTrace {
+    ConditionTrace::RuleReference(RuleReferenceTrace {
+        selector: SelectorTrace {
+            value: condition.selector.value.clone(),
+            pos: condition.selector.pos.clone(),
+        },
+        rule_name: condition.rule_name.value.clone(),
+        referenced_rule_outcome: None,
+        property_check: None,
+        result: false,
+    })
+}
+
+fn create_failed_comparison_trace(
+    condition: &ComparisonCondition,
+    effective_selector: Option<&str>
+) -> ConditionTrace {
+    let path = if let Some(sel) = effective_selector {
+        format!("$.{}.{}", sel, condition.property.value)
+    } else {
+        format!("$.{}.{}", condition.selector.value, condition.property.value)
+    };
+
+    ConditionTrace::Comparison(ComparisonTrace {
+        selector: SelectorTrace {
+            value: condition.selector.value.clone(),
+            pos: condition.selector.pos.clone(),
+        },
+        property: PropertyTrace {
+            value: Value::Null,
+            path,
+        },
+        operator: condition.operator.clone(),
+        value: condition.value.value.to_value_trace(condition.value.pos.clone()),
+        evaluation_details: None,
+        result: false,
+    })
 }
 
 fn extract_value_from_json(
@@ -339,17 +504,36 @@ fn extract_value_from_json(
     selector: &str,
     property: &str
 ) -> Result<RuleValue, RuleError> {
+    // First try to get the object using the selector
     let obj = if let Some(obj) = json.get(selector) {
+        obj
+    } else if let Some(obj) = get_json_value_insensitive(json, selector) {
         obj
     } else {
         let transformed_selector = transform_selector_name(selector);
-        json.get(&transformed_selector)
-            .ok_or_else(|| RuleError::EvaluationError(format!("Selector '{}' (or '{}') not found in JSON", selector, transformed_selector)))?
+        if let Some(obj) = json.get(&transformed_selector) {
+            obj
+        } else if let Some(obj) = get_json_value_insensitive(json, &transformed_selector) {
+            obj
+        } else {
+            return Err(RuleError::EvaluationError(
+                format!("Selector '{}' not found in JSON", selector)
+            ));
+        }
     };
 
-    let value = obj.get(property)
-        .ok_or_else(|| RuleError::EvaluationError(format!("Property '{}' not found in selector '{}'", property, selector)))?;
+    // Then try to get the property from the object (also case-insensitive)
+    let value = if let Some(val) = obj.get(property) {
+        val
+    } else if let Some(val) = get_json_value_insensitive(obj, property) {
+        val
+    } else {
+        return Err(RuleError::EvaluationError(
+            format!("Property '{}' not found in selector '{}'", property, selector)
+        ));
+    };
 
+    // Rest of the function remains the same...
     match value {
         Value::Number(n) => {
             if let Some(num) = n.as_f64() {
@@ -583,7 +767,7 @@ fn transform_selector_name(name: &str) -> String {
     result
 }
 
-fn get_json_value_insensative<'a>(json: &'a serde_json::Value, key: &str) -> Option<&'a serde_json::Value> {
+fn get_json_value_insensitive<'a>(json: &'a serde_json::Value, key: &str) -> Option<&'a serde_json::Value> {
     if let Some(obj) = json.as_object() {
         let key_lower = key.to_lowercase();
         for (k, v) in obj {
