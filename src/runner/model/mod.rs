@@ -218,6 +218,7 @@ impl RuleSet {
 }
 
 #[derive(Debug, Serialize, Clone)]
+#[derive(PartialEq)]
 pub struct SourcePosition {
     pub line: usize,
     pub start: usize,
