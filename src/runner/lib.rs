@@ -1,6 +1,5 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::runner::model::{Rule, Condition, ComparisonCondition, RuleReferenceCondition, PositionedValue, ComparisonOperator, RuleValue};
     use crate::runner::utils::{find_global_rule, find_referenced_outcomes, infer_possible_properties, transform_property_name, transform_selector_name};
 

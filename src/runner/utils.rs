@@ -59,7 +59,7 @@ pub fn find_global_rule<'a>(rules: &'a [Rule]) -> Result<&'a Rule, RuleError> {
 }
 
 pub fn transform_property_name(name: &str) -> String {
-    let words: Vec<&str> = name.split_whitespace().collect();
+    let words: Vec<&str> = name.split(&[' ', '_'][..]).filter(|s| !s.is_empty()).collect();
     if words.is_empty() {
         return String::new();
     }

@@ -71,7 +71,7 @@ comparison_operator = {
 }
 
 list_value = { "[" ~ value ~ ("," ~ value)* ~ "]" }
-value = { number | string_literal | date_literal | boolean }
+value = { date_literal | number | boolean | string_literal }
 
 rule_name = @{(!(". " | " and " | ".") ~ ANY)+}
 property = @{ "__" ~ property_name ~ "__" }
