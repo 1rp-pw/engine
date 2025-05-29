@@ -1,7 +1,7 @@
 use crate::runner::error::RuleError;
 use crate::runner::model::{Condition, Rule};
 
-fn find_referenced_outcomes(rules: &[Rule]) -> std::collections::HashSet<String> {
+pub fn find_referenced_outcomes(rules: &[Rule]) -> std::collections::HashSet<String> {
     let mut referenced = std::collections::HashSet::new();
 
     for rule in rules {
