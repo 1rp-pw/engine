@@ -1,3 +1,5 @@
+mod lib;
+
 use crate::runner::error::RuleError;
 use chrono::NaiveDate;
 use pest::Parser;

@@ -1,3 +1,5 @@
+mod lib;
+
 use chrono::NaiveDate;
 use std::collections::HashMap;
 use std::fmt;
@@ -183,8 +185,8 @@ impl Rule {
 #[derive(Debug, Default)]
 pub struct RuleSet {
     pub rules: Vec<Rule>,
-    rule_map: HashMap<String, usize>,
-    label_map: HashMap<String, usize>,
+    pub(crate) rule_map: HashMap<String, usize>,
+    pub(crate) label_map: HashMap<String, usize>,
 }
 
 impl RuleSet {
@@ -216,6 +218,7 @@ impl RuleSet {
 }
 
 #[derive(Debug, Serialize, Clone)]
+#[derive(PartialEq)]
 pub struct SourcePosition {
     pub line: usize,
     pub start: usize,

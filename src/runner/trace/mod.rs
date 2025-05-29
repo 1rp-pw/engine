@@ -1,3 +1,5 @@
+mod lib;
+
 use serde::Serialize;
 use crate::runner::model::{ComparisonOperator, RuleValue, SourcePosition};
 

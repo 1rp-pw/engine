@@ -1,3 +1,5 @@
+mod lib;
+
 use thiserror::Error;
 
 #[derive(Error, Debug)]

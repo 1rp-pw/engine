@@ -1,7 +1,7 @@
 use crate::runner::error::RuleError;
 use crate::runner::model::{Condition, Rule};
 
-fn find_referenced_outcomes(rules: &[Rule]) -> std::collections::HashSet<String> {
+pub fn find_referenced_outcomes(rules: &[Rule]) -> std::collections::HashSet<String> {
     let mut referenced = std::collections::HashSet::new();
 
     for rule in rules {
@@ -59,7 +59,7 @@ pub fn find_global_rule<'a>(rules: &'a [Rule]) -> Result<&'a Rule, RuleError> {
 }
 
 pub fn transform_property_name(name: &str) -> String {
-    let words: Vec<&str> = name.split_whitespace().collect();
+    let words: Vec<&str> = name.split(&[' ', '_'][..]).filter(|s| !s.is_empty()).collect();
     if words.is_empty() {
         return String::new();
     }

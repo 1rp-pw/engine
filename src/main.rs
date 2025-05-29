@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use std::env;
 use runner::parser::parse_rules;
 use runner::evaluator::evaluate_rule_set;
-use runner::model::{Condition, RuleSet};
 use runner::trace::RuleSetTrace;
 use flags_rs::{Auth, Client};
 use serde_json::Value;

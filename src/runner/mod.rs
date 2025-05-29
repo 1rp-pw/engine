@@ -4,3 +4,4 @@ pub mod parser;
 pub mod evaluator;
 pub mod trace;
 pub mod utils;
+mod lib;
