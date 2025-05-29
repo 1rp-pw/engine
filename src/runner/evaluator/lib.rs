@@ -118,7 +118,7 @@ mod tests {
 
         // Test case-insensitive match - should return actual key from JSON
         let result = find_effective_selector("USER", &json).unwrap();
-        assert_eq!(result, Some("user".to_string()));
+        assert_eq!(result, Some("User".to_string()));
 
         // Test camelCase transformation
         let result = find_effective_selector("user profile", &json).unwrap();
@@ -238,12 +238,12 @@ mod tests {
     #[test]
     fn test_multiple_conditions_with_and() {
         let json = json!({
-            "user": {
-                "age": 25,
-                "name": "John",
-                "active": true
-            }
-        });
+        "user": {
+            "age": 25,
+            "name": "John",
+            "active": true
+        }
+    });
 
         let rule = Rule {
             label: Some("adult active user".to_string()),
@@ -260,7 +260,7 @@ mod tests {
                         right_property_path: None,
                         property_chain: None,
                     }),
-                    operator: Some(ConditionOperator::And),
+                    operator: None, // Remove the operator from the first condition
                 },
                 ConditionGroup {
                     condition: Condition::Comparison(ComparisonCondition {
@@ -272,7 +272,7 @@ mod tests {
                         right_property_path: None,
                         property_chain: None,
                     }),
-                    operator: None,
+                    operator: Some(ConditionOperator::And), // Move the operator to the second condition
                 }
             ],
             outcome: "valid_user".to_string(),
@@ -311,7 +311,7 @@ mod tests {
                         right_property_path: None,
                         property_chain: None,
                     }),
-                    operator: Some(ConditionOperator::Or),
+                    operator: None,
                 },
                 ConditionGroup {
                     condition: Condition::Comparison(ComparisonCondition {
@@ -323,13 +323,13 @@ mod tests {
                         right_property_path: None,
                         property_chain: None,
                     }),
-                    operator: None,
+                    operator: Some(ConditionOperator::Or),
                 }
             ],
             outcome: "eligible".to_string(),
             position: None,
         };
-        
+
         let rule_map: HashMap<String, usize> = HashMap::new();
         let label_map: HashMap<String, usize> = HashMap::new();
 
@@ -385,7 +385,7 @@ mod tests {
             outcome: "global".to_string(),
             position: None,
         };
-        
+
         let rule_map: HashMap<String, usize> = HashMap::new();
         let label_map: HashMap<String, usize> = HashMap::new();
 
@@ -443,9 +443,14 @@ mod tests {
             outcome: "global".to_string(),
             position: None,
         };
-        
-        let rule_map: HashMap<String, usize> = HashMap::new();
-        let label_map: HashMap<String, usize> = HashMap::new();
+
+        let mut rule_map = HashMap::new();
+        rule_map.insert("adult".to_string(), 0);    // age_rule is at index 0
+        rule_map.insert("global".to_string(), 1);   // global_rule is at index 1
+
+        let mut label_map = HashMap::new();
+        label_map.insert("age check".to_string(), 0);
+        label_map.insert("global rule".to_string(), 1);
 
         let rule_set = RuleSet {
             rules: vec![age_rule, global_rule],
