@@ -1,3 +1,5 @@
+mod lib;
+
 use chrono::NaiveDate;
 use std::collections::HashMap;
 use std::fmt;
