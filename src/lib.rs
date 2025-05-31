@@ -514,7 +514,7 @@ A **Document** is archived
     //         "name": "Joey",
     //         "ZoomProfile": "Recorded Zoom",
     //         "BankerModelList": "No",
-    //         "ZoomSetup": "No Zoom Account",
+    //         "ZoomSetup": "Recorded Zoom",
     //       }
     //     });
     //     let (result_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();

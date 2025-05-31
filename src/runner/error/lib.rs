@@ -1,6 +1,5 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::io;
     use serde_json;
     use crate::runner::error::RuleError;
@@ -174,7 +173,6 @@ mod tests {
         use std::error::Error;
 
         // Create a nested IO error
-        let inner_error = io::Error::new(io::ErrorKind::Other, "Inner error");
         let outer_error = io::Error::new(io::ErrorKind::NotFound, "Outer error");
 
         let rule_error: RuleError = outer_error.into();
@@ -200,8 +198,6 @@ mod tests {
 
     #[test]
     fn test_error_downcast() {
-        use std::error::Error;
-
         // Test downcasting for IO errors
         let io_err = io::Error::new(io::ErrorKind::NotFound, "File not found");
         let rule_error: RuleError = io_err.into();
