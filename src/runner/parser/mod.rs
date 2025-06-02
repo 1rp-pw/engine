@@ -209,9 +209,10 @@ fn parse_property_condition(pair: Pair<Rule>) -> Result<ComparisonCondition, Rul
                 "is no more than" => ComparisonOperator::LessThanOrEqual,
 
                 "is equal to" => ComparisonOperator::EqualTo,
+                "is the same as" => ComparisonOperator::EqualTo,
+
                 "is not equal to" => ComparisonOperator::NotEqualTo,
-                "is the same as" => ComparisonOperator::SameAs,
-                "is not the same as" => ComparisonOperator::NotSameAs,
+                "is not the same as" => ComparisonOperator::NotEqualTo,
 
                 "is later than" => ComparisonOperator::LaterThan,
                 "is earlier than" => ComparisonOperator::EarlierThan,

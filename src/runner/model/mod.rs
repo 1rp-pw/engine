@@ -11,8 +11,6 @@ pub enum ComparisonOperator {
     LessThanOrEqual,
     EqualTo,
     NotEqualTo,
-    SameAs,
-    NotSameAs,
     LaterThan,
     EarlierThan,
     GreaterThan,
@@ -26,25 +24,51 @@ impl fmt::Display for ComparisonOperator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ComparisonOperator::GreaterThanOrEqual => write!(f, "is greater than or equal to"),
-            ComparisonOperator::GreaterThanOrEqual => write!(f, "is at least"),
-            
+
             ComparisonOperator::LessThanOrEqual => write!(f, "is less than or equal to"),
-            ComparisonOperator::LessThanOrEqual => write!(f, "is now more than"),
-            
+
             ComparisonOperator::EqualTo => write!(f, "is equal to"),
             ComparisonOperator::NotEqualTo => write!(f, "is not equal to"),
-            ComparisonOperator::SameAs => write!(f, "is the same as"),
-            ComparisonOperator::NotSameAs => write!(f, "is not the same as"),
-            
+
             ComparisonOperator::LaterThan => write!(f, "is later than"),
             ComparisonOperator::EarlierThan => write!(f, "is earlier than"),
-            
+
             ComparisonOperator::GreaterThan => write!(f, "is greater than"),
             ComparisonOperator::LessThan => write!(f, "is less than"),
-            
+
             ComparisonOperator::In => write!(f, "is in"),
             ComparisonOperator::NotIn => write!(f, "is not in"),
             ComparisonOperator::Contains => write!(f, "contains"),
+        }
+    }
+}
+
+impl ComparisonOperator {
+    pub fn all_representations(&self) -> Vec<&'static str> {
+        match self {
+            ComparisonOperator::GreaterThanOrEqual => vec![
+                "is greater than or equal to",
+                "is at least"
+            ],
+            ComparisonOperator::LessThanOrEqual => vec![
+                "is less than or equal to",
+                "is no more than"
+            ],
+            ComparisonOperator::EqualTo => vec![
+                "is equal to",
+                "is the same as"
+            ],
+            ComparisonOperator::NotEqualTo => vec![
+                "is not equal to",
+                "is not the same as"
+            ],
+            ComparisonOperator::LaterThan => vec!["is later than"],
+            ComparisonOperator::EarlierThan => vec!["is earlier than"],
+            ComparisonOperator::GreaterThan => vec!["is greater than"],
+            ComparisonOperator::LessThan => vec!["is less than"],
+            ComparisonOperator::In => vec!["is in"],
+            ComparisonOperator::NotIn => vec!["is not in"],
+            ComparisonOperator::Contains => vec!["contains"],
         }
     }
 }

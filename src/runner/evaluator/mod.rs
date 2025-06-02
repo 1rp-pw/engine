@@ -859,8 +859,6 @@ fn evaluate_comparison(
         // Equality comparisons
         EqualTo => compare_equal(left, right),
         NotEqualTo => compare_not_equal(left, right),
-        SameAs => compare_equal(left, right), // Same logic as EqualTo
-        NotSameAs => compare_not_equal(left, right), // Same logic as NotEqualTo
 
         // Date comparisons
         LaterThan => compare_dates_later(left, right),
