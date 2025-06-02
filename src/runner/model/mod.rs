@@ -26,15 +26,22 @@ impl fmt::Display for ComparisonOperator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ComparisonOperator::GreaterThanOrEqual => write!(f, "is greater than or equal to"),
+            ComparisonOperator::GreaterThanOrEqual => write!(f, "is at least"),
+            
             ComparisonOperator::LessThanOrEqual => write!(f, "is less than or equal to"),
+            ComparisonOperator::LessThanOrEqual => write!(f, "is now more than"),
+            
             ComparisonOperator::EqualTo => write!(f, "is equal to"),
             ComparisonOperator::NotEqualTo => write!(f, "is not equal to"),
             ComparisonOperator::SameAs => write!(f, "is the same as"),
             ComparisonOperator::NotSameAs => write!(f, "is not the same as"),
+            
             ComparisonOperator::LaterThan => write!(f, "is later than"),
             ComparisonOperator::EarlierThan => write!(f, "is earlier than"),
+            
             ComparisonOperator::GreaterThan => write!(f, "is greater than"),
             ComparisonOperator::LessThan => write!(f, "is less than"),
+            
             ComparisonOperator::In => write!(f, "is in"),
             ComparisonOperator::NotIn => write!(f, "is not in"),
             ComparisonOperator::Contains => write!(f, "contains"),

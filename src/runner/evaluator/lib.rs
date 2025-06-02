@@ -2,8 +2,8 @@
 mod tests {
     use chrono::NaiveDate;
     use serde_json::{json};
-    use std::collections::HashMap;
-
+    use std::collections::{HashMap, HashSet};
+    use crate::runner::error::RuleError;
     use crate::runner::evaluator::{
         compare_contains, compare_dates_earlier, compare_dates_later, compare_equal,
         compare_in_list, compare_not_equal, compare_not_in_list, compare_numbers_gt,
@@ -229,9 +229,11 @@ mod tests {
 
         let rule_map: HashMap<String, usize> = HashMap::new();
         let label_map: HashMap<String, usize> = HashMap::new();
+        let mut evaluation_stack = HashSet::new();
+        let mut call_path = Vec::new();
 
         let rule_set = RuleSet { rules: vec![], rule_map, label_map  };
-        let (result, _trace) = evaluate_rule(&rule, &json, &rule_set).unwrap();
+        let (result, _trace) = evaluate_rule(&rule, &json, &rule_set, &mut evaluation_stack, &mut call_path).unwrap();
         assert_eq!(result, true);
     }
 
@@ -282,8 +284,11 @@ mod tests {
         let rule_map: HashMap<String, usize> = HashMap::new();
         let label_map: HashMap<String, usize> = HashMap::new();
 
+        let mut evaluation_stack = HashSet::new();
+        let mut call_path = Vec::new();
+
         let rule_set = RuleSet { rules: vec![], rule_map, label_map };
-        let (result, _trace) = evaluate_rule(&rule, &json, &rule_set).unwrap();
+        let (result, _trace) = evaluate_rule(&rule, &json, &rule_set, &mut evaluation_stack, &mut call_path).unwrap();
         assert_eq!(result, true);
     }
 
@@ -333,8 +338,11 @@ mod tests {
         let rule_map: HashMap<String, usize> = HashMap::new();
         let label_map: HashMap<String, usize> = HashMap::new();
 
+        let mut evaluation_stack = HashSet::new();
+        let mut call_path = Vec::new();
+
         let rule_set = RuleSet { rules: vec![], rule_map, label_map };
-        let (result, _trace) = evaluate_rule(&rule, &json, &rule_set).unwrap();
+        let (result, _trace) = evaluate_rule(&rule, &json, &rule_set, &mut evaluation_stack, &mut call_path).unwrap();
         assert_eq!(result, true); // Should be true because vip is true, even though age < 18
     }
 
@@ -389,13 +397,16 @@ mod tests {
         let rule_map: HashMap<String, usize> = HashMap::new();
         let label_map: HashMap<String, usize> = HashMap::new();
 
+        let mut evaluation_stack = HashSet::new();
+        let mut call_path = Vec::new();
+
         let rule_set = RuleSet {
             rules: vec![age_rule, main_rule.clone()],
             rule_map,
             label_map
         };
 
-        let (result, _trace) = evaluate_rule(&main_rule, &json, &rule_set).unwrap();
+        let (result, _trace) = evaluate_rule(&main_rule, &json, &rule_set, &mut evaluation_stack, &mut call_path).unwrap();
         assert_eq!(result, true);
     }
 
@@ -632,5 +643,239 @@ mod tests {
         // Should error when trying to compare incompatible types for equality
         let result = compare_equal(&string_val, &number_val);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_infinite_loop_detection() {
+        let json = json!({
+        "person": {
+            "age": 25,
+            "driving_test_score": 85
+        }
+    });
+
+        // Create the cyclic rules from your example
+
+        // Rule 1: A **person** follows rule 1 if age >= 18 and follows rule 2
+        let rule1 = Rule {
+            label: None,
+            selector: "person".to_string(),
+            selector_pos: None,
+            conditions: vec![
+                ConditionGroup {
+                    condition: Condition::Comparison(ComparisonCondition {
+                        selector: PositionedValue { value: "person".to_string(), pos: None },
+                        property: PositionedValue { value: "age".to_string(), pos: None },
+                        operator: ComparisonOperator::GreaterThanOrEqual,
+                        value: PositionedValue { value: RuleValue::Number(18.0), pos: None },
+                        left_property_path: None,
+                        right_property_path: None,
+                        property_chain: None,
+                    }),
+                    operator: None,
+                },
+                ConditionGroup {
+                    condition: Condition::RuleReference(RuleReferenceCondition {
+                        selector: PositionedValue { value: "".to_string(), pos: None },
+                        rule_name: PositionedValue { value: "rule 2".to_string(), pos: None },
+                    }),
+                    operator: Some(ConditionOperator::And),
+                }
+            ],
+            outcome: "rule 1".to_string(),
+            position: None,
+        };
+
+        // Rule 2: A **person** follows rule 2 if driving_test_score >= 60 and follows rule 3
+        let rule2 = Rule {
+            label: None,
+            selector: "person".to_string(),
+            selector_pos: None,
+            conditions: vec![
+                ConditionGroup {
+                    condition: Condition::Comparison(ComparisonCondition {
+                        selector: PositionedValue { value: "person".to_string(), pos: None },
+                        property: PositionedValue { value: "driving_test_score".to_string(), pos: None },
+                        operator: ComparisonOperator::GreaterThanOrEqual,
+                        value: PositionedValue { value: RuleValue::Number(60.0), pos: None },
+                        left_property_path: None,
+                        right_property_path: None,
+                        property_chain: None,
+                    }),
+                    operator: None,
+                },
+                ConditionGroup {
+                    condition: Condition::RuleReference(RuleReferenceCondition {
+                        selector: PositionedValue { value: "".to_string(), pos: None },
+                        rule_name: PositionedValue { value: "rule 3".to_string(), pos: None },
+                    }),
+                    operator: Some(ConditionOperator::And),
+                }
+            ],
+            outcome: "rule 2".to_string(),
+            position: None,
+        };
+
+        // Rule 3: A **person** follows rule 3 if passes eye test and follows rule 1 (CYCLE!)
+        let rule3 = Rule {
+            label: None,
+            selector: "person".to_string(),
+            selector_pos: None,
+            conditions: vec![
+                ConditionGroup {
+                    condition: Condition::RuleReference(RuleReferenceCondition {
+                        selector: PositionedValue { value: "person".to_string(), pos: None },
+                        rule_name: PositionedValue { value: "passes an eye test".to_string(), pos: None },
+                    }),
+                    operator: None,
+                },
+                ConditionGroup {
+                    condition: Condition::RuleReference(RuleReferenceCondition {
+                        selector: PositionedValue { value: "".to_string(), pos: None },
+                        rule_name: PositionedValue { value: "rule 1".to_string(), pos: None },
+                    }),
+                    operator: Some(ConditionOperator::And),
+                }
+            ],
+            outcome: "rule 3".to_string(),
+            position: None,
+        };
+
+        // Global rule that starts the evaluation
+        let global_rule = Rule {
+            label: None,
+            selector: "person".to_string(),
+            selector_pos: None,
+            conditions: vec![
+                ConditionGroup {
+                    condition: Condition::RuleReference(RuleReferenceCondition {
+                        selector: PositionedValue { value: "".to_string(), pos: None },
+                        rule_name: PositionedValue { value: "rule 1".to_string(), pos: None },
+                    }),
+                    operator: None,
+                }
+            ],
+            outcome: "full driving license".to_string(),
+            position: None,
+        };
+
+        // Set up the rule set
+        let mut rule_map = HashMap::new();
+        rule_map.insert("rule 1".to_string(), 0);
+        rule_map.insert("rule 2".to_string(), 1);
+        rule_map.insert("rule 3".to_string(), 2);
+        rule_map.insert("full driving license".to_string(), 3);
+
+        let rule_set = RuleSet {
+            rules: vec![rule1, rule2, rule3, global_rule],
+            rule_map,
+            label_map: HashMap::new(),
+        };
+
+        // Test that cycle detection catches the infinite loop
+        let result = evaluate_rule_set(&rule_set, &json);
+
+        match result {
+            Err(RuleError::EvaluationError(msg)) => {
+                // Check that the error message contains information about the cycle
+                assert!(msg.contains("Infinite loop detected"));
+                assert!(msg.contains("rule 1"));
+                assert!(msg.contains("rule 2"));
+                assert!(msg.contains("rule 3"));
+                println!("✅ Cycle detected successfully: {}", msg);
+            },
+            Ok(_) => {
+                panic!("Expected infinite loop error, but evaluation succeeded");
+            },
+            Err(other_error) => {
+                panic!("Expected infinite loop error, but got: {:?}", other_error);
+            }
+        }
+    }
+
+    #[test]
+    fn test_no_false_positive_cycle_detection() {
+        let json = json!({
+        "person": {
+            "age": 25,
+            "has_license": true
+        }
+    });
+
+        // Create a rule that references another rule but doesn't create a cycle
+        let age_check_rule = Rule {
+            label: None,
+            selector: "person".to_string(),
+            selector_pos: None,
+            conditions: vec![
+                ConditionGroup {
+                    condition: Condition::Comparison(ComparisonCondition {
+                        selector: PositionedValue { value: "person".to_string(), pos: None },
+                        property: PositionedValue { value: "age".to_string(), pos: None },
+                        operator: ComparisonOperator::GreaterThanOrEqual,
+                        value: PositionedValue { value: RuleValue::Number(18.0), pos: None },
+                        left_property_path: None,
+                        right_property_path: None,
+                        property_chain: None,
+                    }),
+                    operator: None,
+                }
+            ],
+            outcome: "is adult".to_string(),
+            position: None,
+        };
+
+        let main_rule = Rule {
+            label: None,
+            selector: "person".to_string(),
+            selector_pos: None,
+            conditions: vec![
+                ConditionGroup {
+                    condition: Condition::RuleReference(RuleReferenceCondition {
+                        selector: PositionedValue { value: "".to_string(), pos: None },
+                        rule_name: PositionedValue { value: "is adult".to_string(), pos: None },
+                    }),
+                    operator: None,
+                },
+                ConditionGroup {
+                    condition: Condition::Comparison(ComparisonCondition {
+                        selector: PositionedValue { value: "person".to_string(), pos: None },
+                        property: PositionedValue { value: "has_license".to_string(), pos: None },
+                        operator: ComparisonOperator::EqualTo,
+                        value: PositionedValue { value: RuleValue::Boolean(true), pos: None },
+                        left_property_path: None,
+                        right_property_path: None,
+                        property_chain: None,
+                    }),
+                    operator: Some(ConditionOperator::And),
+                }
+            ],
+            outcome: "can drive".to_string(),
+            position: None,
+        };
+
+        let mut rule_map = HashMap::new();
+        rule_map.insert("is adult".to_string(), 0);
+        rule_map.insert("can drive".to_string(), 1);
+
+        let rule_set = RuleSet {
+            rules: vec![age_check_rule, main_rule],
+            rule_map,
+            label_map: HashMap::new(),
+        };
+
+        // This should succeed without any cycle detection errors
+        let result = evaluate_rule_set(&rule_set, &json);
+
+        match result {
+            Ok((results, _trace)) => {
+                assert_eq!(results.get("can drive"), Some(&true));
+                assert_eq!(results.get("is adult"), Some(&true));
+                println!("✅ No false positive - valid rule evaluation succeeded");
+            },
+            Err(e) => {
+                panic!("Valid rule evaluation should not fail: {:?}", e);
+            }
+        }
     }
 }

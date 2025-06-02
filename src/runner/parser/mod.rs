@@ -203,15 +203,24 @@ fn parse_property_condition(pair: Pair<Rule>) -> Result<ComparisonCondition, Rul
         Rule::comparison_operator => {
             match operator_pair.as_str() {
                 "is greater than or equal to" => ComparisonOperator::GreaterThanOrEqual,
+                "is at least" => ComparisonOperator::GreaterThanOrEqual,
+
                 "is less than or equal to" => ComparisonOperator::LessThanOrEqual,
+                "is no more than" => ComparisonOperator::LessThanOrEqual,
+
                 "is equal to" => ComparisonOperator::EqualTo,
                 "is not equal to" => ComparisonOperator::NotEqualTo,
                 "is the same as" => ComparisonOperator::SameAs,
                 "is not the same as" => ComparisonOperator::NotSameAs,
+
                 "is later than" => ComparisonOperator::LaterThan,
                 "is earlier than" => ComparisonOperator::EarlierThan,
+
                 "is greater than" => ComparisonOperator::GreaterThan,
                 "is less than" => ComparisonOperator::LessThan,
+
+                "is in" => ComparisonOperator::In,
+                "is not in" => ComparisonOperator::NotIn,
                 "contains" => ComparisonOperator::Contains,
                 _ => return Err(RuleError::ParseError(format!("Unknown operator: {}", operator_pair.as_str())))
             }

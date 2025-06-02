@@ -8,18 +8,29 @@ use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use chrono::NaiveDate;
 
+impl RuleError {
+    pub fn infinite_loop_error(cycle_path: Vec<String>) -> Self {
+        RuleError::EvaluationError(format!(
+            "Infinite loop detected in rule evaluation: {} -> {}",
+            cycle_path.join(" -> "),
+            cycle_path[0]
+        ))
+    }
+}
+
 pub fn evaluate_rule_set(
     rule_set: &RuleSet,
     json: &Value
 ) -> Result<(HashMap<String, bool>, RuleSetTrace), RuleError> {
     let global_rule= crate::runner::utils::find_global_rule(&rule_set.rules)?;
-    let (result, rule_trace) = evaluate_rule(global_rule, json, rule_set)?;
+    let mut evaluation_stack = HashSet::new();
+    let mut call_path = Vec::new();
 
+    let (result, rule_trace) = evaluate_rule(global_rule, json, rule_set, &mut evaluation_stack, &mut call_path)?;
     let mut results = HashMap::new();
     results.insert(global_rule.outcome.clone(), result);
 
     let mut all_traces = vec![rule_trace];
-
     let mut processed_rules = HashSet::new();
     processed_rules.insert(global_rule.outcome.clone());
 
@@ -44,7 +55,10 @@ pub fn evaluate_rule_set(
 
         // Then process the collected rules and modify all_traces
         for (outcome, rule) in rules_to_process {
-            let (sub_result, sub_trace) = evaluate_rule(rule, json, rule_set)?;
+            let mut sub_evaluation_stack = HashSet::new();
+            let mut sub_call_path = Vec::new();
+
+            let (sub_result, sub_trace) = evaluate_rule(rule, json, rule_set, &mut sub_evaluation_stack, &mut sub_call_path)?;
             results.insert(outcome, sub_result);
             all_traces.push(sub_trace);
         }
@@ -62,15 +76,26 @@ pub fn evaluate_rule_set(
 pub fn evaluate_rule(
     model_rule: &Rule,
     json: &Value,
-    rule_set: &RuleSet
+    rule_set: &RuleSet,
+    evaluation_stack: &mut HashSet<String>,
+    call_path: &mut Vec<String>,
 ) -> Result<(bool, RuleTrace), RuleError> {
+    // cycle check
+    let rule_identifier = model_rule.outcome.clone();
+    if evaluation_stack.contains(&rule_identifier) {
+        call_path.push(rule_identifier.clone());
+        return Err(RuleError::infinite_loop_error(call_path.clone()));
+    }
+    evaluation_stack.insert(rule_identifier.clone());
+    call_path.push(rule_identifier.clone());
+
     // 1) evaluate each condition, collect its bool and its trace
     let mut results = Vec::new();
     let mut ops     = Vec::new();
     let mut condition_traces = Vec::new();
 
     for (i, cg) in model_rule.conditions.iter().enumerate() {
-        let (res, trace) = evaluate_condition(&cg.condition, json, rule_set)?;
+        let (res, trace) = evaluate_condition(&cg.condition, json, rule_set, evaluation_stack, call_path)?;
         results.push(res);
         condition_traces.push(trace);
 
@@ -82,6 +107,9 @@ pub fn evaluate_rule(
             ops.push(ConditionOperator::And);
         }
     }
+
+    evaluation_stack.remove(&rule_identifier);
+    call_path.pop();
 
     // 2) collapse all ANDs first
     let mut i = 0;
@@ -124,11 +152,13 @@ pub fn evaluate_rule(
 fn evaluate_condition(
     condition: &Condition,
     json: &Value,
-    rule_set: &RuleSet
+    rule_set: &RuleSet,
+    evaluation_stack: &mut HashSet<String>,
+    call_path: &mut Vec<String>,
 ) -> Result<(bool, ConditionTrace), RuleError> {
     match condition {
         Condition::RuleReference(ref_condition) => {
-            evaluate_rule_reference_condition(ref_condition, json, rule_set)
+            evaluate_rule_reference_condition(ref_condition, json, rule_set, evaluation_stack, call_path)
         },
         Condition::Comparison(comp_condition) => {
             evaluate_comparison_condition(comp_condition, json)
@@ -139,7 +169,9 @@ fn evaluate_condition(
 fn evaluate_rule_reference_condition(
     condition: &RuleReferenceCondition,
     json: &Value,
-    rule_set: &RuleSet
+    rule_set: &RuleSet,
+    evaluation_stack: &mut HashSet<String>,
+    call_path: &mut Vec<String>,
 ) -> Result<(bool, ConditionTrace), RuleError> {
     // Handle empty selector case (for label references)
     if condition.selector.value.is_empty() {
@@ -147,7 +179,7 @@ fn evaluate_rule_reference_condition(
         let rule_name = condition.rule_name.value.trim();
 
         // Try to find and evaluate the referenced rule
-        if let Some((result, outcome)) = try_evaluate_by_rule(rule_name, json, rule_set)? {
+        if let Some((result, outcome)) = try_evaluate_by_rule(rule_name, json, rule_set, evaluation_stack, call_path)? {
             let rule_reference_trace = RuleReferenceTrace {
                 selector: SelectorTrace {
                     value: String::new(),
@@ -174,7 +206,7 @@ fn evaluate_rule_reference_condition(
 
     let part = condition.rule_name.value.trim();
     let (result, referenced_outcome, property_check) =
-        evaluate_rule_or_property(part, &effective_selector.unwrap(), json, rule_set)?;
+        evaluate_rule_or_property(part, &effective_selector.unwrap(), json, rule_set, evaluation_stack, call_path)?;
 
     let rule_reference_trace = RuleReferenceTrace {
         selector: SelectorTrace {
@@ -194,10 +226,12 @@ fn evaluate_rule_or_property(
     rule_name: &str,
     effective_selector: &str,
     json: &Value,
-    rule_set: &RuleSet
+    rule_set: &RuleSet,
+    evaluation_stack: &mut HashSet<String>,
+    call_path: &mut Vec<String>,
 ) -> Result<(bool, Option<String>, Option<PropertyCheckTrace>), RuleError> {
     // Try to find a matching rule first
-    if let Some((result, outcome)) = try_evaluate_by_rule(rule_name, json, rule_set)? {
+    if let Some((result, outcome)) = try_evaluate_by_rule(rule_name, json, rule_set, evaluation_stack, call_path)? {
         return Ok((result, Some(outcome), None));
     }
 
@@ -216,23 +250,25 @@ fn evaluate_rule_or_property(
 fn try_evaluate_by_rule(
     rule_name: &str,
     json: &Value,
-    rule_set: &RuleSet
+    rule_set: &RuleSet,
+    evaluation_stack: &mut HashSet<String>,
+    call_path: &mut Vec<String>,
 ) -> Result<Option<(bool, String)>, RuleError> {
     // Try exact outcome match
     if let Some(rule) = rule_set.get_rule(rule_name) {
-        let (result, _) = evaluate_rule(rule, json, rule_set)?;
+        let (result, _) = evaluate_rule(rule, json, rule_set, evaluation_stack, call_path)?;
         return Ok(Some((result, rule.outcome.clone())));
     }
 
     // Try exact label match
     if let Some(rule) = rule_set.get_rule_by_label(rule_name) {
-        let (result, _) = evaluate_rule(rule, json, rule_set)?;
+        let (result, _) = evaluate_rule(rule, json, rule_set, evaluation_stack, call_path)?;
         return Ok(Some((result, rule.outcome.clone())));
     }
 
     // Try fuzzy matching
     if let Some(rule) = find_rule_fuzzy_match(rule_name, rule_set) {
-        let (result, _) = evaluate_rule(rule, json, rule_set)?;
+        let (result, _) = evaluate_rule(rule, json, rule_set, evaluation_stack, call_path)?;
         return Ok(Some((result, rule.outcome.clone())));
     }
 
