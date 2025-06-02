@@ -282,15 +282,22 @@ A **user** is valid if __age__ of **user** is greater than __min_age__ of **conf
     fn test_parse_all_comparison_operators() {
         let operators = vec![
             ("is greater than or equal to", ComparisonOperator::GreaterThanOrEqual),
+            ("is at least", ComparisonOperator::GreaterThanOrEqual),
+            
             ("is less than or equal to", ComparisonOperator::LessThanOrEqual),
+            ("is no more than", ComparisonOperator::LessThanOrEqual),
+            
             ("is equal to", ComparisonOperator::EqualTo),
             ("is not equal to", ComparisonOperator::NotEqualTo),
             ("is the same as", ComparisonOperator::SameAs),
             ("is not the same as", ComparisonOperator::NotSameAs),
+            
             ("is later than", ComparisonOperator::LaterThan),
             ("is earlier than", ComparisonOperator::EarlierThan),
+            
             ("is greater than", ComparisonOperator::GreaterThan),
             ("is less than", ComparisonOperator::LessThan),
+            
             ("contains", ComparisonOperator::Contains),
         ];
 

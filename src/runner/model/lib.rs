@@ -6,15 +6,20 @@ mod tests {
     #[test]
     fn test_comparison_operator_display() {
         assert_eq!(ComparisonOperator::GreaterThanOrEqual.to_string(), "is greater than or equal to");
+
         assert_eq!(ComparisonOperator::LessThanOrEqual.to_string(), "is less than or equal to");
+
         assert_eq!(ComparisonOperator::EqualTo.to_string(), "is equal to");
         assert_eq!(ComparisonOperator::NotEqualTo.to_string(), "is not equal to");
         assert_eq!(ComparisonOperator::SameAs.to_string(), "is the same as");
         assert_eq!(ComparisonOperator::NotSameAs.to_string(), "is not the same as");
+
         assert_eq!(ComparisonOperator::LaterThan.to_string(), "is later than");
         assert_eq!(ComparisonOperator::EarlierThan.to_string(), "is earlier than");
+
         assert_eq!(ComparisonOperator::GreaterThan.to_string(), "is greater than");
         assert_eq!(ComparisonOperator::LessThan.to_string(), "is less than");
+
         assert_eq!(ComparisonOperator::In.to_string(), "is in");
         assert_eq!(ComparisonOperator::NotIn.to_string(), "is not in");
         assert_eq!(ComparisonOperator::Contains.to_string(), "contains");
