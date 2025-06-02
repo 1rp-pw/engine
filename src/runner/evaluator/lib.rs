@@ -782,7 +782,6 @@ mod tests {
                 assert!(msg.contains("rule 1"));
                 assert!(msg.contains("rule 2"));
                 assert!(msg.contains("rule 3"));
-                println!("✅ Cycle detected successfully: {}", msg);
             },
             Ok(_) => {
                 panic!("Expected infinite loop error, but evaluation succeeded");
@@ -871,7 +870,6 @@ mod tests {
             Ok((results, _trace)) => {
                 assert_eq!(results.get("can drive"), Some(&true));
                 assert_eq!(results.get("is adult"), Some(&true));
-                println!("✅ No false positive - valid rule evaluation succeeded");
             },
             Err(e) => {
                 panic!("Valid rule evaluation should not fail: {:?}", e);
