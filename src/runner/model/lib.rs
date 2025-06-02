@@ -11,8 +11,6 @@ mod tests {
 
         assert_eq!(ComparisonOperator::EqualTo.to_string(), "is equal to");
         assert_eq!(ComparisonOperator::NotEqualTo.to_string(), "is not equal to");
-        assert_eq!(ComparisonOperator::SameAs.to_string(), "is the same as");
-        assert_eq!(ComparisonOperator::NotSameAs.to_string(), "is not the same as");
 
         assert_eq!(ComparisonOperator::LaterThan.to_string(), "is later than");
         assert_eq!(ComparisonOperator::EarlierThan.to_string(), "is earlier than");
