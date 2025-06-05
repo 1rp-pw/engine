@@ -86,7 +86,7 @@ async fn handle_run(
     match parse_rules(&package.rule) {
         Ok(rule_set) => match evaluate_rule_set(&rule_set, &package.data) {
             Ok((results, trace)) => {
-                eprintln!("rules: {:?}", rule_set);
+                //eprintln!("rules: {:?}", rule_set);
 
                 let mut labels = HashMap::new();
                 for rule_trace in &trace.execution {
@@ -109,7 +109,7 @@ async fn handle_run(
                     rule,
                     data: package.data.clone(),
                 };
-                eprintln!("response: {:?}", response);
+                //eprintln!("response: {:?}", response);
                 (StatusCode::OK, Json(response))
             }
             Err(error) => {
