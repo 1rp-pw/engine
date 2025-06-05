@@ -30,7 +30,7 @@ struct EvaluationResponse {
     trace: Option<RuleSetTrace>,
     #[serde(skip_serializing_if="Option::is_none")]
     labels: Option<HashMap<String, bool>>,
-    text: Vec<String>,
+    rule: Vec<String>,
     data: Value,
 }
 
@@ -78,7 +78,7 @@ async fn handle_run(
             error: None,
             trace: None,
             labels: None,
-            text: Vec::new(),
+            rule: Vec::new(),
             data: Value::Null,
         }));
     }
@@ -96,7 +96,7 @@ async fn handle_run(
                 }
 
                 let result = results.values().next().cloned().unwrap_or(false);
-                let text = package.rule.lines().map(String::from).collect();
+                let rule = package.rule.lines().map(String::from).collect();
                 let response = EvaluationResponse {
                     result,
                     error: None,
@@ -106,34 +106,34 @@ async fn handle_run(
                     } else {
                         Some(labels)
                     },
-                    text,
+                    rule,
                     data: package.data.clone(),
                 };
                 eprintln!("response: {:?}", response);
                 (StatusCode::OK, Json(response))
             }
             Err(error) => {
-                let text = package.rule.lines().map(String::from).collect();
+                let rule = package.rule.lines().map(String::from).collect();
                 let response = EvaluationResponse {
                     result: false,
                     error: Some(error.to_string()),
                     trace: None,
                     labels: None,
-                    text,
+                    rule,
                     data: package.data.clone(),
                 };
                 (StatusCode::BAD_REQUEST, Json(response))
             }
         },
         Err(error) => {
-            let text = package.rule.lines().map(String::from).collect();
+            let rule = package.rule.lines().map(String::from).collect();
             
             let response = EvaluationResponse {
                 result: false,
                 error: Some(error.to_string()),
                 trace: None,
                 labels: None,
-                text,
+                rule,
                 data: package.data.clone(),
             };
             (StatusCode::BAD_REQUEST, Json(response))
