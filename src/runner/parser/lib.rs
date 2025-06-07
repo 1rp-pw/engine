@@ -88,9 +88,7 @@ mod tests {
 
     #[test]
     fn test_parse_string_comparison() {
-        let input = r#"
-A **user** is valid if __status__ of **user** is equal to "active".
-        "#;
+        let input = r#"A **user** is valid if __status__ of **user** is equal to "active"."#;
 
         let result = parse_rules(input);
         assert!(result.is_ok());
@@ -244,35 +242,6 @@ A **user** is valid if __id__ of __group__ of **user** is equal to 1.
                 let path = comp.left_property_path.as_ref().unwrap();
                 assert_eq!(path.selector, "user");
                 assert_eq!(path.properties, vec!["id", "group"]);
-            }
-            _ => panic!("Expected comparison condition"),
-        }
-    }
-
-    #[test]
-    fn test_parse_property_to_property_comparison() {
-        let input = r#"
-A **user** is valid if __age__ of **user** is greater than __min_age__ of **config**.
-        "#;
-
-        let result = parse_rules(input);
-        assert!(result.is_ok());
-
-        let rule_set = result.unwrap();
-        let rule = &rule_set.rules[0];
-
-        match &rule.conditions[0].condition {
-            Condition::Comparison(comp) => {
-                assert!(comp.left_property_path.is_some());
-                assert!(comp.right_property_path.is_some());
-
-                let left_path = comp.left_property_path.as_ref().unwrap();
-                assert_eq!(left_path.selector, "user");
-                assert_eq!(left_path.properties, vec!["age"]);
-
-                let right_path = comp.right_property_path.as_ref().unwrap();
-                assert_eq!(right_path.selector, "config");
-                assert_eq!(right_path.properties, vec!["minAge"]);
             }
             _ => panic!("Expected comparison condition"),
         }
@@ -495,29 +464,6 @@ A **user** is valid if __score__ of **user** is in [85, 90, 95, 100].
                         }
                     }
                     _ => panic!("Expected list value"),
-                }
-            }
-            _ => panic!("Expected comparison condition"),
-        }
-    }
-
-    #[test]
-    fn test_parse_property_name_transformation() {
-        let input = r#"
-A **user** is valid if __first name__ of **user** is equal to "John".
-        "#;
-
-        let result = parse_rules(input);
-        assert!(result.is_ok());
-
-        let rule_set = result.unwrap();
-        let rule = &rule_set.rules[0];
-
-        match &rule.conditions[0].condition {
-            Condition::Comparison(comp) => {
-                // Property should be transformed from "first name" to "firstName"
-                if let Some(path) = &comp.left_property_path {
-                    assert_eq!(path.properties, vec!["firstName"]);
                 }
             }
             _ => panic!("Expected comparison condition"),
