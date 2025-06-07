@@ -7,6 +7,7 @@ use crate::runner::trace::{RuleSetTrace, RuleTrace, ConditionTrace, ComparisonTr
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use chrono::NaiveDate;
+use crate::runner::utils::transform_property_name;
 
 impl RuleError {
     pub fn infinite_loop_error(cycle_path: Vec<String>) -> Self {
@@ -394,6 +395,28 @@ fn evaluate_property_result(property_check: &PropertyCheckTrace) -> bool {
     }
 }
 
+fn calculate_length_of(value: &Value) -> Result<f64, RuleError> {
+    match value {
+        Value::String(s) => Ok(s.len() as f64),
+        Value::Array(arr) => Ok(arr.len() as f64),
+        Value::Object(obj) => Ok(obj.len() as f64), // Object property count
+        Value::Null => Ok(0.0),
+        _ => Err(RuleError::EvaluationError(
+            format!("Cannot calculate length of {:?}", value)
+        ))
+    }
+}
+
+fn calculate_number_of(value: &Value) -> Result<f64, RuleError> {
+    match value {
+        Value::Array(arr) => Ok(arr.len() as f64),
+        Value::Null => Ok(0.0),
+        _ => Err(RuleError::EvaluationError(
+            format!("Cannot calculate number of {:?} for non array", value)
+        ))
+    }
+}
+
 // ===== Comparison Evaluation =====
 
 fn evaluate_comparison_condition(
@@ -458,9 +481,15 @@ fn evaluate_cross_object_comparison(
     left_path: &crate::runner::model::PropertyPath,
     json: &Value
 ) -> Result<(bool, ConditionTrace), RuleError> {
+    if is_length_of_operation(left_path) {
+        return evaluate_length_of_comparison(condition, left_path, json);
+    }
+    if is_number_of_operation(left_path) {
+        return evaluate_number_of_comparison(condition, left_path, json);
+    }
+
     // Resolve left property path
     let (left_value, left_path_str) = resolve_property_path(left_path, json)?;
-
     if left_value.is_none() {
         return Ok((false, create_failed_comparison_trace_with_path(condition, &left_path_str)));
     }
@@ -501,6 +530,104 @@ fn evaluate_cross_object_comparison(
     Ok((comparison_result, ConditionTrace::Comparison(comparison_trace)))
 }
 
+fn evaluate_length_of_comparison(
+    condition: &ComparisonCondition,
+    left_path: &crate::runner::model::PropertyPath,
+    json: &Value
+) -> Result<(bool, ConditionTrace), RuleError> {
+    let mut actual_path = left_path.clone();
+    actual_path.properties.pop();
+
+    let (target_value, mut path_str) = resolve_property_path(&actual_path, json)?;
+    if target_value.is_none() {
+        path_str = format!("{}.length", path_str);
+        return Ok((false, create_failed_comparison_trace_with_path(condition, &path_str)));
+    }
+
+    // Calculate length
+    let length = calculate_length_of(target_value.unwrap())?;
+    let length_rule_value = RuleValue::Number(length);
+
+    // Perform comparison
+    let (comparison_result, evaluation_details) = perform_comparison(
+        &length_rule_value,
+        &condition.operator,
+        &condition.value.value
+    )?;
+
+    // Build the trace with length information
+    let length_path = format!("{}.length", path_str);
+    let comparison_trace = ComparisonTrace {
+        selector: SelectorTrace {
+            value: left_path.selector.clone(),
+            pos: None,
+        },
+        property: PropertyTrace {
+            value: serde_json::json!(length), // Show the calculated length
+            path: length_path,
+        },
+        operator: condition.operator.clone(),
+        value: condition.value.value.to_value_trace(condition.value.pos.clone()),
+        evaluation_details,
+        result: comparison_result,
+    };
+
+    Ok((comparison_result, ConditionTrace::Comparison(comparison_trace)))
+}
+
+fn evaluate_number_of_comparison(
+    condition: &ComparisonCondition,
+    left_path: &crate::runner::model::PropertyPath,
+    json: &Value
+) -> Result<(bool, ConditionTrace), RuleError> {
+    let mut actual_path = left_path.clone();
+    actual_path.properties.pop();
+
+    let (target_value, mut path_str) = resolve_property_path(&actual_path, json)?;
+    if target_value.is_none() {
+        path_str = format!("{}.length", path_str);
+        return Ok((false, create_failed_comparison_trace_with_path(condition, &path_str)));
+    }
+
+    // Calculate length
+    let number = calculate_number_of(target_value.unwrap())?;
+    let number_rule_value = RuleValue::Number(number);
+
+    // Perform comparison
+    let (comparison_result, evaluation_details) = perform_comparison(
+        &number_rule_value,
+        &condition.operator,
+        &condition.value.value
+    )?;
+
+    // Build the trace with length information
+    let number_path = format!("{}.number", path_str);
+    let comparison_trace = ComparisonTrace {
+        selector: SelectorTrace {
+            value: left_path.selector.clone(),
+            pos: None,
+        },
+        property: PropertyTrace {
+            value: serde_json::json!(number), // Show the calculated length
+            path: number_path,
+        },
+        operator: condition.operator.clone(),
+        value: condition.value.value.to_value_trace(condition.value.pos.clone()),
+        evaluation_details,
+        result: comparison_result,
+    };
+
+    Ok((comparison_result, ConditionTrace::Comparison(comparison_trace)))
+}
+
+fn is_length_of_operation(path: &crate::runner::model::PropertyPath) -> bool {
+    path.properties.last() == Some(&"__length_of__".to_string())
+}
+fn is_number_of_operation(path: &crate::runner::model::PropertyPath) -> bool {
+    path.properties.last() == Some(&"__number_of__".to_string())
+}
+
+
 fn resolve_property_path<'a>(
     path: &crate::runner::model::PropertyPath,
     json: &'a Value
@@ -509,7 +636,6 @@ fn resolve_property_path<'a>(
 
     // Find effective selector
     let effective_selector = find_effective_selector(&path.selector, json)?;
-
     if effective_selector.is_none() {
         return Ok((None, format!("$.{}", path.selector)));
     }
@@ -518,21 +644,73 @@ fn resolve_property_path<'a>(
     let mut current_value = json.get(&final_selector)
         .ok_or_else(|| RuleError::EvaluationError(format!("Selector '{}' not found", final_selector)))?;
 
-    path_parts[0] = final_selector; // Use the actual key from JSON
+    path_parts[0] = final_selector.clone(); // Use the actual key from JSON
+
+    let is_length_of_operator = is_length_of_operation(path);
+    let properties_to_traverse = if is_length_of_operator {
+        &path.properties[..path.properties.len() - 1]
+    } else {
+        &path.properties[..]
+    };
+
+    let is_number_of_operator = is_number_of_operation(path);
+    let properties_to_traverse = if is_number_of_operator {
+        &path.properties[..path.properties.len() - 1]
+    } else {
+        &path.properties[..]
+    };
 
     // Follow the property chain - properties are in reverse order
     // For "__id__ of __group__ of **user**", we get properties: ["id", "group"]
     // But we need to traverse: user -> group -> id
     for property in path.properties.iter().rev() {
+        let mut found_property = None;
+        let mut actual_property_name = property.clone();
+
         if let Some(prop_value) = current_value.get(property) {
-            current_value = prop_value;
-            path_parts.push(property.clone());
+            found_property = Some(prop_value);
         } else if let Some(prop_value) = get_json_value_insensitive(current_value, property) {
+            found_property = Some(prop_value);
+            if let Some(obj) = current_value.as_object() {
+                for (key, _) in obj {
+                    if key.to_lowercase() == property.to_lowercase() {
+                        actual_property_name = key.to_string();
+                        break;
+                    }
+                }
+            }
+        } else {
+            let transformed_property = transform_property_name(property);
+            if let Some(prop_value) = current_value.get(&transformed_property) {
+                found_property = Some(prop_value);
+                actual_property_name = transformed_property.clone();
+            } else if let Some(prop_value) = get_json_value_insensitive(current_value, &transformed_property) {
+                found_property = Some(prop_value);
+                if let Some(obj) = current_value.as_object() {
+                    let transformed_lower = transformed_property.to_lowercase();
+                    for (key, _) in obj {
+                        if key.to_lowercase() == transformed_lower {
+                            actual_property_name = key.to_string();
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some(prop_value) = found_property {
             current_value = prop_value;
-            path_parts.push(property.clone());
+            path_parts.push(actual_property_name);
         } else {
             return Ok((None, format!("$.{}", path_parts.join("."))));
         }
+    }
+
+    if is_length_of_operator {
+        let length_value = calculate_length_of(current_value)?;
+        path_parts.push("length".to_string());
+        let path_str = format!("$.{}", path_parts.join("."));
+        return Ok((Some(current_value), path_str));
     }
 
     let path_str = format!("$.{}", path_parts.join("."));
@@ -833,9 +1011,14 @@ fn extract_value_from_json(
     } else if let Some(val) = get_json_value_insensitive(obj, property) {
         val
     } else {
-        return Err(RuleError::EvaluationError(
-            format!("Property '{}' not found in selector '{}'", property, selector)
-        ));
+        let transformed_property = transform_selector_name(property);
+        if let Some(val) = obj.get(&transformed_property) {
+            val
+        } else {
+            return Err(RuleError::EvaluationError(
+                format!("Property '{}' not found in selector '{}'", property, selector)
+            ));
+        }
     };
 
     convert_json_to_rule_value(value)
