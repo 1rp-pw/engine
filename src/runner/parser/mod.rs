@@ -191,9 +191,12 @@ fn parse_property_condition(pair: Pair<Rule>) -> Result<ComparisonCondition, Rul
 
     // Check what type of left side we have
     match left_access_pair.as_rule() {
-        Rule::length_expr => {
+        Rule::length_of_expr => {
             // Handle length expression
-            parse_length_condition(left_access_pair, inner_pairs)
+            parse_length_of_condition(left_access_pair, inner_pairs)
+        }
+        Rule::number_of_expr => {
+            parse_number_of_condition(left_access_pair, inner_pairs)
         }
         Rule::property_access => {
             // Handle regular property access (existing logic)
@@ -203,16 +206,16 @@ fn parse_property_condition(pair: Pair<Rule>) -> Result<ComparisonCondition, Rul
     }
 }
 
-fn parse_length_condition(
-    length_expr_pair: Pair<Rule>,
+fn parse_length_of_condition(
+    length_of_expr_pair: Pair<Rule>,
     mut remaining_pairs: pest::iterators::Pairs<Rule>
 ) -> Result<ComparisonCondition, RuleError> {
     // Parse the length expression to get the property path
-    let property_path = parse_length_expression(length_expr_pair)?;
+    let property_path = parse_length_of_expression(length_of_expr_pair)?;
 
     // Parse the predicate
     let predicate_pair = remaining_pairs.next()
-        .ok_or_else(|| RuleError::ParseError("Missing predicate after length expression".to_string()))?;
+        .ok_or_else(|| RuleError::ParseError("Missing predicate after length of expression".to_string()))?;
 
     let mut predicate_inner = predicate_pair.into_inner();
 
@@ -233,10 +236,10 @@ fn parse_length_condition(
                 "is not the same as" => ComparisonOperator::NotEqualTo,
                 "is greater than" => ComparisonOperator::GreaterThan,
                 "is less than" => ComparisonOperator::LessThan,
-                _ => return Err(RuleError::ParseError(format!("Unsupported operator for length comparison: {}", operator_pair.as_str())))
+                _ => return Err(RuleError::ParseError(format!("Unsupported operator for length of comparison: {}", operator_pair.as_str())))
             }
         }
-        _ => return Err(RuleError::ParseError("Length comparisons require comparison operators".to_string()))
+        _ => return Err(RuleError::ParseError("Length of comparisons require comparison operators".to_string()))
     };
 
     // Parse right operand (should be a number for length comparisons)
@@ -255,12 +258,12 @@ fn parse_length_condition(
             });
             PositionedValue::with_position(parse_value(right_pair)?, val_pos)
         }
-        _ => return Err(RuleError::ParseError("Length comparisons require a numeric value".to_string()))
+        _ => return Err(RuleError::ParseError("Length of comparisons require a numeric value".to_string()))
     };
 
     Ok(ComparisonCondition {
         selector: PositionedValue::new(property_path.selector.clone()),
-        property: PositionedValue::new("__length__".to_string()), // Special marker for length
+        property: PositionedValue::new("__length_of__".to_string()), // Special marker for length
         operator,
         value: right_value,
         property_chain: None,
@@ -269,14 +272,92 @@ fn parse_length_condition(
     })
 }
 
-fn parse_length_expression(pair: Pair<Rule>) -> Result<PropertyPath, RuleError> {
+fn parse_number_of_condition(
+    number_of_expr_pair: Pair<Rule>,
+    mut remaining_pairs: pest::iterators::Pairs<Rule>
+) -> Result<ComparisonCondition, RuleError> {
+    // Parse the length expression to get the property path
+    let property_path = parse_number_of_expression(number_of_expr_pair)?;
+
+    // Parse the predicate
+    let predicate_pair = remaining_pairs.next()
+        .ok_or_else(|| RuleError::ParseError("Missing predicate after number of expression".to_string()))?;
+
+    let mut predicate_inner = predicate_pair.into_inner();
+
+    // Parse operator
+    let operator_pair = predicate_inner.next()
+        .ok_or_else(|| RuleError::ParseError("Missing operator".to_string()))?;
+
+    let operator = match operator_pair.as_rule() {
+        Rule::comparison_operator => {
+            match operator_pair.as_str() {
+                "is greater than or equal to" => ComparisonOperator::GreaterThanOrEqual,
+                "is at least" => ComparisonOperator::GreaterThanOrEqual,
+                "is less than or equal to" => ComparisonOperator::LessThanOrEqual,
+                "is no more than" => ComparisonOperator::LessThanOrEqual,
+                "is equal to" => ComparisonOperator::EqualTo,
+                "is the same as" => ComparisonOperator::EqualTo,
+                "is not equal to" => ComparisonOperator::NotEqualTo,
+                "is not the same as" => ComparisonOperator::NotEqualTo,
+                "is greater than" => ComparisonOperator::GreaterThan,
+                "is less than" => ComparisonOperator::LessThan,
+                _ => return Err(RuleError::ParseError(format!("Unsupported operator for number of comparison: {}", operator_pair.as_str())))
+            }
+        }
+        _ => return Err(RuleError::ParseError("Number of comparisons require comparison operators".to_string()))
+    };
+
+    // Parse right operand (should be a number for length comparisons)
+    let right_pair = predicate_inner.next()
+        .ok_or_else(|| RuleError::ParseError("Missing right operand".to_string()))?;
+
+    let right_value = match right_pair.as_rule() {
+        Rule::value => {
+            let value_span = right_pair.as_span();
+            let (value_line, start_col) = value_span.start_pos().line_col();
+            let (_, end_col) = value_span.end_pos().line_col();
+            let val_pos = Some(SourcePosition{
+                line: value_line,
+                start: start_col,
+                end: end_col,
+            });
+            PositionedValue::with_position(parse_value(right_pair)?, val_pos)
+        }
+        _ => return Err(RuleError::ParseError("Number of comparisons require a numeric value".to_string()))
+    };
+
+    Ok(ComparisonCondition {
+        selector: PositionedValue::new(property_path.selector.clone()),
+        property: PositionedValue::new("__number_of__".to_string()), // Special marker for length
+        operator,
+        value: right_value,
+        property_chain: None,
+        left_property_path: Some(property_path),
+        right_property_path: None,
+    })
+}
+
+fn parse_length_of_expression(pair: Pair<Rule>) -> Result<PropertyPath, RuleError> {
     let mut inner_pairs = pair.into_inner();
 
     let property_access_pair = inner_pairs.next()
         .ok_or_else(|| RuleError::ParseError("Missing property access".to_string()))?;
 
     let mut path = parse_property_access(property_access_pair)?;
-    path.properties.push("__length__".to_string());
+    path.properties.push("__length_of__".to_string());
+
+    Ok(path)
+}
+
+fn parse_number_of_expression(pair: Pair<Rule>) -> Result<PropertyPath, RuleError> {
+    let mut inner_pairs = pair.into_inner();
+
+    let property_access_pair = inner_pairs.next()
+        .ok_or_else(|| RuleError::ParseError("Missing property access".to_string()))?;
+
+    let mut path = parse_property_access(property_access_pair)?;
+    path.properties.push("__number_of__".to_string());
 
     Ok(path)
 }

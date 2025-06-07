@@ -36,7 +36,8 @@ condition = {
 // Property condition now handles chained access
 property_condition = {
     ("the")? ~ property_access ~ predicate |
-    length_expr ~ predicate
+    number_of_expr ~ predicate |
+    length_of_expr ~ predicate
 }
 
 // Property access can be chained: __prop__ of __prop__ of **obj**
@@ -48,7 +49,7 @@ rule_reference = { "the"? ~ object_selector ~ reference_name }
 reference_name = @{ (!("." | "and" | "or" | "\n") ~ ANY)+ }
 
 predicate = {
-    comparison_operator ~ (property_access | length_expr | value) |
+    comparison_operator ~ (property_access | value) |
     list_operator ~ (property_access | list_value)
 }
 
@@ -78,8 +79,8 @@ comparison_operator = {
     "contains"
 }
 
-length_expr = { ("the")? ~ "length" ~ "of" ~ property_access }
-
+length_of_expr = { ("the")? ~ "length" ~ "of" ~ property_access }
+number_of_expr = { ("the")? ~ "number" ~ "of" ~ property_access }
 list_value = { "[" ~ value ~ ("," ~ value)* ~ "]" }
 value = { date_literal | number | boolean | string_literal }
 

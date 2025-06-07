@@ -659,6 +659,48 @@ A **Document** is archived
     }
 
     #[test]
+    fn test_array_number_greater_than() {
+        let rule_text = r#"
+        A **user** is valid if the number of __items__ of **user** is greater than 3.
+        "#;
+
+        let rule_set = parse_rules(rule_text).unwrap();
+
+        // Test case where array length is greater than 3
+        let json_true = json!({
+            "user": {
+                "items": [1, 2, 3, 4, 5]  // 5 items
+            }
+        });
+        let (results_true, _trace_true) = evaluate_rule_set(&rule_set, &json_true).unwrap();
+        assert!(results_true["valid"]);
+
+        // Test case where array length is not greater than 3
+        let json_false = json!({
+        "user": {
+            "items": [1, 2]  // 2 items
+        }
+    });
+        let (results_false, _trace_false) = evaluate_rule_set(&rule_set, &json_false).unwrap();
+        assert!(!results_false["valid"]);
+
+        // Test case where "number of" is used on a string - should return an error
+        let json_error = json!({
+        "user": {
+            "items": "tester"  // string, not an array
+        }
+    });
+        let result = evaluate_rule_set(&rule_set, &json_error);
+        assert!(result.is_err());
+        // Optionally check that the error message indicates the invalid use of "number of" on a string
+        if let Err(error) = result {
+            let error_msg = error.to_string();
+            assert!(error_msg.contains("number of") || error_msg.contains("array") || error_msg.contains("string"));
+        }
+
+    }
+
+    #[test]
     fn test_string_length_equal_to() {
         let rule_text = r#"
         A **user** passes validation if the length of __password__ of **user** is equal to 8.
@@ -1219,12 +1261,12 @@ A **user** is valid if __age__ of **user** is greater than 18
         let (results, _trace) = evaluate_rule_set(&rule_set, &json_data).unwrap();
         assert!(!results["valid"], "Should return false when property is not found");
     }
-    
+
     #[test]
     fn test_property_against_property() {
         let input = r#"A **user** is valid if __age__ of **user** is greater than __min_age__ of **config**."#;
         let rule_set = parse_rules(input).unwrap();
-        
+
         let json_data = json!({
             "user": {
                 "age": 25
