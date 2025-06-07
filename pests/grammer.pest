@@ -46,7 +46,7 @@ property_access = {
 }
 
 rule_reference = { "the"? ~ object_selector ~ reference_name }
-reference_name = @{ (!("." | "and" | "or" | "\n") ~ ANY)+ }
+reference_name = @{ (!("." | "\n") ~ ANY)+ }
 
 predicate = {
     comparison_operator ~ (property_access | value) |

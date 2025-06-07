@@ -72,17 +72,6 @@ async fn handle_run(
     State(state): State<AppState>,
     Json(package): Json<RuleDataPackage>
 ) -> (StatusCode, Json<EvaluationResponse>) {
-    if !state.flags_client.is("run_v1").enabled().await {
-        return (StatusCode::NOT_IMPLEMENTED, Json(EvaluationResponse{
-            result: false,
-            error: None,
-            trace: None,
-            labels: None,
-            rule: Vec::new(),
-            data: Value::Null,
-        }));
-    }
-
     match parse_rules(&package.rule) {
         Ok(rule_set) => match evaluate_rule_set(&rule_set, &package.data) {
             Ok((results, trace)) => {
