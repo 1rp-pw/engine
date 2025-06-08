@@ -1286,12 +1286,10 @@ A **user** is valid if __age__ of **user** is greater than 18
   and **login** passes the password tests.
 
 A **login** passes the username tests
-  if __username__ of **login** is not empty
-  and length of __username__ in **login** is at least 3.
+  if length of __username__ in **login** is at least 3.
 
 A **login** passes the password tests
-  if __username__ of **login** is not empty
-  and length of __password__ in **login** is at least 5."#;
+  if length of __password__ in **login** is at least 5."#;
 
         let rule_set = parse_rules(input).unwrap();
 
