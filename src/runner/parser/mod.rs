@@ -386,6 +386,8 @@ fn parse_comparison_operator(pair: Pair<Rule>) -> Result<ComparisonOperator, Rul
         "is in" => Ok(ComparisonOperator::In),
         "is not in" => Ok(ComparisonOperator::NotIn),
         "contains" => Ok(ComparisonOperator::Contains),
+        "is empty" => Ok(ComparisonOperator::IsEmpty),
+        "is not empty" => Ok(ComparisonOperator::IsNotEmpty),
         _ => Err(RuleError::ParseError(format!("Unknown operator: {}", pair.as_str())))
     }
 }
@@ -431,6 +433,8 @@ fn parse_regular_property_condition(
                 "is in" => ComparisonOperator::In,
                 "is not in" => ComparisonOperator::NotIn,
                 "contains" => ComparisonOperator::Contains,
+                "is empty" => ComparisonOperator::IsEmpty,
+                "is not empty" => ComparisonOperator::IsNotEmpty,
                 _ => return Err(RuleError::ParseError(format!("Unknown operator: {}", operator_pair.as_str())))
             }
         }
@@ -441,15 +445,26 @@ fn parse_regular_property_condition(
                 _ => return Err(RuleError::ParseError(format!("Unknown list operator: {}", operator_pair.as_str())))
             }
         }
+        Rule::empty_operator => {
+            match operator_pair.as_str() {
+                "is empty" => ComparisonOperator::IsEmpty,
+                "is not empty" => ComparisonOperator::IsNotEmpty,
+                _ => return Err(RuleError::ParseError(format!("Unknown empty operator: {}", operator_pair.as_str())))
+            }
+        }
         _ => return Err(RuleError::ParseError("Expected operator".to_string()))
     };
 
-    // Parse right operand
-    let right_pair = predicate_inner.next()
-        .ok_or_else(|| RuleError::ParseError("Missing right operand".to_string()))?;
-    let rp = right_pair.clone();
+    // Parse right operand (empty operators don't need one)
+    let (right_value, right_property_path) = if matches!(operator, ComparisonOperator::IsEmpty | ComparisonOperator::IsNotEmpty) {
+        // Empty operators don't have a right operand, use a dummy value
+        (PositionedValue::new(RuleValue::String("".to_string())), None)
+    } else {
+        let right_pair = predicate_inner.next()
+            .ok_or_else(|| RuleError::ParseError("Missing right operand".to_string()))?;
+        let rp = right_pair.clone();
 
-    let (right_value, right_property_path) = match right_pair.as_rule() {
+        match right_pair.as_rule() {
         Rule::property_access => {
             let right_path = parse_property_access(right_pair)?;
             let value_span = rp.as_span();
@@ -498,6 +513,7 @@ fn parse_regular_property_condition(
             )
         }
         _ => return Err(RuleError::ParseError(format!("Unknown right operand type: {:?}", right_pair.as_rule())))
+        }
     };
 
     Ok(ComparisonCondition {

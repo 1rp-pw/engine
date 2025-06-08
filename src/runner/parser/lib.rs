@@ -471,6 +471,75 @@ A **user** is valid if __score__ of **user** is in [85, 90, 95, 100].
     }
 
     #[test]
+    fn test_parse_empty_operators() {
+        // Test "is empty" operator
+        let input = r#"A **login** is valid if __username__ of **login** is empty."#;
+
+        let result = parse_rules(input);
+        assert!(result.is_ok());
+
+        let rule_set = result.unwrap();
+        let rule = &rule_set.rules[0];
+
+        match &rule.conditions[0].condition {
+            Condition::Comparison(comp) => {
+                assert_eq!(comp.operator, ComparisonOperator::IsEmpty);
+                assert_eq!(comp.property.value, "username");
+                assert_eq!(comp.selector.value, "login");
+            }
+            _ => panic!("Expected comparison condition"),
+        }
+
+        // Test "is not empty" operator
+        let input = r#"A **login** is valid if __username__ of **login** is not empty."#;
+
+        let result = parse_rules(input);
+        assert!(result.is_ok());
+
+        let rule_set = result.unwrap();
+        let rule = &rule_set.rules[0];
+
+        match &rule.conditions[0].condition {
+            Condition::Comparison(comp) => {
+                assert_eq!(comp.operator, ComparisonOperator::IsNotEmpty);
+                assert_eq!(comp.property.value, "username");
+                assert_eq!(comp.selector.value, "login");
+            }
+            _ => panic!("Expected comparison condition"),
+        }
+    }
+
+    #[test]
+    fn test_parse_complex_rule_with_empty_operators() {
+        let input = r#"A **login** is valid if __username__ of **login** is not empty and __password__ of **login** contains "@"."#;
+
+        let result = parse_rules(input);
+        assert!(result.is_ok());
+
+        let rule_set = result.unwrap();
+        let rule = &rule_set.rules[0];
+        assert_eq!(rule.conditions.len(), 2);
+
+        // First condition: username is not empty
+        match &rule.conditions[0].condition {
+            Condition::Comparison(comp) => {
+                assert_eq!(comp.operator, ComparisonOperator::IsNotEmpty);
+                assert_eq!(comp.property.value, "username");
+            }
+            _ => panic!("Expected comparison condition"),
+        }
+
+        // Second condition: password contains "@"
+        match &rule.conditions[1].condition {
+            Condition::Comparison(comp) => {
+                assert_eq!(comp.operator, ComparisonOperator::Contains);
+                assert_eq!(comp.property.value, "password");
+            }
+            _ => panic!("Expected comparison condition"),
+        }
+    }
+
+    #[test]
     fn test_parse_whitespace_and_formatting() {
         let input = r#"
 

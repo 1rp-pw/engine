@@ -21,6 +21,8 @@ mod tests {
         assert_eq!(ComparisonOperator::In.to_string(), "is in");
         assert_eq!(ComparisonOperator::NotIn.to_string(), "is not in");
         assert_eq!(ComparisonOperator::Contains.to_string(), "contains");
+        assert_eq!(ComparisonOperator::IsEmpty.to_string(), "is empty");
+        assert_eq!(ComparisonOperator::IsNotEmpty.to_string(), "is not empty");
     }
 
     #[test]
