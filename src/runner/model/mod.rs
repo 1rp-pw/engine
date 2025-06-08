@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::fmt;
 use serde::Serialize;
 use std::borrow::Cow;
+use std::sync::RwLock;
 
 // String constants to avoid allocations
 pub mod constants {
@@ -17,6 +18,85 @@ pub mod constants {
     pub const STATUS: &str = "status";
     pub const ACTIVE: &str = "active";
     pub const PERSON: &str = "person";
+}
+
+// Caching system for performance optimization
+#[derive(Debug, Default)]
+pub struct PerformanceCache {
+    // Cache for rule fuzzy matching to avoid O(n) searches
+    pub rule_fuzzy_matches: RwLock<HashMap<String, Option<String>>>,
+    
+    // Cache for JSON property lookups to avoid repeated case-insensitive searches
+    pub json_property_lookups: RwLock<HashMap<(String, String), Option<String>>>,
+    
+    // Cache for selector transformations (e.g., "user profile" -> "userProfile")
+    pub selector_transformations: RwLock<HashMap<String, String>>,
+    
+    // Cache for effective selector resolutions
+    pub effective_selectors: RwLock<HashMap<String, Option<String>>>,
+    
+    // Cache for property name transformations
+    pub property_transformations: RwLock<HashMap<String, String>>,
+}
+
+impl PerformanceCache {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    
+    pub fn clear(&self) {
+        if let Ok(mut cache) = self.rule_fuzzy_matches.write() {
+            cache.clear();
+        }
+        if let Ok(mut cache) = self.json_property_lookups.write() {
+            cache.clear();
+        }
+        if let Ok(mut cache) = self.selector_transformations.write() {
+            cache.clear();
+        }
+        if let Ok(mut cache) = self.effective_selectors.write() {
+            cache.clear();
+        }
+        if let Ok(mut cache) = self.property_transformations.write() {
+            cache.clear();
+        }
+    }
+    
+    // Get cache statistics for monitoring
+    pub fn get_stats(&self) -> CacheStats {
+        let rule_count = self.rule_fuzzy_matches.read()
+            .map(|cache| cache.len())
+            .unwrap_or(0);
+        let json_count = self.json_property_lookups.read()
+            .map(|cache| cache.len())
+            .unwrap_or(0);
+        let selector_count = self.selector_transformations.read()
+            .map(|cache| cache.len())
+            .unwrap_or(0);
+        let effective_count = self.effective_selectors.read()
+            .map(|cache| cache.len())
+            .unwrap_or(0);
+        let property_count = self.property_transformations.read()
+            .map(|cache| cache.len())
+            .unwrap_or(0);
+            
+        CacheStats {
+            rule_fuzzy_matches: rule_count,
+            json_property_lookups: json_count,
+            selector_transformations: selector_count,
+            effective_selectors: effective_count,
+            property_transformations: property_count,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CacheStats {
+    pub rule_fuzzy_matches: usize,
+    pub json_property_lookups: usize,
+    pub selector_transformations: usize,
+    pub effective_selectors: usize,
+    pub property_transformations: usize,
 }
 
 /// Efficient string type that avoids allocations for common strings
@@ -289,6 +369,7 @@ pub struct RuleSet {
     pub rules: Vec<Rule>,
     pub(crate) rule_map: HashMap<String, usize>,
     pub(crate) label_map: HashMap<String, usize>,
+    pub cache: PerformanceCache,
 }
 
 impl RuleSet {
@@ -297,6 +378,16 @@ impl RuleSet {
             rules: Vec::new(),
             rule_map: HashMap::new(),
             label_map: HashMap::new(),
+            cache: PerformanceCache::new(),
+        }
+    }
+    
+    pub fn with_capacity(capacity: usize) -> Self {
+        RuleSet {
+            rules: Vec::with_capacity(capacity),
+            rule_map: HashMap::with_capacity(capacity),
+            label_map: HashMap::with_capacity(capacity),
+            cache: PerformanceCache::new(),
         }
     }
 
@@ -308,6 +399,18 @@ impl RuleSet {
 
         self.rule_map.insert(rule.outcome.clone(), index);
         self.rules.push(rule);
+    }
+    
+    pub fn add_rules(&mut self, rules: Vec<Rule>) {
+        // Reserve capacity to avoid reallocations
+        let new_capacity = self.rules.len() + rules.len();
+        self.rules.reserve(new_capacity);
+        self.rule_map.reserve(rules.len());
+        self.label_map.reserve(rules.len());
+        
+        for rule in rules {
+            self.add_rule(rule);
+        }
     }
 
     pub fn get_rule(&self, outcome: &str) -> Option<&Rule> {

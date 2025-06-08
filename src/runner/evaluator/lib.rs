@@ -232,7 +232,7 @@ mod tests {
         let mut evaluation_stack = HashSet::new();
         let mut call_path = Vec::new();
 
-        let rule_set = RuleSet { rules: vec![], rule_map, label_map  };
+        let rule_set = RuleSet { rules: vec![], rule_map, label_map, cache: crate::runner::model::PerformanceCache::new() };
         let (result, _trace) = evaluate_rule(&rule, &json, &rule_set, &mut evaluation_stack, &mut call_path).unwrap();
         assert_eq!(result, true);
     }
@@ -287,7 +287,7 @@ mod tests {
         let mut evaluation_stack = HashSet::new();
         let mut call_path = Vec::new();
 
-        let rule_set = RuleSet { rules: vec![], rule_map, label_map };
+        let rule_set = RuleSet { rules: vec![], rule_map, label_map, cache: crate::runner::model::PerformanceCache::new() };
         let (result, _trace) = evaluate_rule(&rule, &json, &rule_set, &mut evaluation_stack, &mut call_path).unwrap();
         assert_eq!(result, true);
     }
@@ -341,7 +341,7 @@ mod tests {
         let mut evaluation_stack = HashSet::new();
         let mut call_path = Vec::new();
 
-        let rule_set = RuleSet { rules: vec![], rule_map, label_map };
+        let rule_set = RuleSet { rules: vec![], rule_map, label_map, cache: crate::runner::model::PerformanceCache::new() };
         let (result, _trace) = evaluate_rule(&rule, &json, &rule_set, &mut evaluation_stack, &mut call_path).unwrap();
         assert_eq!(result, true); // Should be true because vip is true, even though age < 18
     }
@@ -394,8 +394,13 @@ mod tests {
             position: None,
         };
 
-        let rule_map: HashMap<String, usize> = HashMap::new();
-        let label_map: HashMap<String, usize> = HashMap::new();
+        let mut rule_map = HashMap::new();
+        rule_map.insert("adult".to_string(), 0);    // age_rule is at index 0
+        rule_map.insert("global".to_string(), 1);   // main_rule is at index 1
+
+        let mut label_map = HashMap::new();
+        label_map.insert("age check".to_string(), 0);
+        label_map.insert("main rule".to_string(), 1);
 
         let mut evaluation_stack = HashSet::new();
         let mut call_path = Vec::new();
@@ -403,7 +408,8 @@ mod tests {
         let rule_set = RuleSet {
             rules: vec![age_rule, main_rule.clone()],
             rule_map,
-            label_map
+            label_map,
+            cache: crate::runner::model::PerformanceCache::new()
         };
 
         let (result, _trace) = evaluate_rule(&main_rule, &json, &rule_set, &mut evaluation_stack, &mut call_path).unwrap();
@@ -466,7 +472,8 @@ mod tests {
         let rule_set = RuleSet {
             rules: vec![age_rule, global_rule],
             rule_map,
-            label_map
+            label_map,
+            cache: crate::runner::model::PerformanceCache::new()
         };
 
         let (results, _trace) = evaluate_rule_set(&rule_set, &json).unwrap();
@@ -770,6 +777,7 @@ mod tests {
             rules: vec![rule1, rule2, rule3, global_rule],
             rule_map,
             label_map: HashMap::new(),
+            cache: crate::runner::model::PerformanceCache::new(),
         };
 
         // Test that cycle detection catches the infinite loop
@@ -908,6 +916,7 @@ mod tests {
             rules: vec![age_check_rule, main_rule],
             rule_map,
             label_map: HashMap::new(),
+            cache: crate::runner::model::PerformanceCache::new(),
         };
 
         // This should succeed without any cycle detection errors

@@ -277,6 +277,13 @@ fn try_evaluate_by_rule(
 }
 
 fn find_rule_fuzzy_match<'a>(rule_name: &str, rule_set: &'a RuleSet) -> Option<&'a Rule> {
+    // Check cache first
+    if let Ok(cache) = rule_set.cache.rule_fuzzy_matches.read() {
+        if let Some(cached_outcome) = cache.get(rule_name) {
+            return cached_outcome.as_ref().and_then(|outcome| rule_set.get_rule(outcome));
+        }
+    }
+
     let rule_name_lower = rule_name.to_lowercase();
 
     // First, try to match rules where the outcome contains key parts of the rule_name
@@ -294,28 +301,42 @@ fn find_rule_fuzzy_match<'a>(rule_name: &str, rule_set: &'a RuleSet) -> Option<&
     }
 
     // Now try to find a matching rule
-    for rule in &rule_set.rules {
-        let outcome_lower = rule.outcome.to_lowercase();
-
+    let mut found_outcome: Option<String> = None;
+    
+    // Pre-allocate lowercase strings to avoid repeated allocations in loop
+    let rule_outcomes_lower: Vec<_> = rule_set.rules
+        .iter()
+        .map(|rule| rule.outcome.to_lowercase())
+        .collect();
+    
+    for (rule, outcome_lower) in rule_set.rules.iter().zip(rule_outcomes_lower.iter()) {
         // Check if the rule outcome matches the cleaned rule name
-        if outcome_lower == cleaned_rule_name {
-            return Some(rule);
+        if outcome_lower == &cleaned_rule_name {
+            found_outcome = Some(rule.outcome.clone());
+            break;
         }
 
         // Check if either contains the other
-        if outcome_lower.contains(&cleaned_rule_name) || cleaned_rule_name.contains(&outcome_lower) {
-            return Some(rule);
+        if outcome_lower.contains(&cleaned_rule_name) || cleaned_rule_name.contains(outcome_lower) {
+            found_outcome = Some(rule.outcome.clone());
+            break;
         }
 
         // Original checks with full rule_name
-        if outcome_lower == rule_name_lower ||
+        if outcome_lower == &rule_name_lower ||
             outcome_lower.contains(&rule_name_lower) ||
-            rule_name_lower.contains(&outcome_lower) {
-            return Some(rule);
+            rule_name_lower.contains(outcome_lower) {
+            found_outcome = Some(rule.outcome.clone());
+            break;
         }
     }
 
-    None
+    // Cache the result
+    if let Ok(mut cache) = rule_set.cache.rule_fuzzy_matches.write() {
+        cache.insert(rule_name.to_string(), found_outcome.clone());
+    }
+
+    found_outcome.and_then(|outcome| rule_set.get_rule(&outcome))
 }
 
 fn try_evaluate_as_property(
@@ -1250,9 +1271,10 @@ fn get_json_value_insensitive<'a>(json: &'a serde_json::Value, key: &str) -> Opt
             return Some(value);
         }
         
-        // Then try case-insensitive match
+        // Then try case-insensitive match using more efficient approach
+        let key_lower = key.to_ascii_lowercase();
         for (k, v) in obj {
-            if k.eq_ignore_ascii_case(key) {
+            if k.to_ascii_lowercase() == key_lower {
                 return Some(v);
             }
         }

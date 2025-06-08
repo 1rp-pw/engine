@@ -16,7 +16,12 @@ pub fn parse_rules(input: &str) -> Result<RuleSet, RuleError> {
     let pairs = RuleParser::parse(Rule::rule_set, input)
         .map_err(|e| RuleError::ParseError(e.to_string()))?;
 
-    let mut rule_set = RuleSet::new();
+    // Pre-estimate rule count for better allocation
+    let estimated_rule_count = input.lines()
+        .filter(|line| line.trim_start().starts_with("A ") || line.trim_start().starts_with("An "))
+        .count();
+    
+    let mut rule_set = RuleSet::with_capacity(estimated_rule_count.max(10));
 
     for pair in pairs {
         match pair.as_rule() {
@@ -528,7 +533,8 @@ fn parse_regular_property_condition(
 }
 
 fn parse_property_access(pair: Pair<Rule>) -> Result<crate::runner::model::PropertyPath, RuleError> {
-    let mut properties = Vec::new();
+    // Pre-allocate with expected size to avoid reallocations
+    let mut properties = Vec::with_capacity(3); // Most property chains are short
     let mut selector = String::new();
 
     for inner in pair.into_inner() {
@@ -545,6 +551,9 @@ fn parse_property_access(pair: Pair<Rule>) -> Result<crate::runner::model::Prope
             _ => {}
         }
     }
+
+    // Shrink to fit if we over-allocated
+    properties.shrink_to_fit();
 
     Ok(crate::runner::model::PropertyPath {
         properties,
@@ -600,11 +609,15 @@ fn parse_rule_reference(pair: Pair<Rule>) -> Result<RuleReferenceCondition, Rule
 
 fn parse_list_value(pair: Pair<Rule>) -> Result<RuleValue, RuleError> {
     let inner_pairs = pair.into_inner();
-    let mut values = Vec::new();
+    // Pre-allocate with reasonable size - most lists are small
+    let mut values = Vec::with_capacity(5);
 
     for value_pair in inner_pairs {
         values.push(parse_value(value_pair)?);
     }
+
+    // Shrink to fit to save memory
+    values.shrink_to_fit();
 
     Ok(RuleValue::List(values))
 }
