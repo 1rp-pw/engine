@@ -6,7 +6,7 @@ use pest::error::InputLocation::Pos;
 use pest::Parser;
 use pest_derive::Parser;
 use pest::iterators::Pair;
-use crate::runner::model::{ComparisonOperator, RuleSet, RuleValue, Condition, SourcePosition, ConditionOperator, ComparisonCondition, PositionedValue, RuleReferenceCondition, PropertyPath};
+use crate::runner::model::{ComparisonOperator, RuleSet, RuleValue, Condition, SourcePosition, ConditionOperator, ComparisonCondition, PositionedValue, RuleReferenceCondition, PropertyPath, constants};
 
 #[derive(Parser)]
 #[grammar = "pests/grammer.pest"]
@@ -263,7 +263,7 @@ fn parse_length_of_condition(
 
     Ok(ComparisonCondition {
         selector: PositionedValue::new(property_path.selector.clone()),
-        property: PositionedValue::new("__length_of__".to_string()), // Special marker for length
+        property: PositionedValue::from_static(constants::LENGTH_OF_MARKER), // Special marker for length
         operator,
         value: right_value,
         property_chain: None,
@@ -329,7 +329,7 @@ fn parse_number_of_condition(
 
     Ok(ComparisonCondition {
         selector: PositionedValue::new(property_path.selector.clone()),
-        property: PositionedValue::new("__number_of__".to_string()), // Special marker for length
+        property: PositionedValue::from_static(constants::NUMBER_OF_MARKER), // Special marker for number_of
         operator,
         value: right_value,
         property_chain: None,
@@ -518,7 +518,7 @@ fn parse_regular_property_condition(
 
     Ok(ComparisonCondition {
         selector: PositionedValue::new(left_path.selector.clone()),
-        property: PositionedValue::new(left_path.properties.last().unwrap_or(&String::new()).clone()),
+        property: PositionedValue::new(left_path.properties.last().map(|s| s.clone()).unwrap_or_else(|| constants::EMPTY_STRING.to_string())),
         operator,
         value: right_value,
         property_chain: None,

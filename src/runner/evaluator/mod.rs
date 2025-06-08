@@ -1193,7 +1193,7 @@ fn compare_contains(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleErr
 fn is_equal(left: &RuleValue, right: &RuleValue) -> bool {
     match (left, right) {
         (RuleValue::Number(l), RuleValue::Number(r)) => l == r,
-        (RuleValue::String(l), RuleValue::String(r)) => l == r,
+        (RuleValue::String(l), RuleValue::String(r)) => l == r, // String comparison is already efficient
         (RuleValue::Date(l), RuleValue::Date(r)) => l == r,
         (RuleValue::Boolean(l), RuleValue::Boolean(r)) => l == r,
         _ => false,
@@ -1218,12 +1218,25 @@ fn transform_selector_name(name: &str) -> String {
     if words.is_empty() {
         return String::new();
     }
+    
+    if words.len() == 1 {
+        return words[0].to_lowercase();
+    }
 
-    let mut result = words[0].to_lowercase();
+    // Pre-allocate with reasonable capacity to avoid reallocations
+    let estimated_size = name.len(); // Conservative estimate
+    let mut result = String::with_capacity(estimated_size);
+    result.push_str(&words[0].to_lowercase());
+    
     for word in &words[1..] {
         if !word.is_empty() {
-            result.push_str(&word[0..1].to_uppercase());
-            result.push_str(&word[1..].to_lowercase());
+            // Capitalize first letter
+            if let Some(first_char) = word.chars().next() {
+                result.extend(first_char.to_uppercase());
+                if word.len() > 1 {
+                    result.push_str(&word[1..].to_lowercase());
+                }
+            }
         }
     }
 
@@ -1232,9 +1245,14 @@ fn transform_selector_name(name: &str) -> String {
 
 fn get_json_value_insensitive<'a>(json: &'a serde_json::Value, key: &str) -> Option<&'a serde_json::Value> {
     if let Some(obj) = json.as_object() {
-        let key_lower = key.to_lowercase();
+        // First try exact match (most common case)
+        if let Some(value) = obj.get(key) {
+            return Some(value);
+        }
+        
+        // Then try case-insensitive match
         for (k, v) in obj {
-            if k.to_lowercase() == key_lower {
+            if k.eq_ignore_ascii_case(key) {
                 return Some(v);
             }
         }

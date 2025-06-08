@@ -4,6 +4,60 @@ use chrono::NaiveDate;
 use std::collections::HashMap;
 use std::fmt;
 use serde::Serialize;
+use std::borrow::Cow;
+
+// String constants to avoid allocations
+pub mod constants {
+    pub const LENGTH_OF_MARKER: &str = "__length_of__";
+    pub const NUMBER_OF_MARKER: &str = "__number_of__";
+    pub const EMPTY_STRING: &str = "";
+    pub const USER: &str = "user";
+    pub const AGE: &str = "age";
+    pub const NAME: &str = "name";
+    pub const STATUS: &str = "status";
+    pub const ACTIVE: &str = "active";
+    pub const PERSON: &str = "person";
+}
+
+/// Efficient string type that avoids allocations for common strings
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct EfficientString(Cow<'static, str>);
+
+impl EfficientString {
+    pub fn from_static(s: &'static str) -> Self {
+        Self(Cow::Borrowed(s))
+    }
+    
+    pub fn from_string(s: String) -> Self {
+        Self(Cow::Owned(s))
+    }
+    
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+    
+    pub fn into_string(self) -> String {
+        self.0.into_owned()
+    }
+}
+
+impl fmt::Display for EfficientString {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<&'static str> for EfficientString {
+    fn from(s: &'static str) -> Self {
+        Self::from_static(s)
+    }
+}
+
+impl From<String> for EfficientString {
+    fn from(s: String) -> Self {
+        Self::from_string(s)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum ComparisonOperator {
@@ -167,6 +221,17 @@ impl<T> PositionedValue<T> {
 
     pub fn with_position(value: T, pos: Option<SourcePosition>) -> Self {
         Self { value, pos }
+    }
+}
+
+// Specialized constructors for common string values to avoid allocations
+impl PositionedValue<String> {
+    pub fn from_static(value: &'static str) -> Self {
+        Self { value: value.to_string(), pos: None }
+    }
+    
+    pub fn from_static_with_pos(value: &'static str, pos: Option<SourcePosition>) -> Self {
+        Self { value: value.to_string(), pos }
     }
 }
 
