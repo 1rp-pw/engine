@@ -9,7 +9,7 @@ mod tests {
         compare_in_list, compare_not_equal, compare_not_in_list, compare_numbers_gt,
         compare_numbers_gte, compare_numbers_lt, compare_numbers_lte, evaluate_rule_set,
         evaluate_rule, evaluate_comparison_condition, convert_json_to_rule_value,
-        find_effective_selector, extract_value_from_json
+        find_effective_selector, extract_value_from_json, compare_is_empty, compare_is_not_empty
     };
     use crate::runner::model::{
         RuleValue, Rule, RuleSet, Condition, ComparisonCondition, RuleReferenceCondition,
@@ -790,6 +790,53 @@ mod tests {
                 panic!("Expected infinite loop error, but got: {:?}", other_error);
             }
         }
+    }
+
+    #[test]
+    fn test_empty_string_operations() {
+        let empty_string = RuleValue::String("".to_string());
+        let non_empty_string = RuleValue::String("hello".to_string());
+
+        // Test is empty
+        assert_eq!(compare_is_empty(&empty_string).unwrap(), true);
+        assert_eq!(compare_is_empty(&non_empty_string).unwrap(), false);
+
+        // Test is not empty
+        assert_eq!(compare_is_not_empty(&empty_string).unwrap(), false);
+        assert_eq!(compare_is_not_empty(&non_empty_string).unwrap(), true);
+    }
+
+    #[test]
+    fn test_empty_list_operations() {
+        let empty_list = RuleValue::List(vec![]);
+        let non_empty_list = RuleValue::List(vec![
+            RuleValue::String("item1".to_string()),
+            RuleValue::Number(42.0),
+        ]);
+
+        // Test is empty
+        assert_eq!(compare_is_empty(&empty_list).unwrap(), true);
+        assert_eq!(compare_is_empty(&non_empty_list).unwrap(), false);
+
+        // Test is not empty
+        assert_eq!(compare_is_not_empty(&empty_list).unwrap(), false);
+        assert_eq!(compare_is_not_empty(&non_empty_list).unwrap(), true);
+    }
+
+    #[test]
+    fn test_empty_operations_with_unsupported_types() {
+        let number_value = RuleValue::Number(42.0);
+        let boolean_value = RuleValue::Boolean(true);
+        let date_value = RuleValue::Date(NaiveDate::from_ymd_opt(2023, 1, 1).unwrap());
+
+        // Test that unsupported types return errors
+        assert!(compare_is_empty(&number_value).is_err());
+        assert!(compare_is_empty(&boolean_value).is_err());
+        assert!(compare_is_empty(&date_value).is_err());
+
+        assert!(compare_is_not_empty(&number_value).is_err());
+        assert!(compare_is_not_empty(&boolean_value).is_err());
+        assert!(compare_is_not_empty(&date_value).is_err());
     }
 
     #[test]

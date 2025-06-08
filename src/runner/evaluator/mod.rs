@@ -1051,6 +1051,10 @@ fn evaluate_comparison(
         In => compare_in_list(left, right),
         NotIn => compare_not_in_list(left, right),
         Contains => compare_contains(left, right),
+        
+        // Empty checks (only use left operand, ignore right)
+        IsEmpty => compare_is_empty(left),
+        IsNotEmpty => compare_is_not_empty(left),
     }
 }
 
@@ -1194,6 +1198,19 @@ fn is_equal(left: &RuleValue, right: &RuleValue) -> bool {
         (RuleValue::Boolean(l), RuleValue::Boolean(r)) => l == r,
         _ => false,
     }
+}
+
+// Empty check functions
+pub fn compare_is_empty(value: &RuleValue) -> Result<bool, RuleError> {
+    match value {
+        RuleValue::String(s) => Ok(s.is_empty()),
+        RuleValue::List(items) => Ok(items.is_empty()),
+        _ => Err(RuleError::TypeError("IsEmpty only works with strings or lists".to_string())),
+    }
+}
+
+pub fn compare_is_not_empty(value: &RuleValue) -> Result<bool, RuleError> {
+    compare_is_empty(value).map(|result| !result)
 }
 
 fn transform_selector_name(name: &str) -> String {

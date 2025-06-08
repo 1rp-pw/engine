@@ -18,6 +18,8 @@ pub enum ComparisonOperator {
     In,
     NotIn,
     Contains,
+    IsEmpty,
+    IsNotEmpty,
 }
 
 impl fmt::Display for ComparisonOperator {
@@ -39,6 +41,8 @@ impl fmt::Display for ComparisonOperator {
             ComparisonOperator::In => write!(f, "is in"),
             ComparisonOperator::NotIn => write!(f, "is not in"),
             ComparisonOperator::Contains => write!(f, "contains"),
+            ComparisonOperator::IsEmpty => write!(f, "is empty"),
+            ComparisonOperator::IsNotEmpty => write!(f, "is not empty"),
         }
     }
 }
@@ -69,6 +73,8 @@ impl ComparisonOperator {
             ComparisonOperator::In => vec!["is in"],
             ComparisonOperator::NotIn => vec!["is not in"],
             ComparisonOperator::Contains => vec!["contains"],
+            ComparisonOperator::IsEmpty => vec!["is empty"],
+            ComparisonOperator::IsNotEmpty => vec!["is not empty"],
         }
     }
 }
