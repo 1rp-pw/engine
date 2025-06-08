@@ -1278,6 +1278,39 @@ A **user** is valid if __age__ of **user** is greater than 18
         let (results, _trace) = evaluate_rule_set(&rule_set, &json_data).unwrap();
         assert!(results["valid"]);
     }
+
+    #[test]
+    fn test_username_and_password_validation() {
+        let input = r#"A **login** is valid
+  if **login** passes the username tests
+  and **login** passes the password tests.
+
+A **login** passes the username tests
+  if length of __username__ in **login** is at least 3.
+
+A **login** passes the password tests
+  if length of __password__ in **login** is at least 5."#;
+
+        let rule_set = parse_rules(input).unwrap();
+
+        let json_good = json!({
+            "login": {
+                "username": "john",
+                "password": "<PASSWORD>"
+            }
+        });
+        let (results_good, _trace_good) = evaluate_rule_set(&rule_set, &json_good).unwrap();
+        assert!(results_good["valid"]);
+        
+        let json_bad_username = json!({
+            "login": {
+                "username": "jo",
+                "password": "<PASSWORD>"
+            }
+        });
+        let (results_bad_username, _trace_bad_username) = evaluate_rule_set(&rule_set, &json_bad_username).unwrap();
+        assert!(!results_bad_username["valid"]);
+    }
 }
 
 
