@@ -329,6 +329,27 @@ mod tests {
     }
 
     #[test]
+    fn test_custom_object_selector_mapping() {
+        use crate::runner::parser::parse_rules;
+
+        // Parse the rules first
+        let input = r#"
+        A **driver** is valid if the **driver** passes the test.
+        A **driver** passes the test if the __name__ of the **person** is equal to "bob".
+        "#;
+
+        let mut rule_set = parse_rules(input).unwrap();
+        
+        // Add the mapping: **driver** -> **person**
+        rule_set.map_selector("driver", "person");
+
+        // Test the mapping functionality
+        assert_eq!(rule_set.resolve_selector("driver"), "person");
+        assert_eq!(rule_set.resolve_selector("person"), "person"); // Unmapped selectors return themselves
+        assert_eq!(rule_set.resolve_selector("user"), "user"); // Unmapped selectors return themselves
+    }
+
+    #[test]
     fn test_property_deduplication() {
         let properties = infer_possible_properties("test");
         // For single word "test", the function generates duplicates because

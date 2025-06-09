@@ -1368,6 +1368,96 @@ fn find_effective_selector(selector: &str, json: &Value) -> Result<Option<String
     Ok(None)
 }
 
+fn find_effective_selector_with_mapping(selector: &str, json: &Value, rule_set: &RuleSet) -> Result<Option<String>, RuleError> {
+    // First resolve the selector through mappings
+    let actual_selector = rule_set.resolve_selector(selector);
+    
+    // Then find the effective selector in JSON
+    find_effective_selector(&actual_selector, json)
+}
+
+fn resolve_property_path_with_mapping<'a>(
+    path: &crate::runner::model::PropertyPath,
+    json: &'a Value,
+    rule_set: &RuleSet
+) -> Result<(Option<&'a Value>, String), RuleError> {
+    let mut path_parts = vec![path.selector.clone()];
+
+    // Find effective selector with mapping support
+    let effective_selector = find_effective_selector_with_mapping(&path.selector, json, rule_set)?;
+    if effective_selector.is_none() {
+        return Ok((None, format!("$.{}", path.selector)));
+    }
+
+    let final_selector = effective_selector.unwrap();
+    let mut current_value = json.get(&final_selector)
+        .ok_or_else(|| RuleError::EvaluationError(format!("Selector '{}' not found", final_selector)))?;
+
+    path_parts[0] = final_selector.clone(); // Use the actual key from JSON
+
+    let is_length_of_operator = is_length_of_operation(path);
+    let is_number_of_operator = is_number_of_operation(path);
+    
+    let properties_to_process = if is_length_of_operator {
+        &path.properties[..path.properties.len() - 1]
+    } else if is_number_of_operator {
+        &path.properties[..path.properties.len() - 1]
+    } else {
+        &path.properties[..]
+    };
+
+    // Follow the property chain - properties are in reverse order
+    // For "__id__ of __group__ of **user**", we get properties: ["id", "group"]
+    // But we need to traverse: user -> group -> id
+    for property in properties_to_process.iter().rev() {
+        let mut found_property = None;
+        let mut actual_property_name = property.clone();
+
+        if let Some(prop_value) = current_value.get(property) {
+            found_property = Some(prop_value);
+        } else if let Some(prop_value) = get_json_value_insensitive(current_value, property) {
+            found_property = Some(prop_value);
+            // Find the actual property name in the JSON for path tracking
+            if let Some(obj) = current_value.as_object() {
+                for (key, _) in obj {
+                    if names_match(property, key) {
+                        actual_property_name = key.clone();
+                        break;
+                    }
+                }
+            }
+        } else {
+            let transformed_property = transform_property_name(property);
+            if let Some(prop_value) = current_value.get(&transformed_property) {
+                found_property = Some(prop_value);
+                actual_property_name = transformed_property.clone();
+            } else if let Some(prop_value) = get_json_value_insensitive(current_value, &transformed_property) {
+                found_property = Some(prop_value);
+                // Find the actual property name in the JSON for path tracking
+                if let Some(obj) = current_value.as_object() {
+                    for (key, _) in obj {
+                        if names_match(&transformed_property, key) {
+                            actual_property_name = key.clone();
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some(value) = found_property {
+            current_value = value;
+            path_parts.push(actual_property_name);
+        } else {
+            let path_so_far = format!("$.{}", path_parts.join("."));
+            return Ok((None, format!("{}.{}", path_so_far, property)));
+        }
+    }
+
+    let final_path = format!("$.{}", path_parts.join("."));
+    Ok((Some(current_value), final_path))
+}
+
 fn create_failed_rule_reference_trace(condition: &RuleReferenceCondition) -> ConditionTrace {
     ConditionTrace::RuleReference(RuleReferenceTrace {
         selector: SelectorTrace {

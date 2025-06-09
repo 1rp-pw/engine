@@ -466,6 +466,9 @@ pub struct RuleSet {
     pub(crate) rule_map: HashMap<String, usize>,
     pub(crate) label_map: HashMap<String, usize>,
     pub cache: PerformanceCache,
+    // Maps custom object selectors to actual JSON paths
+    // e.g., "driver" -> "person"
+    pub selector_mappings: HashMap<String, String>,
 }
 
 impl RuleSet {
@@ -476,6 +479,7 @@ impl RuleSet {
             rule_map: HashMap::new(),
             label_map: HashMap::new(),
             cache: PerformanceCache::new(),
+            selector_mappings: HashMap::new(),
         }
     }
     
@@ -485,6 +489,7 @@ impl RuleSet {
             rule_map: HashMap::with_capacity(capacity),
             label_map: HashMap::with_capacity(capacity),
             cache: PerformanceCache::new(),
+            selector_mappings: HashMap::new(),
         }
     }
 
@@ -517,6 +522,17 @@ impl RuleSet {
 
     pub fn get_rule_by_label(&self, label: &str) -> Option<&Rule> {
         self.label_map.get(label).map(|&index| &self.rules[index])
+    }
+
+    /// Add a mapping from a custom selector to an actual JSON path
+    /// e.g., map_selector("driver", "person") allows **driver** to reference the "person" object
+    pub fn map_selector(&mut self, custom_selector: &str, actual_path: &str) {
+        self.selector_mappings.insert(custom_selector.to_string(), actual_path.to_string());
+    }
+
+    /// Get the actual JSON path for a selector, applying mappings if they exist
+    pub fn resolve_selector(&self, selector: &str) -> String {
+        self.selector_mappings.get(selector).cloned().unwrap_or_else(|| selector.to_string())
     }
 }
 

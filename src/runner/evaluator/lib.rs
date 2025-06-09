@@ -230,7 +230,7 @@ mod tests {
         let mut evaluation_stack = HashSet::new();
         let mut call_path = Vec::new();
 
-        let rule_set = RuleSet { rules: vec![], rule_map, label_map, cache: crate::runner::model::PerformanceCache::new() };
+        let rule_set = RuleSet { rules: vec![], rule_map, label_map, cache: crate::runner::model::PerformanceCache::new(), selector_mappings: std::collections::HashMap::new() };
         let (result, _trace) = evaluate_rule(&rule, &json, &rule_set, &mut evaluation_stack, &mut call_path).unwrap();
         assert_eq!(result, true);
     }
@@ -285,7 +285,7 @@ mod tests {
         let mut evaluation_stack = HashSet::new();
         let mut call_path = Vec::new();
 
-        let rule_set = RuleSet { rules: vec![], rule_map, label_map, cache: crate::runner::model::PerformanceCache::new() };
+        let rule_set = RuleSet { rules: vec![], rule_map, label_map, cache: crate::runner::model::PerformanceCache::new(), selector_mappings: std::collections::HashMap::new() };
         let (result, _trace) = evaluate_rule(&rule, &json, &rule_set, &mut evaluation_stack, &mut call_path).unwrap();
         assert_eq!(result, true);
     }
@@ -339,7 +339,7 @@ mod tests {
         let mut evaluation_stack = HashSet::new();
         let mut call_path = Vec::new();
 
-        let rule_set = RuleSet { rules: vec![], rule_map, label_map, cache: crate::runner::model::PerformanceCache::new() };
+        let rule_set = RuleSet { rules: vec![], rule_map, label_map, cache: crate::runner::model::PerformanceCache::new(), selector_mappings: std::collections::HashMap::new() };
         let (result, _trace) = evaluate_rule(&rule, &json, &rule_set, &mut evaluation_stack, &mut call_path).unwrap();
         assert_eq!(result, true); // Should be true because vip is true, even though age < 18
     }
@@ -407,7 +407,8 @@ mod tests {
             rules: vec![age_rule, main_rule.clone()],
             rule_map,
             label_map,
-            cache: crate::runner::model::PerformanceCache::new()
+            cache: crate::runner::model::PerformanceCache::new(),
+            selector_mappings: std::collections::HashMap::new()
         };
 
         let (result, _trace) = evaluate_rule(&main_rule, &json, &rule_set, &mut evaluation_stack, &mut call_path).unwrap();
@@ -471,7 +472,8 @@ mod tests {
             rules: vec![age_rule, global_rule],
             rule_map,
             label_map,
-            cache: crate::runner::model::PerformanceCache::new()
+            cache: crate::runner::model::PerformanceCache::new(),
+            selector_mappings: std::collections::HashMap::new()
         };
 
         let (results, _trace) = evaluate_rule_set(&rule_set, &json).unwrap();
@@ -776,6 +778,7 @@ mod tests {
             rule_map,
             label_map: HashMap::new(),
             cache: crate::runner::model::PerformanceCache::new(),
+            selector_mappings: std::collections::HashMap::new(),
         };
 
         // Test that cycle detection catches the infinite loop
@@ -915,6 +918,7 @@ mod tests {
             rule_map,
             label_map: HashMap::new(),
             cache: crate::runner::model::PerformanceCache::new(),
+            selector_mappings: std::collections::HashMap::new(),
         };
 
         // This should succeed without any cycle detection errors
@@ -973,6 +977,7 @@ mod tests {
             },
             label_map: HashMap::new(),
             cache: crate::runner::model::PerformanceCache::new(),
+            selector_mappings: std::collections::HashMap::new(),
         };
 
         // Test with trace-preserving evaluation
@@ -1029,6 +1034,7 @@ mod tests {
             },
             label_map: HashMap::new(),
             cache: crate::runner::model::PerformanceCache::new(),
+            selector_mappings: std::collections::HashMap::new(),
         };
 
         // Test with trace-preserving evaluation
@@ -1128,6 +1134,7 @@ mod tests {
             rule_map,
             label_map: HashMap::new(),
             cache: crate::runner::model::PerformanceCache::new(),
+            selector_mappings: std::collections::HashMap::new(),
         };
 
         // Test with trace-preserving evaluation
@@ -1206,6 +1213,7 @@ mod tests {
             rule_map,
             label_map: HashMap::new(),
             cache: crate::runner::model::PerformanceCache::new(),
+            selector_mappings: std::collections::HashMap::new(),
         };
 
         // Test with trace-preserving evaluation
@@ -1295,6 +1303,7 @@ mod tests {
             },
             label_map: HashMap::new(),
             cache: crate::runner::model::PerformanceCache::new(),
+            selector_mappings: std::collections::HashMap::new(),
         };
 
         // Test with trace-preserving evaluation
@@ -1372,6 +1381,7 @@ mod tests {
             rule_map: HashMap::new(),
             label_map: HashMap::new(),
             cache: crate::runner::model::PerformanceCache::new(),
+            selector_mappings: std::collections::HashMap::new(),
         };
 
         let mut evaluation_stack = HashSet::new();
@@ -1603,6 +1613,7 @@ mod tests {
             rule_map,
             label_map: HashMap::new(),
             cache: crate::runner::model::PerformanceCache::new(),
+            selector_mappings: std::collections::HashMap::new(),
         };
 
         // Test both evaluation methods
