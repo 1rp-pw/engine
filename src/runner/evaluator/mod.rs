@@ -1518,6 +1518,9 @@ fn evaluate_comparison(
         // Empty checks (only use left operand, ignore right)
         IsEmpty => compare_is_empty(left),
         IsNotEmpty => compare_is_not_empty(left),
+        
+        // Duration comparison
+        Within => compare_within(left, right),
     }
 }
 
@@ -1685,6 +1688,18 @@ pub fn compare_is_empty(value: &RuleValue) -> Result<bool, RuleError> {
 
 pub fn compare_is_not_empty(value: &RuleValue) -> Result<bool, RuleError> {
     compare_is_empty(value).map(|result| !result)
+}
+
+fn compare_within(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleError> {
+    match (left, right) {
+        (RuleValue::Date(date_value), RuleValue::Duration(duration)) => {
+            let now = chrono::Utc::now().naive_utc().date();
+            let diff_days = (*date_value - now).num_days().abs() as f64;
+            let duration_days = duration.to_seconds() / 86400.0; // Convert to days
+            Ok(diff_days <= duration_days)
+        },
+        _ => Err(RuleError::TypeError("Within operator requires a date and a duration".to_string())),
+    }
 }
 
 fn transform_selector_name(name: &str) -> String {

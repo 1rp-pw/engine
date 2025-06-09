@@ -115,6 +115,10 @@ impl From<&RuleValue> for TypedValue {
                 value: serde_json::json!(b),
                 value_type: "boolean".to_string(),
             },
+            RuleValue::Duration(d) => TypedValue {
+                value: serde_json::json!(d.to_string()),
+                value_type: "duration".to_string(),
+            },
             RuleValue::List(items) => {
                 let json_items: Vec<serde_json::Value> = items
                     .iter()
@@ -123,6 +127,7 @@ impl From<&RuleValue> for TypedValue {
                         RuleValue::String(s) => serde_json::json!(s),
                         RuleValue::Date(d) => serde_json::json!(d.format("%Y-%m-%d").to_string()),
                         RuleValue::Boolean(b) => serde_json::json!(b),
+                        RuleValue::Duration(d) => serde_json::json!(d.to_string()),
                         RuleValue::List(_) => serde_json::json!(null), // nested lists not shown in example
                     })
                     .collect();

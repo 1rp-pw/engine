@@ -558,4 +558,72 @@ A **user** is valid if __score__ of **user** is in [85, 90, 95, 100].
         assert_eq!(rule.selector, "user");
         assert_eq!(rule.outcome, "the test");
     }
+
+    #[test]
+    fn test_parse_within_duration() {
+        let input = r#"A **user** is valid if __test_date__ of **user** is within 30 days."#;
+
+        let result = parse_rules(input);
+        assert!(result.is_ok());
+
+        let rule_set = result.unwrap();
+        assert_eq!(rule_set.rules.len(), 1);
+        let rule = &rule_set.rules[0];
+        assert_eq!(rule.selector, "user");
+        assert_eq!(rule.outcome, "valid");
+
+        match &rule.conditions[0].condition {
+            Condition::Comparison(comp) => {
+                assert_eq!(comp.operator, ComparisonOperator::Within);
+                assert_eq!(comp.property.value, "test_date");
+                match &comp.value.value {
+                    RuleValue::Duration(duration) => {
+                        assert_eq!(duration.amount, 30.0);
+                        // Should be normalized to days since it's >= 1 day
+                        assert_eq!(duration.unit, crate::runner::model::TimeUnit::Days);
+                    }
+                    _ => panic!("Expected Duration value"),
+                }
+            }
+            _ => panic!("Expected comparison condition"),
+        }
+    }
+
+    #[test]
+    fn test_parse_within_different_time_units() {
+        let test_cases = vec![
+            ("30 minutes", 30.0 * 60.0), // Should normalize to seconds
+            ("2 hours", 2.0 * 3600.0),   // Should normalize to seconds  
+            ("5 days", 5.0 * 86400.0),   // Should normalize to days (5 days in seconds)
+            ("1 month", 1.0 * 2629746.0), // Should normalize to days (1 month in seconds)
+            ("2 years", 2.0 * 31556952.0), // Should normalize to days (2 years in seconds)
+        ];
+
+        for (duration_str, expected_seconds) in test_cases {
+            let input = format!(r#"A **user** is valid if __test_date__ of **user** is within {}."#, duration_str);
+            
+            let result = parse_rules(&input);
+            assert!(result.is_ok(), "Failed to parse: {}", duration_str);
+
+            let rule_set = result.unwrap();
+            let rule = &rule_set.rules[0];
+
+            match &rule.conditions[0].condition {
+                Condition::Comparison(comp) => {
+                    match &comp.value.value {
+                        RuleValue::Duration(duration) => {
+                            let actual_seconds = duration.to_seconds();
+                            // Allow for small floating point differences (within 1%)
+                            let diff = (actual_seconds - expected_seconds).abs();
+                            let tolerance = expected_seconds * 0.01; // 1% tolerance
+                            assert!(diff < tolerance.max(1.0), "Duration mismatch for {}: expected {} seconds, got {} seconds", 
+                                   duration_str, expected_seconds, actual_seconds);
+                        }
+                        _ => panic!("Expected Duration value for: {}", duration_str),
+                    }
+                }
+                _ => panic!("Expected comparison condition for: {}", duration_str),
+            }
+        }
+    }
 }

@@ -162,6 +162,7 @@ pub enum ComparisonOperator {
     Contains,
     IsEmpty,
     IsNotEmpty,
+    Within,
 }
 
 impl fmt::Display for ComparisonOperator {
@@ -186,6 +187,7 @@ impl fmt::Display for ComparisonOperator {
             ComparisonOperator::Contains => write!(f, "contains"),
             ComparisonOperator::IsEmpty => write!(f, "is empty"),
             ComparisonOperator::IsNotEmpty => write!(f, "is not empty"),
+            ComparisonOperator::Within => write!(f, "is within"),
         }
     }
 }
@@ -222,6 +224,7 @@ impl ComparisonOperator {
             ComparisonOperator::Contains => vec!["contains"],
             ComparisonOperator::IsEmpty => vec!["is empty"],
             ComparisonOperator::IsNotEmpty => vec!["is not empty"],
+            ComparisonOperator::Within => vec!["is within"],
         }
     }
 }
@@ -239,6 +242,60 @@ pub enum RuleValue {
     Date(NaiveDate),
     Boolean(bool),
     List(Vec<RuleValue>),
+    Duration(Duration),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Duration {
+    pub amount: f64,
+    pub unit: TimeUnit,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub enum TimeUnit {
+    Seconds,
+    Minutes,
+    Hours,
+    Days,
+    Weeks,
+    Months,
+    Years,
+    Decades,
+    Centuries,
+}
+
+impl Duration {
+    pub fn new(amount: f64, unit: TimeUnit) -> Self {
+        Self { amount, unit }
+    }
+    
+    /// Convert to seconds for comparison purposes
+    pub fn to_seconds(&self) -> f64 {
+        match self.unit {
+            TimeUnit::Seconds => self.amount,
+            TimeUnit::Minutes => self.amount * 60.0,
+            TimeUnit::Hours => self.amount * 3600.0,
+            TimeUnit::Days => self.amount * 86400.0,
+            TimeUnit::Weeks => self.amount * 604800.0,
+            TimeUnit::Months => self.amount * 2629746.0, // Average month in seconds
+            TimeUnit::Years => self.amount * 31556952.0, // Average year in seconds
+            TimeUnit::Decades => self.amount * 315569520.0,
+            TimeUnit::Centuries => self.amount * 3155695200.0,
+        }
+    }
+    
+    /// Auto-reduce to appropriate unit
+    pub fn normalize(self) -> Self {
+        let seconds = self.to_seconds();
+        
+        // If less than a day, reduce to seconds for precision
+        if seconds < 86400.0 {
+            return Duration::new(seconds, TimeUnit::Seconds);
+        }
+        
+        // Otherwise, reduce to days
+        Duration::new(seconds / 86400.0, TimeUnit::Days)
+    }
 }
 
 impl fmt::Display for RuleValue {
@@ -258,6 +315,29 @@ impl fmt::Display for RuleValue {
                 }
                 write!(f, "]")
             }
+            RuleValue::Duration(d) => write!(f, "{}", d),
+        }
+    }
+}
+
+impl fmt::Display for Duration {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let unit_str = match self.unit {
+            TimeUnit::Seconds => if self.amount == 1.0 { "second" } else { "seconds" },
+            TimeUnit::Minutes => if self.amount == 1.0 { "minute" } else { "minutes" },
+            TimeUnit::Hours => if self.amount == 1.0 { "hour" } else { "hours" },
+            TimeUnit::Days => if self.amount == 1.0 { "day" } else { "days" },
+            TimeUnit::Weeks => if self.amount == 1.0 { "week" } else { "weeks" },
+            TimeUnit::Months => if self.amount == 1.0 { "month" } else { "months" },
+            TimeUnit::Years => if self.amount == 1.0 { "year" } else { "years" },
+            TimeUnit::Decades => if self.amount == 1.0 { "decade" } else { "decades" },
+            TimeUnit::Centuries => if self.amount == 1.0 { "century" } else { "centuries" },
+        };
+        
+        if self.amount.fract() == 0.0 {
+            write!(f, "{} {}", self.amount as i64, unit_str)
+        } else {
+            write!(f, "{} {}", self.amount, unit_str)
         }
     }
 }

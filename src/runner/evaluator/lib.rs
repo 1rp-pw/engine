@@ -12,11 +12,8 @@ mod tests {
         find_effective_selector, extract_value_from_json, compare_is_empty, compare_is_not_empty,
         evaluate_rule_set_with_trace, evaluate_rule_with_trace
     };
-    use crate::runner::model::{
-        RuleValue, Rule, RuleSet, Condition, ComparisonCondition, RuleReferenceCondition,
-        ComparisonOperator, ConditionGroup, ConditionOperator, PropertyPath, PropertyChainElement,
-        PositionedValue
-    };
+    use crate::runner::parser::parse_rules;
+    use crate::runner::model::{RuleValue, Rule, RuleSet, Condition, ComparisonCondition, RuleReferenceCondition, ComparisonOperator, ConditionGroup, ConditionOperator, PropertyPath, PropertyChainElement, PositionedValue, TimeUnit};
 
     // Basic comparison tests (existing)
     #[test]
@@ -1631,5 +1628,160 @@ mod tests {
         assert_eq!(regular_trace.execution.len(), enhanced_trace.execution.len());
         assert_eq!(regular_trace.execution[0].result, enhanced_trace.execution[0].result);
         assert_eq!(regular_trace.execution[1].result, enhanced_trace.execution[1].result);
+    }
+
+    #[test]
+    fn test_within_duration_functionality() {
+        // Test parsing and evaluation of within operator
+        let input = r#"A **user** is valid if __test_date__ of **user** is within 30 days."#;
+        
+        let rule_set = parse_rules(input).expect("Should parse within rule");
+        assert_eq!(rule_set.rules.len(), 1);
+        
+        let rule = &rule_set.rules[0];
+        assert_eq!(rule.selector, "user");
+        assert_eq!(rule.outcome, "valid");
+        
+        // Verify the condition was parsed correctly
+        match &rule.conditions[0].condition {
+            Condition::Comparison(comp) => {
+                assert_eq!(comp.operator, ComparisonOperator::Within);
+                assert_eq!(comp.property.value, "test_date");
+                match &comp.value.value {
+                    RuleValue::Duration(duration) => {
+                        assert_eq!(duration.amount, 30.0);
+                        // Should normalize to days since >= 1 day
+                        assert_eq!(duration.unit, TimeUnit::Days);
+                    }
+                    _ => panic!("Expected Duration value"),
+                }
+            }
+            _ => panic!("Expected comparison condition"),
+        }
+        
+        // Test evaluation with different dates
+        let today = chrono::Utc::now().naive_utc().date();
+        let recent_date = today - chrono::Duration::days(10); // Within 30 days
+        let old_date = today - chrono::Duration::days(50);    // Outside 30 days
+        
+        // Test case 1: Recent date (should pass)
+        let json_recent = json!({
+            "user": {
+                "test_date": recent_date.format("%Y-%m-%d").to_string()
+            }
+        });
+        
+        let (results, _) = evaluate_rule_set(&rule_set, &json_recent)
+            .expect("Should evaluate successfully with recent date");
+        assert_eq!(*results.get("valid").unwrap(), true, "Recent date should be valid");
+        
+        // Test case 2: Old date (should fail)
+        let json_old = json!({
+            "user": {
+                "test_date": old_date.format("%Y-%m-%d").to_string()
+            }
+        });
+        
+        let (results, _) = evaluate_rule_set(&rule_set, &json_old)
+            .expect("Should evaluate successfully with old date");
+        assert_eq!(*results.get("valid").unwrap(), false, "Old date should not be valid");
+        
+        // Test case 3: Edge case - exactly 30 days ago (should pass)
+        let exactly_30_days = today - chrono::Duration::days(30);
+        let json_exact = json!({
+            "user": {
+                "test_date": exactly_30_days.format("%Y-%m-%d").to_string()
+            }
+        });
+        
+        let (results, _) = evaluate_rule_set(&rule_set, &json_exact)
+            .expect("Should evaluate successfully with exact date");
+        assert_eq!(*results.get("valid").unwrap(), true, "Exactly 30 days should be valid");
+    }
+
+    #[test]
+    fn test_within_different_durations() {
+        // Test different time units - use days for simplicity since we're working with dates (not timestamps)
+        let test_cases = vec![
+            ("7 days", 7),
+            ("2 weeks", 14),
+        ];
+        
+        for (duration_str, days_duration) in test_cases {
+            let input = format!(r#"A **user** is valid if __test_date__ of **user** is within {}."#, duration_str);
+            
+            let rule_set = parse_rules(&input)
+                .expect(&format!("Should parse rule with {}", duration_str));
+            
+            // Test with a date just within the duration
+            let today = chrono::Utc::now().naive_utc().date();
+            let test_date = today - chrono::Duration::days((days_duration as f64 * 0.5) as i64); // Half the duration
+            
+            let json_test = json!({
+                "user": {
+                    "test_date": test_date.format("%Y-%m-%d").to_string()
+                }
+            });
+            
+            let (results, _) = evaluate_rule_set(&rule_set, &json_test)
+                .expect(&format!("Should evaluate successfully with {}", duration_str));
+            assert_eq!(*results.get("valid").unwrap(), true, 
+                      "Date within {} should be valid", duration_str);
+                      
+            // Test with a date outside the duration
+            let old_date = today - chrono::Duration::days((days_duration as f64 * 1.5) as i64); // 1.5x the duration
+            
+            let json_old = json!({
+                "user": {
+                    "test_date": old_date.format("%Y-%m-%d").to_string()
+                }
+            });
+            
+            let (results, _) = evaluate_rule_set(&rule_set, &json_old)
+                .expect(&format!("Should evaluate successfully with old {}", duration_str));
+            assert_eq!(*results.get("valid").unwrap(), false, 
+                      "Date outside {} should not be valid", duration_str);
+        }
+    }
+
+    #[test]
+    fn test_within_backward_compatibility() {
+        // Ensure existing functionality still works alongside within
+        let input = r#"
+        A **user** is eligible if __age__ of **user** is greater than 18 and __test date__ of **user** is within 30 days.
+        "#;
+        
+        let rule_set = parse_rules(input).expect("Should parse mixed rules");
+        assert_eq!(rule_set.rules.len(), 1);
+        
+        let today = chrono::Utc::now().naive_utc().date();
+        let recent_date = today - chrono::Duration::days(10);
+        
+        let json = json!({
+            "user": {
+                "age": 25,
+                "test date": recent_date.format("%Y-%m-%d").to_string()
+            }
+        });
+        
+        let (results, _) = evaluate_rule_set(&rule_set, &json)
+            .expect("Should evaluate mixed rules successfully");
+        
+        assert_eq!(*results.get("eligible").unwrap(), true, "Should pass both age and date checks");
+        
+        // Test with old date
+        let old_date = today - chrono::Duration::days(50);
+        let json_old = json!({
+            "user": {
+                "age": 25,
+                "test date": old_date.format("%Y-%m-%d").to_string()
+            }
+        });
+        
+        let (results, _) = evaluate_rule_set(&rule_set, &json_old)
+            .expect("Should evaluate with old date");
+        
+        // The old date should cause the date check to fail, making the overall eligible result false
+        assert_eq!(*results.get("eligible").unwrap(), false, "Should fail date check with old date");
     }
 }
