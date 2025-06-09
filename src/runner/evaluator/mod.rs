@@ -1436,6 +1436,7 @@ fn find_effective_selector(selector: &str, json: &Value) -> Result<Option<String
     Ok(None)
 }
 
+#[allow(dead_code)]
 fn find_effective_selector_with_mapping(selector: &str, json: &Value, rule_set: &RuleSet) -> Result<Option<String>, RuleError> {
     // First resolve the selector through mappings
     let actual_selector = rule_set.resolve_selector(selector);
@@ -1444,6 +1445,7 @@ fn find_effective_selector_with_mapping(selector: &str, json: &Value, rule_set: 
     find_effective_selector(&actual_selector, json)
 }
 
+#[allow(dead_code)]
 fn resolve_property_path_with_mapping<'a>(
     path: &crate::runner::model::PropertyPath,
     json: &'a Value,

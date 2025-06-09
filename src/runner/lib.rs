@@ -352,7 +352,6 @@ mod tests {
     #[test]
     fn test_driving_test_corrected_syntax() {
         use crate::runner::parser::parse_rules;
-        use serde_json::json;
 
         let rule = r#"A **driver** passes the age test
   if the __date of birth__ of the __person__ of the **drivingTest** is earlier than 2008-12-12."#;

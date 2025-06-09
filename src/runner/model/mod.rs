@@ -468,6 +468,7 @@ pub struct RuleSet {
     pub cache: PerformanceCache,
     // Maps custom object selectors to actual JSON paths
     // e.g., "driver" -> "person"
+    #[allow(dead_code)]
     pub selector_mappings: HashMap<String, String>,
 }
 
@@ -526,11 +527,13 @@ impl RuleSet {
 
     /// Add a mapping from a custom selector to an actual JSON path
     /// e.g., map_selector("driver", "person") allows **driver** to reference the "person" object
+    #[allow(dead_code)]
     pub fn map_selector(&mut self, custom_selector: &str, actual_path: &str) {
         self.selector_mappings.insert(custom_selector.to_string(), actual_path.to_string());
     }
 
     /// Get the actual JSON path for a selector, applying mappings if they exist
+    #[allow(dead_code)]
     pub fn resolve_selector(&self, selector: &str) -> String {
         self.selector_mappings.get(selector).cloned().unwrap_or_else(|| selector.to_string())
     }
