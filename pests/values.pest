@@ -1,4 +1,4 @@
-value = { date_literal | number | boolean | string_literal }
+value = { date_literal | duration_literal | number | boolean | string_literal }
 list_value = { "[" ~ value ~ ("," ~ value)* ~ "]" }
 
 string_literal = @{ "\"" ~ (!("\"") ~ ANY)* ~ "\"" | identifier }
@@ -12,3 +12,16 @@ date_literal = @{
   date_format
 }
 date_format = @{ ASCII_DIGIT{4} ~ "-" ~ ASCII_DIGIT{2} ~ "-" ~ ASCII_DIGIT{2} }
+
+duration_literal = { number ~ time_unit }
+time_unit = {
+    "centuries" | "century" |
+    "decades" | "decade" |
+    "years" | "year" |
+    "months" | "month" |
+    "weeks" | "week" |
+    "days" | "day" |
+    "hours" | "hour" |
+    "minutes" | "minute" |
+    "seconds" | "second"
+}

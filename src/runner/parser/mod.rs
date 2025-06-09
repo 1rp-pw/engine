@@ -5,7 +5,7 @@ use chrono::NaiveDate;
 use pest::Parser;
 use pest_derive::Parser;
 use pest::iterators::Pair;
-use crate::runner::model::{ComparisonOperator, RuleSet, RuleValue, Condition, SourcePosition, ConditionOperator, ComparisonCondition, PositionedValue, RuleReferenceCondition, PropertyPath, constants};
+use crate::runner::model::{ComparisonOperator, RuleSet, RuleValue, Condition, SourcePosition, ConditionOperator, ComparisonCondition, PositionedValue, RuleReferenceCondition, PropertyPath, constants, Duration, TimeUnit};
 
 #[derive(Parser)]
 #[grammar = "pests/grammar.pest"]
@@ -397,6 +397,7 @@ fn parse_comparison_operator(pair: Pair<Rule>) -> Result<ComparisonOperator, Rul
         "contains" => Ok(ComparisonOperator::Contains),
         "is empty" => Ok(ComparisonOperator::IsEmpty),
         "is not empty" => Ok(ComparisonOperator::IsNotEmpty),
+        "is within" => Ok(ComparisonOperator::Within),
         _ => Err(RuleError::ParseError(format!("Unknown operator: {}", pair.as_str())))
     }
 }
@@ -445,6 +446,7 @@ fn parse_regular_property_condition(
                 "contains" => ComparisonOperator::Contains,
                 "is empty" => ComparisonOperator::IsEmpty,
                 "is not empty" => ComparisonOperator::IsNotEmpty,
+                "is within" => ComparisonOperator::Within,
                 _ => return Err(RuleError::ParseError(format!("Unknown operator: {}", operator_pair.as_str())))
             }
         }
@@ -661,6 +663,48 @@ fn parse_value(pair: Pair<Rule>) -> Result<RuleValue, RuleError> {
             let b = pair.as_str() == "true";
             Ok(RuleValue::Boolean(b))
         },
+        Rule::duration_literal => {
+            parse_duration(pair)
+        },
         _ => Err(RuleError::ParseError(format!("Unknown value type: {:?}", pair.as_rule())))
+    }
+}
+
+fn parse_duration(pair: Pair<Rule>) -> Result<RuleValue, RuleError> {
+    let mut amount = None;
+    let mut unit = None;
+    
+    for inner in pair.into_inner() {
+        match inner.as_rule() {
+            Rule::number => {
+                amount = Some(inner.as_str().parse::<f64>()
+                    .map_err(|e| RuleError::ParseError(format!("Invalid duration amount: {}", e)))?);
+            },
+            Rule::time_unit => {
+                unit = Some(parse_time_unit(inner)?);
+            },
+            _ => {}
+        }
+    }
+    
+    let amount = amount.ok_or_else(|| RuleError::ParseError("Missing duration amount".to_string()))?;
+    let unit = unit.ok_or_else(|| RuleError::ParseError("Missing duration unit".to_string()))?;
+    
+    let duration = Duration::new(amount, unit).normalize();
+    Ok(RuleValue::Duration(duration))
+}
+
+fn parse_time_unit(pair: Pair<Rule>) -> Result<TimeUnit, RuleError> {
+    match pair.as_str() {
+        "second" | "seconds" => Ok(TimeUnit::Seconds),
+        "minute" | "minutes" => Ok(TimeUnit::Minutes),
+        "hour" | "hours" => Ok(TimeUnit::Hours),
+        "day" | "days" => Ok(TimeUnit::Days),
+        "week" | "weeks" => Ok(TimeUnit::Weeks),
+        "month" | "months" => Ok(TimeUnit::Months),
+        "year" | "years" => Ok(TimeUnit::Years),
+        "decade" | "decades" => Ok(TimeUnit::Decades),
+        "century" | "centuries" => Ok(TimeUnit::Centuries),
+        _ => Err(RuleError::ParseError(format!("Unknown time unit: {}", pair.as_str())))
     }
 }
