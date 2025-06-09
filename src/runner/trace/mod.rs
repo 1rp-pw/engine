@@ -3,12 +3,12 @@ mod lib;
 use serde::Serialize;
 use crate::runner::model::{ComparisonOperator, RuleValue, SourcePosition};
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct RuleSetTrace {
     pub(crate) execution: Vec<RuleTrace>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct RuleTrace {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
@@ -18,14 +18,14 @@ pub struct RuleTrace {
     pub result: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 #[serde(untagged)]
 pub enum ConditionTrace {
     Comparison(ComparisonTrace),
     RuleReference(RuleReferenceTrace),
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct ComparisonTrace {
     pub selector: SelectorTrace,
     pub property: PropertyTrace,
@@ -35,27 +35,27 @@ pub struct ComparisonTrace {
     pub result: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct SelectorTrace {
     pub value: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pos: Option<SourcePosition>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct OutcomeTrace {
     pub value: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pos: Option<SourcePosition>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct PropertyTrace {
     pub value: serde_json::Value,
     pub path: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct ValueTrace {
     pub value: serde_json::Value,
     #[serde(rename = "type")]
@@ -64,21 +64,21 @@ pub struct ValueTrace {
     pub pos: Option<SourcePosition>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct ComparisonEvaluationTrace {
     pub left_value: TypedValue,
     pub right_value: TypedValue,
     pub comparison_result: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct TypedValue {
     pub value: serde_json::Value,
     #[serde(rename = "type")]
     pub value_type: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct RuleReferenceTrace {
     pub selector: SelectorTrace,
     pub rule_name: String,
@@ -89,7 +89,7 @@ pub struct RuleReferenceTrace {
     pub result: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct PropertyCheckTrace {
     pub property_name: String,
     pub property_value: serde_json::Value,

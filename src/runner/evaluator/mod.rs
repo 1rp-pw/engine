@@ -1,6 +1,6 @@
 mod lib;
 
-use crate::runner::error::RuleError;
+use crate::runner::error::{RuleError, EvaluationResult, PartialRuleTrace};
 use crate::runner::model::{Condition, ComparisonOperator, Rule, RuleSet, RuleValue, ConditionOperator, ComparisonCondition, RuleReferenceCondition, PropertyChainElement};
 use crate::runner::trace::{RuleSetTrace, RuleTrace, ConditionTrace, ComparisonTrace, ComparisonEvaluationTrace, RuleReferenceTrace, PropertyCheckTrace, PropertyTrace, TypedValue, SelectorTrace, OutcomeTrace};
 
@@ -17,6 +17,93 @@ impl RuleError {
             cycle_path[0]
         ))
     }
+}
+
+/// Enhanced rule set evaluation that preserves traces even on errors
+pub fn evaluate_rule_set_with_trace(
+    rule_set: &RuleSet,
+    json: &Value
+) -> EvaluationResult<HashMap<String, bool>> {
+    let mut all_traces: Vec<RuleTrace> = Vec::new();
+    let mut results = HashMap::new();
+    let mut processed_rules = HashSet::new();
+    
+    // Find global rule and handle potential error
+    let global_rule = match crate::runner::utils::find_global_rule(&rule_set.rules) {
+        Ok(rule) => rule,
+        Err(error) => {
+            // Even if we can't find global rule, return what trace we can
+            let trace = RuleSetTrace { execution: all_traces };
+            return EvaluationResult::failure(error, Some(trace));
+        }
+    };
+    
+    let mut evaluation_stack = HashSet::new();
+    let mut call_path = Vec::new();
+
+    // Evaluate global rule with trace preservation
+    match evaluate_rule_with_trace(global_rule, json, rule_set, &mut evaluation_stack, &mut call_path) {
+        Ok((result, rule_trace)) => {
+            results.insert(global_rule.outcome.clone(), result);
+            all_traces.push(rule_trace);
+            processed_rules.insert(global_rule.outcome.clone());
+        }
+        Err((error, partial_trace)) => {
+            // Convert partial trace and return failure with trace
+            if let Some(trace) = partial_trace {
+                all_traces.push(trace.to_rule_trace());
+            }
+            let rule_set_trace = RuleSetTrace { execution: all_traces };
+            return EvaluationResult::failure(error, Some(rule_set_trace));
+        }
+    }
+
+    // Continue with referenced rules
+    let mut i = 0;
+    while i < all_traces.len() {
+        let mut rules_to_process = Vec::new();
+        {
+            let trace = &all_traces[i];
+            for condition in &trace.conditions {
+                if let ConditionTrace::RuleReference(ref_trace) = condition {
+                    if let Some(outcome) = &ref_trace.referenced_rule_outcome {
+                        if !processed_rules.contains(outcome) {
+                            if let Some(rule) = rule_set.get_rule(outcome) {
+                                rules_to_process.push((outcome.clone(), rule));
+                                processed_rules.insert(outcome.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Process collected rules
+        for (outcome, rule) in rules_to_process {
+            let mut sub_evaluation_stack = HashSet::new();
+            let mut sub_call_path = Vec::new();
+
+            match evaluate_rule_with_trace(rule, json, rule_set, &mut sub_evaluation_stack, &mut sub_call_path) {
+                Ok((sub_result, sub_trace)) => {
+                    results.insert(outcome, sub_result);
+                    all_traces.push(sub_trace);
+                }
+                Err((error, partial_trace)) => {
+                    // On error, include partial trace and return failure
+                    if let Some(trace) = partial_trace {
+                        all_traces.push(trace.to_rule_trace());
+                    }
+                    let rule_set_trace = RuleSetTrace { execution: all_traces };
+                    return EvaluationResult::failure(error, Some(rule_set_trace));
+                }
+            }
+        }
+
+        i += 1;
+    }
+
+    let rule_set_trace = RuleSetTrace { execution: all_traces };
+    EvaluationResult::success(results, rule_set_trace)
 }
 
 pub fn evaluate_rule_set(
@@ -72,6 +159,104 @@ pub fn evaluate_rule_set(
     };
 
     Ok((results, rule_set_trace))
+}
+
+/// Enhanced rule evaluation that preserves traces even on errors
+pub fn evaluate_rule_with_trace(
+    model_rule: &Rule,
+    json: &Value,
+    rule_set: &RuleSet,
+    evaluation_stack: &mut HashSet<String>,
+    call_path: &mut Vec<String>,
+) -> Result<(bool, RuleTrace), (RuleError, Option<PartialRuleTrace>)> {
+    // Initialize partial trace to capture progress
+    let mut partial_trace = PartialRuleTrace::new(
+        model_rule.label.clone(),
+        model_rule.selector.clone(),
+        model_rule.selector_pos.clone(),
+        model_rule.outcome.clone(),
+        model_rule.position.clone(),
+    );
+
+    // cycle check
+    let rule_identifier = model_rule.outcome.clone();
+    if evaluation_stack.contains(&rule_identifier) {
+        call_path.push(rule_identifier.clone());
+        let error = RuleError::infinite_loop_error(call_path.clone());
+        partial_trace.set_error(format!("Infinite loop detected: {}", error));
+        return Err((error, Some(partial_trace)));
+    }
+    evaluation_stack.insert(rule_identifier.clone());
+    call_path.push(rule_identifier.clone());
+
+    // evaluate each condition, collect results and traces
+    let mut results = Vec::new();
+    let mut ops = Vec::new();
+    let mut condition_traces = Vec::new();
+
+    for (i, cg) in model_rule.conditions.iter().enumerate() {
+        match evaluate_condition_with_trace(&cg.condition, json, rule_set, evaluation_stack, call_path) {
+            Ok((res, trace)) => {
+                results.push(res);
+                partial_trace.add_condition(trace.clone());
+                condition_traces.push(trace);
+            }
+            Err((error, condition_trace)) => {
+                // Add any partial condition trace we have
+                if let Some(trace) = condition_trace {
+                    partial_trace.add_condition(trace);
+                }
+                partial_trace.set_error(format!("Condition evaluation failed: {}", error));
+                evaluation_stack.remove(&rule_identifier);
+                call_path.pop();
+                return Err((error, Some(partial_trace)));
+            }
+        }
+
+        // record the operator that follows this condition
+        if let Some(op) = &cg.operator {
+            ops.push(op.clone());
+        } else if i != 0 {
+            ops.push(ConditionOperator::And);
+        }
+    }
+
+    evaluation_stack.remove(&rule_identifier);
+    call_path.pop();
+
+    // collapse all ANDs first
+    let mut i = 0;
+    while i < ops.len() {
+        if ops[i] == ConditionOperator::And {
+            results[i] = results[i] && results[i + 1];
+            results.remove(i + 1);
+            ops.remove(i);
+        } else {
+            i += 1;
+        }
+    }
+
+    // fold OR across what remains
+    let rule_result = results
+        .into_iter()
+        .fold(false, |acc, next| acc || next);
+
+    // build complete trace object
+    let rule_trace = RuleTrace {
+        label: model_rule.label.clone(),
+        selector: SelectorTrace {
+            value: model_rule.selector.clone(),
+            pos: model_rule.selector_pos.clone(),
+        },
+        outcome: OutcomeTrace {
+            value: model_rule.outcome.clone(),
+            pos: model_rule.position.clone(),
+        },
+        conditions: condition_traces,
+        result: rule_result,
+    };
+
+    Ok((rule_result, rule_trace))
 }
 
 pub fn evaluate_rule(
@@ -150,6 +335,29 @@ pub fn evaluate_rule(
     Ok((rule_result, rule_trace))
 }
 
+fn evaluate_condition_with_trace(
+    condition: &Condition,
+    json: &Value,
+    rule_set: &RuleSet,
+    evaluation_stack: &mut HashSet<String>,
+    call_path: &mut Vec<String>,
+) -> Result<(bool, ConditionTrace), (RuleError, Option<ConditionTrace>)> {
+    match condition {
+        Condition::RuleReference(ref_condition) => {
+            match evaluate_rule_reference_condition_with_trace(ref_condition, json, rule_set, evaluation_stack, call_path) {
+                Ok(result) => Ok(result),
+                Err((error, trace)) => Err((error, trace))
+            }
+        },
+        Condition::Comparison(comp_condition) => {
+            match evaluate_comparison_condition_with_trace(comp_condition, json) {
+                Ok(result) => Ok(result),
+                Err((error, trace)) => Err((error, trace))
+            }
+        },
+    }
+}
+
 fn evaluate_condition(
     condition: &Condition,
     json: &Value,
@@ -221,6 +429,165 @@ fn evaluate_rule_reference_condition(
     };
 
     Ok((result, ConditionTrace::RuleReference(rule_reference_trace)))
+}
+
+fn evaluate_rule_reference_condition_with_trace(
+    condition: &RuleReferenceCondition,
+    json: &Value,
+    rule_set: &RuleSet,
+    evaluation_stack: &mut HashSet<String>,
+    call_path: &mut Vec<String>,
+) -> Result<(bool, ConditionTrace), (RuleError, Option<ConditionTrace>)> {
+    // Handle empty selector case (for label references)
+    if condition.selector.value.is_empty() {
+        let rule_name = condition.rule_name.value.trim();
+
+        // Try to find and evaluate the referenced rule
+        match try_evaluate_by_rule_with_trace(rule_name, json, rule_set, evaluation_stack, call_path) {
+            Ok(Some((result, outcome))) => {
+                let rule_reference_trace = RuleReferenceTrace {
+                    selector: SelectorTrace {
+                        value: String::new(),
+                        pos: None,
+                    },
+                    rule_name: condition.rule_name.value.clone(),
+                    referenced_rule_outcome: Some(outcome),
+                    property_check: None,
+                    result,
+                };
+                return Ok((result, ConditionTrace::RuleReference(rule_reference_trace)));
+            }
+            Ok(None) => {
+                // Rule not found
+                return Ok((false, create_failed_rule_reference_trace(condition)));
+            }
+            Err((error, _)) => {
+                // Error during rule evaluation
+                let failed_trace = create_failed_rule_reference_trace(condition);
+                return Err((error, Some(failed_trace)));
+            }
+        }
+    }
+
+    // Normal case with selector
+    let effective_selector = match find_effective_selector(&condition.selector.value, json) {
+        Ok(Some(sel)) => sel,
+        Ok(None) => {
+            return Ok((false, create_failed_rule_reference_trace(condition)));
+        }
+        Err(error) => {
+            let failed_trace = create_failed_rule_reference_trace(condition);
+            return Err((error, Some(failed_trace)));
+        }
+    };
+
+    let part = condition.rule_name.value.trim();
+    match evaluate_rule_or_property_with_trace(part, &effective_selector, json, rule_set, evaluation_stack, call_path) {
+        Ok((result, referenced_outcome, property_check)) => {
+            let rule_reference_trace = RuleReferenceTrace {
+                selector: SelectorTrace {
+                    value: condition.selector.value.clone(),
+                    pos: condition.selector.pos.clone(),
+                },
+                rule_name: condition.rule_name.value.clone(),
+                referenced_rule_outcome: referenced_outcome,
+                property_check,
+                result,
+            };
+
+            Ok((result, ConditionTrace::RuleReference(rule_reference_trace)))
+        }
+        Err((error, _)) => {
+            let failed_trace = create_failed_rule_reference_trace(condition);
+            Err((error, Some(failed_trace)))
+        }
+    }
+}
+
+fn evaluate_comparison_condition_with_trace(
+    condition: &ComparisonCondition,
+    json: &Value
+) -> Result<(bool, ConditionTrace), (RuleError, Option<ConditionTrace>)> {
+    // Check if this is a cross-object comparison
+    if let Some(left_path) = &condition.left_property_path {
+        return match evaluate_cross_object_comparison(condition, left_path, json) {
+            Ok(result) => Ok(result),
+            Err(error) => {
+                let failed_trace = create_failed_comparison_trace(condition, None);
+                Err((error, Some(failed_trace)))
+            }
+        };
+    }
+
+    // Check if this is a chained property access
+    if let Some(property_chain) = &condition.property_chain {
+        return match evaluate_chained_comparison_condition(condition, property_chain, json) {
+            Ok(result) => Ok(result),
+            Err(error) => {
+                let failed_trace = create_failed_comparison_trace(condition, None);
+                Err((error, Some(failed_trace)))
+            }
+        };
+    }
+
+    // Original simple property condition logic
+    let effective_selector = match find_effective_selector(&condition.selector.value, json) {
+        Ok(Some(sel)) => sel,
+        Ok(None) => {
+            return Ok((false, create_failed_comparison_trace(condition, None)));
+        }
+        Err(error) => {
+            let failed_trace = create_failed_comparison_trace(condition, None);
+            return Err((error, Some(failed_trace)));
+        }
+    };
+
+    // Check if property exists
+    let property_value = json.get(&effective_selector)
+        .and_then(|obj| obj.get(&condition.property.value));
+
+    if property_value.is_none() {
+        return Ok((false, create_failed_comparison_trace(condition, Some(&effective_selector))));
+    }
+
+    // Extract and evaluate the comparison
+    let json_value = match extract_value_from_json(json, &effective_selector, &condition.property.value) {
+        Ok(value) => value,
+        Err(error) => {
+            let failed_trace = create_failed_comparison_trace(condition, Some(&effective_selector));
+            return Err((error, Some(failed_trace)));
+        }
+    };
+    
+    let (comparison_result, evaluation_details) = match perform_comparison(
+        &json_value,
+        &condition.operator,
+        &condition.value.value
+    ) {
+        Ok(result) => result,
+        Err(error) => {
+            let failed_trace = create_failed_comparison_trace(condition, Some(&effective_selector));
+            return Err((error, Some(failed_trace)));
+        }
+    };
+
+    // Build the trace
+    let comparison_trace = ComparisonTrace {
+        selector: SelectorTrace {
+            value: condition.selector.value.clone(),
+            pos: condition.selector.pos.clone(),
+        },
+        property: PropertyTrace {
+            value: property_value.unwrap().clone(),
+            path: format!("$.{}.{}", effective_selector, condition.property.value),
+        },
+        operator: condition.operator.clone(),
+        value: condition.value.value.to_value_trace(condition.value.pos.clone()),
+        evaluation_details,
+        result: comparison_result,
+    };
+
+    Ok((comparison_result, ConditionTrace::Comparison(comparison_trace)))
 }
 
 fn evaluate_rule_or_property(
@@ -337,6 +704,73 @@ fn find_rule_fuzzy_match<'a>(rule_name: &str, rule_set: &'a RuleSet) -> Option<&
     }
 
     found_outcome.and_then(|outcome| rule_set.get_rule(&outcome))
+}
+
+fn try_evaluate_by_rule_with_trace(
+    rule_name: &str,
+    json: &Value,
+    rule_set: &RuleSet,
+    evaluation_stack: &mut HashSet<String>,
+    call_path: &mut Vec<String>,
+) -> Result<Option<(bool, String)>, (RuleError, Option<PartialRuleTrace>)> {
+    // Try exact outcome match
+    if let Some(rule) = rule_set.get_rule(rule_name) {
+        match evaluate_rule_with_trace(rule, json, rule_set, evaluation_stack, call_path) {
+            Ok((result, _)) => Ok(Some((result, rule.outcome.clone()))),
+            Err((error, partial_trace)) => Err((error, partial_trace))
+        }
+    } else if let Some(rule) = rule_set.get_rule_by_label(rule_name) {
+        // Try exact label match
+        match evaluate_rule_with_trace(rule, json, rule_set, evaluation_stack, call_path) {
+            Ok((result, _)) => Ok(Some((result, rule.outcome.clone()))),
+            Err((error, partial_trace)) => Err((error, partial_trace))
+        }
+    } else if let Some(rule) = find_rule_fuzzy_match(rule_name, rule_set) {
+        // Try fuzzy matching
+        match evaluate_rule_with_trace(rule, json, rule_set, evaluation_stack, call_path) {
+            Ok((result, _)) => Ok(Some((result, rule.outcome.clone()))),
+            Err((error, partial_trace)) => Err((error, partial_trace))
+        }
+    } else {
+        Ok(None)
+    }
+}
+
+fn evaluate_rule_or_property_with_trace(
+    rule_name: &str,
+    effective_selector: &str,
+    json: &Value,
+    rule_set: &RuleSet,
+    evaluation_stack: &mut HashSet<String>,
+    call_path: &mut Vec<String>,
+) -> Result<(bool, Option<String>, Option<PropertyCheckTrace>), (RuleError, Option<PartialRuleTrace>)> {
+    // Try to find a matching rule first
+    match try_evaluate_by_rule_with_trace(rule_name, json, rule_set, evaluation_stack, call_path) {
+        Ok(Some((result, outcome))) => {
+            return Ok((result, Some(outcome), None));
+        }
+        Ok(None) => {
+            // Continue to property evaluation
+        }
+        Err((error, partial_trace)) => {
+            return Err((error, partial_trace));
+        }
+    }
+
+    // If no rule found, try to evaluate as a property
+    match try_evaluate_as_property(rule_name, effective_selector, json) {
+        Ok(Some(property_check)) => {
+            let result = evaluate_property_result(&property_check);
+            Ok((result, None, Some(property_check)))
+        }
+        Ok(None) => {
+            // If neither rule nor property found, assume true (free text condition)
+            Ok((true, None, None))
+        }
+        Err(error) => {
+            Err((error, None))
+        }
+    }
 }
 
 fn try_evaluate_as_property(
