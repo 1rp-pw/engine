@@ -411,13 +411,39 @@ fn evaluate_rule_reference_condition(
     // Normal case with selector
     let effective_selector = find_effective_selector(&condition.selector.value, json)?;
 
-    if effective_selector.is_none() {
-        return Ok((false, create_failed_rule_reference_trace(condition)));
-    }
-
-    let part = condition.rule_name.value.trim();
-    let (result, referenced_outcome, property_check) =
-        evaluate_rule_or_property(part, &effective_selector.unwrap(), json, rule_set, evaluation_stack, call_path)?;
+    let (result, referenced_outcome, property_check) = if effective_selector.is_some() {
+        // Selector exists in JSON - use it directly
+        let part = condition.rule_name.value.trim();
+        evaluate_rule_or_property(part, &effective_selector.unwrap(), json, rule_set, evaluation_stack, call_path)?
+    } else {
+        // Conceptual selector - try to evaluate the rule without requiring the selector to exist
+        let part = condition.rule_name.value.trim();
+        
+        // First, try to find the rule globally (without a specific selector)
+        if let Some((rule_result, outcome)) = try_evaluate_by_rule(part, json, rule_set, evaluation_stack, call_path)? {
+            (rule_result, Some(outcome), None)
+        } else {
+            // If no global rule found, try to evaluate against all available objects in the JSON
+            let mut found_any_match = false;
+            let mut last_outcome = None;
+            let mut last_property_check = None;
+            
+            if let Some(obj) = json.as_object() {
+                for (key, _) in obj {
+                    if let Ok((rule_result, outcome, prop_check)) = evaluate_rule_or_property(part, key, json, rule_set, evaluation_stack, call_path) {
+                        if rule_result {
+                            found_any_match = true;
+                            last_outcome = outcome;
+                            last_property_check = prop_check;
+                            break; // Found a match, we can stop
+                        }
+                    }
+                }
+            }
+            
+            (found_any_match, last_outcome, last_property_check)
+        }
+    };
 
     let rule_reference_trace = RuleReferenceTrace {
         selector: SelectorTrace {
