@@ -1436,12 +1436,12 @@ A **driver** passes the theory test
   and the __hazard perception__ of the __theory__ of the __scores__ of the **driving test** is at least 44.
 
 A **driver** passes the practical test
-  if the __minor__ of the __practical__ of the __scores__ of the **driving test** is no more than 15
-  and the __major__ of the **practical** of the **scores** of the **driving test** is equal to false.
+  if the __minor__ of the __practical__ of the __scores__ in the **driving test** is no more than 15
+  and the __major__ of the **practical** of the **scores** in the **driving test** is equal to false.
 
 A **driver** has taken the test in the time period
-  if the __theory__ of the __testDates__ of the **driving test** is within 2 years
-  and the __practical__ of the __testDates__ of the **driving test** is within 30 days."#;
+  if the __theory__ of the __test dates__ in the **driving test** is within 2 years
+  and the __practical__ of the __test dates__ in the **driving test** is within 30 days."#;
 
         let rule_set = parse_rules(input).unwrap();
 
