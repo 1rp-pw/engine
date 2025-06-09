@@ -697,7 +697,6 @@ A **Document** is archived
             let error_msg = error.to_string();
             assert!(error_msg.contains("number of") || error_msg.contains("array") || error_msg.contains("string"));
         }
-
     }
 
     #[test]
@@ -1301,7 +1300,7 @@ A **login** passes the password tests
         });
         let (results_good, _trace_good) = evaluate_rule_set(&rule_set, &json_good).unwrap();
         assert!(results_good["valid"]);
-        
+
         let json_bad_username = json!({
             "login": {
                 "username": "jo",
@@ -1310,6 +1309,85 @@ A **login** passes the password tests
         });
         let (results_bad_username, _trace_bad_username) = evaluate_rule_set(&rule_set, &json_bad_username).unwrap();
         assert!(!results_bad_username["valid"]);
+    }
+
+    #[test]
+    fn full_driving_test() {
+        let input = r#"A **driving test** gets a driving licence
+  if the **driving test** passes the age test
+  and the **driving test** passes the test requirements
+  and the **driving test** has taken the test in the time period.
+
+A **driving test** passes the age test
+  if the __date of birth__ of the **person** in the **driving test** is earlier than 2008-12-12.
+
+A **driving test** passes the test requirements
+  if **driving test** passes the theory test
+  and the **driving test** passes the practical test.
+
+A **driving test** passes the theory test
+  if the __multiple choice__ of the **theory** of the **scores** in the **driving test** is at least 43
+  and the __hazard perception__ of the **theory** of the **scores** in the **driving test** is at least 44.
+
+A **driving test** passes the practical test
+  if the __minor__ in the **practical** of the **scores** in the **driving test** is no more than 15
+  and the __major__ in the **practical** of the **scores** in the **driving test** is equal to false.
+
+A **driving test** has taken the test in the time period
+  if the __theory__ of the **testDates** in the **driving test** is within 2 years
+  and the __practical__ of the **testDates** in the **driving test** is within 30 days."#;
+
+        let rule_set = parse_rules(input).unwrap();
+
+        let json_good = json!({
+          "drivingTest": {
+            "person": {
+              "dateOfBirth": "1990-01-01",
+              "name": "Bob"
+            },
+            "scores": {
+              "practical": {
+                "major": false,
+                "minor": 13
+              },
+              "theory": {
+                "hazardPerception": 75,
+                "multipleChoice": 45
+              }
+            },
+            "testDates": {
+              "practical": "2025-06-01",
+              "theory": "2024-12-12"
+            }
+          }
+        });
+        let (results_good, _trace_good) = evaluate_rule_set(&rule_set, &json_good).unwrap();
+        assert!(results_good["a driving licence"]);
+
+        let json_bad = json!({
+          "drivingTest": {
+            "person": {
+              "dateOfBirth": "1990-01-01",
+              "name": "Bob"
+            },
+            "scores": {
+              "practical": {
+                "major": true,
+                "minor": 13
+              },
+              "theory": {
+                "hazardPerception": 75,
+                "multipleChoice": 45
+              }
+            },
+            "testDates": {
+              "practical": "2025-06-01",
+              "theory": "2024-12-12"
+            }
+          }
+        });
+        let (results_bad, _trace_bad) = evaluate_rule_set(&rule_set, &json_bad).unwrap();
+        assert!(!results_bad["a driving licence"]);
     }
 }
 

@@ -540,27 +540,91 @@ fn parse_regular_property_condition(
 }
 
 fn parse_property_access(pair: Pair<Rule>) -> Result<crate::runner::model::PropertyPath, RuleError> {
-    // Pre-allocate with expected size to avoid reallocations
-    let mut properties = Vec::with_capacity(3); // Most property chains are short
-    let mut selector = String::new();
+    // Track elements with their types for proper chaining
+    let mut elements = Vec::with_capacity(3);
 
     for inner in pair.into_inner() {
         match inner.as_rule() {
+            Rule::property_or_selector => {
+                // Parse the inner property or object_selector
+                for sub_inner in inner.into_inner() {
+                    match sub_inner.as_rule() {
+                        Rule::property => {
+                            let property_text = sub_inner.as_str();
+                            let property_name = property_text[2..property_text.len()-2].to_string();
+                            elements.push(("property", property_name));
+                        }
+                        Rule::object_selector => {
+                            let selector_text = sub_inner.as_str();
+                            let selector_name = selector_text[2..selector_text.len()-2].to_string();
+                            elements.push(("object", selector_name));
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            // Backward compatibility: handle direct property/object_selector rules
             Rule::property => {
                 let property_text = inner.as_str();
                 let property_name = property_text[2..property_text.len()-2].to_string();
-                properties.push(property_name);
+                elements.push(("property", property_name));
             }
             Rule::object_selector => {
                 let selector_text = inner.as_str();
-                selector = selector_text[2..selector_text.len()-2].to_string();
+                let selector_name = selector_text[2..selector_text.len()-2].to_string();
+                elements.push(("object", selector_name));
             }
             _ => {}
         }
     }
 
-    // Shrink to fit if we over-allocated
-    properties.shrink_to_fit();
+    // According to the specification:
+    // ** elements are object selectors (for navigation)
+    // __ elements are properties, with the final __ being the actual property
+    // Example: __bill__ of **test** of **beep** becomes beep.test.bill
+    
+    // Reverse the elements since they're parsed left-to-right but we need right-to-left traversal
+    elements.reverse();
+    
+    let mut object_chain = Vec::new();
+    let mut final_property = String::new();
+    
+    // The first element (after reverse) should be the root object selector
+    // Subsequent object selectors extend the path
+    // The final property element becomes the property to access
+    
+    for (i, (element_type, name)) in elements.iter().enumerate() {
+        match &**element_type {
+            "object" => {
+                object_chain.push(name.clone());
+            }
+            "property" => {
+                // The last property becomes the final property
+                // Any previous properties become part of the object chain
+                if i == elements.len() - 1 {
+                    final_property = name.clone();
+                } else {
+                    object_chain.push(name.clone());
+                }
+            }
+            _ => {}
+        }
+    }
+    
+    // Determine the selector and properties
+    let selector = if object_chain.is_empty() {
+        // If no object chain, use empty selector for backward compatibility
+        String::new()
+    } else {
+        // Take the first object as the root selector
+        object_chain.remove(0)
+    };
+    
+    // The remaining object chain becomes the property path, plus the final property
+    let mut properties = object_chain;
+    if !final_property.is_empty() {
+        properties.push(final_property);
+    }
 
     Ok(crate::runner::model::PropertyPath {
         properties,

@@ -244,7 +244,7 @@ A **user** is valid if __id__ of __group__ of **user** is equal to 1.
                 assert!(comp.left_property_path.is_some());
                 let path = comp.left_property_path.as_ref().unwrap();
                 assert_eq!(path.selector, "user");
-                assert_eq!(path.properties, vec!["id", "group"]);
+                assert_eq!(path.properties, vec!["group", "id"]);
             }
             _ => panic!("Expected comparison condition"),
         }

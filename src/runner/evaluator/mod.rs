@@ -1108,23 +1108,20 @@ fn resolve_property_path<'a>(
     path_parts[0] = final_selector.clone(); // Use the actual key from JSON
 
     let is_length_of_operator = is_length_of_operation(path);
-    if is_length_of_operator {
-        &path.properties[..path.properties.len() - 1]
-    } else {
-        &path.properties[..]
-    };
-
     let is_number_of_operator = is_number_of_operation(path);
-    if is_number_of_operator {
+    
+    let properties_to_process = if is_length_of_operator {
+        &path.properties[..path.properties.len() - 1]
+    } else if is_number_of_operator {
         &path.properties[..path.properties.len() - 1]
     } else {
         &path.properties[..]
     };
 
-    // Follow the property chain - properties are in reverse order
-    // For "__id__ of __group__ of **user**", we get properties: ["id", "group"]
-    // But we need to traverse: user -> group -> id
-    for property in path.properties.iter().rev() {
+    // Follow the property chain - properties are already in correct traversal order
+    // For "__date of birth__ of **person** of **driving test**", we get properties: ["person", "date of birth"]
+    // And we traverse: driving test -> person -> date of birth
+    for property in properties_to_process.iter() {
         let mut found_property = None;
         let mut actual_property_name = property.clone();
 
@@ -1132,10 +1129,11 @@ fn resolve_property_path<'a>(
             found_property = Some(prop_value);
         } else if let Some(prop_value) = get_json_value_insensitive(current_value, property) {
             found_property = Some(prop_value);
+            // Find the actual property name in the JSON for path tracking
             if let Some(obj) = current_value.as_object() {
                 for (key, _) in obj {
-                    if key.to_lowercase() == property.to_lowercase() {
-                        actual_property_name = key.to_string();
+                    if names_match(property, key) {
+                        actual_property_name = key.clone();
                         break;
                     }
                 }
@@ -1147,11 +1145,11 @@ fn resolve_property_path<'a>(
                 actual_property_name = transformed_property.clone();
             } else if let Some(prop_value) = get_json_value_insensitive(current_value, &transformed_property) {
                 found_property = Some(prop_value);
+                // Find the actual property name in the JSON for path tracking
                 if let Some(obj) = current_value.as_object() {
-                    let transformed_lower = transformed_property.to_lowercase();
                     for (key, _) in obj {
-                        if key.to_lowercase() == transformed_lower {
-                            actual_property_name = key.to_string();
+                        if names_match(&transformed_property, key) {
+                            actual_property_name = key.clone();
                             break;
                         }
                     }
@@ -1406,10 +1404,10 @@ fn resolve_property_path_with_mapping<'a>(
         &path.properties[..]
     };
 
-    // Follow the property chain - properties are in reverse order
-    // For "__id__ of __group__ of **user**", we get properties: ["id", "group"]
-    // But we need to traverse: user -> group -> id
-    for property in properties_to_process.iter().rev() {
+    // Follow the property chain - properties are already in correct traversal order
+    // For "__date of birth__ of **person** of **driving test**", we get properties: ["person", "date of birth"]
+    // And we traverse: driving test -> person -> date of birth
+    for property in properties_to_process.iter() {
         let mut found_property = None;
         let mut actual_property_name = property.clone();
 
