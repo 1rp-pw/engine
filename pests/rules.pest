@@ -1,0 +1,17 @@
+rule_start = {"A " | "An "}
+label = @{ (!(". " ~ rule_start)  ~ ANY)+ ~ ". " }
+
+object_selector = @{ "**" ~ identifier ~ "**" }
+selector = @{ identifier }
+
+rule_header = { label? ~ rule_start ~ object_selector }
+rule_set = { SOI ~ (COMMENT | rule)* ~ EOI }
+rule = {
+    rule_header ~ rule_outcome ~
+    "if" ~ condition ~ (condition_operator ~ condition)* ~ "."
+}
+rule_outcome = {
+  outcome_verb? ~ outcome
+}
+rule_name = @{(!(". " | " and " | ".") ~ ANY)+}
+outcome_verb = { "gets" | "passes" | "is" | "has" | "receives" | "qualifies for" | "meets" | "satisfies" }

@@ -1,0 +1,14 @@
+value = { date_literal | number | boolean | string_literal }
+list_value = { "[" ~ value ~ ("," ~ value)* ~ "]" }
+
+string_literal = @{ "\"" ~ (!("\"") ~ ANY)* ~ "\"" | identifier }
+
+number = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
+
+boolean = { "true" | "false" }
+
+date_literal = @{
+  "date(" ~ date_format ~ ")" |
+  date_format
+}
+date_format = @{ ASCII_DIGIT{4} ~ "-" ~ ASCII_DIGIT{2} ~ "-" ~ ASCII_DIGIT{2} }

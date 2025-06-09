@@ -1,0 +1,19 @@
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+COMMENT = _{ "#" ~ (!"\n" ~ ANY)* ~ "\n" }
+
+identifier = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+
+property = @{ "__" ~ property_name ~ "__" }
+property_name = @{ (!("__") ~ ANY)+ }
+
+label_name = @{(ASCII_ALPHANUMERIC | "_" | "-")+}
+label_predicate = _{ "is valid" | "is approved" | "has passed" }
+label_reference = { "§" ~ label_name ~ label_predicate? }
+
+rule_reference = { "the"? ~ object_selector ~ reference_name }
+reference_name = @{ (!("." | "\n") ~ ANY)+ }
+
+length_of_expr = { ("the")? ~ "length" ~ "of" ~ property_access }
+number_of_expr = { ("the")? ~ "number" ~ "of" ~ property_access }
+
+outcome = @{ (!("if" | ".") ~ ANY)+ }
