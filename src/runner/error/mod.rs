@@ -25,6 +25,7 @@ pub enum RuleError {
 #[derive(Debug)]
 pub struct EvaluationResult<T> {
     pub result: Result<T, RuleError>,
+    #[allow(dead_code)]
     pub trace: Option<RuleSetTrace>,
 }
 
@@ -42,19 +43,23 @@ impl<T> EvaluationResult<T> {
             trace,
         }
     }
-    
+
+    #[allow(dead_code)]
     pub fn is_success(&self) -> bool {
         self.result.is_ok()
     }
-    
+
+    #[allow(dead_code)]
     pub fn is_failure(&self) -> bool {
         self.result.is_err()
     }
-    
+
+    #[allow(dead_code)]
     pub fn unwrap(self) -> T {
         self.result.unwrap()
     }
-    
+
+    #[allow(dead_code)]
     pub fn unwrap_trace(self) -> RuleSetTrace {
         self.trace.expect("Expected trace to be present")
     }
@@ -96,7 +101,8 @@ impl PartialRuleTrace {
     pub fn add_condition(&mut self, condition_trace: ConditionTrace) {
         self.conditions.push(condition_trace);
     }
-    
+
+    #[allow(dead_code)]
     pub fn set_result(&mut self, result: bool) {
         self.result = Some(result);
     }

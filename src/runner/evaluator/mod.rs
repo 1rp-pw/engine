@@ -19,7 +19,7 @@ impl RuleError {
     }
 }
 
-/// Enhanced rule set evaluation that preserves traces even on errors
+#[allow(dead_code)]
 pub fn evaluate_rule_set_with_trace(
     rule_set: &RuleSet,
     json: &Value
@@ -106,6 +106,7 @@ pub fn evaluate_rule_set_with_trace(
     EvaluationResult::success(results, rule_set_trace)
 }
 
+#[allow(dead_code)]
 pub fn evaluate_rule_set(
     rule_set: &RuleSet,
     json: &Value
@@ -335,6 +336,7 @@ pub fn evaluate_rule(
     Ok((rule_result, rule_trace))
 }
 
+#[allow(dead_code)]
 fn evaluate_condition_with_trace(
     condition: &Condition,
     json: &Value,
@@ -431,6 +433,7 @@ fn evaluate_rule_reference_condition(
     Ok((result, ConditionTrace::RuleReference(rule_reference_trace)))
 }
 
+#[allow(dead_code)]
 fn evaluate_rule_reference_condition_with_trace(
     condition: &RuleReferenceCondition,
     json: &Value,
@@ -504,6 +507,7 @@ fn evaluate_rule_reference_condition_with_trace(
     }
 }
 
+#[allow(dead_code)]
 fn evaluate_comparison_condition_with_trace(
     condition: &ComparisonCondition,
     json: &Value
@@ -706,6 +710,7 @@ fn find_rule_fuzzy_match<'a>(rule_name: &str, rule_set: &'a RuleSet) -> Option<&
     found_outcome.and_then(|outcome| rule_set.get_rule(&outcome))
 }
 
+#[allow(dead_code)]
 fn try_evaluate_by_rule_with_trace(
     rule_name: &str,
     json: &Value,
@@ -736,6 +741,7 @@ fn try_evaluate_by_rule_with_trace(
     }
 }
 
+#[allow(dead_code)]
 fn evaluate_rule_or_property_with_trace(
     rule_name: &str,
     effective_selector: &str,
@@ -873,7 +879,7 @@ fn calculate_number_of(value: &Value) -> Result<f64, RuleError> {
 }
 
 // ===== Comparison Evaluation =====
-
+#[allow(dead_code)]
 fn evaluate_comparison_condition(
     condition: &ComparisonCondition,
     json: &Value
@@ -1162,7 +1168,7 @@ fn resolve_property_path<'a>(
     }
 
     if is_length_of_operator {
-        let length_value = calculate_length_of(current_value)?;
+        calculate_length_of(current_value)?;
         path_parts.push("length".to_string());
         let path_str = format!("$.{}", path_parts.join("."));
         return Ok((Some(current_value), path_str));
@@ -1172,6 +1178,7 @@ fn resolve_property_path<'a>(
     Ok((Some(current_value), path_str))
 }
 
+#[allow(dead_code)]
 fn evaluate_chained_comparison_condition(
     condition: &ComparisonCondition,
     property_chain: &[PropertyChainElement],

@@ -9,8 +9,10 @@ use crate::runner::model::{ComparisonOperator, RuleSet, RuleValue, Condition, So
 
 #[derive(Parser)]
 #[grammar = "pests/grammar.pest"]
+#[allow(dead_code)]
 pub struct RuleParser;
 
+#[allow(dead_code)]
 pub fn parse_rules(input: &str) -> Result<RuleSet, RuleError> {
     let pairs = RuleParser::parse(Rule::rule_set, input)
         .map_err(|e| RuleError::ParseError(e.to_string()))?;
@@ -368,6 +370,7 @@ fn parse_number_of_expression(pair: Pair<Rule>) -> Result<PropertyPath, RuleErro
     Ok(path)
 }
 
+#[allow(dead_code)]
 fn parse_comparison_operator(pair: Pair<Rule>) -> Result<ComparisonOperator, RuleError> {
     match pair.as_str() {
         "is greater than or equal to" => Ok(ComparisonOperator::GreaterThanOrEqual),

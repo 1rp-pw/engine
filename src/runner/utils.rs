@@ -1,6 +1,7 @@
 use crate::runner::error::RuleError;
 use crate::runner::model::{Condition, Rule};
 
+#[allow(dead_code)]
 pub fn find_referenced_outcomes(rules: &[Rule]) -> std::collections::HashSet<String> {
     let mut referenced = std::collections::HashSet::new();
 
@@ -40,7 +41,8 @@ pub fn find_referenced_outcomes(rules: &[Rule]) -> std::collections::HashSet<Str
     referenced
 }
 
-pub fn find_global_rule<'a>(rules: &'a [Rule]) -> Result<&'a Rule, RuleError> {
+#[allow(dead_code)]
+pub fn find_global_rule(rules: &[Rule]) -> Result<&Rule, RuleError> {
     if rules.len() == 1 {
         return Ok(&rules[0])
     }
@@ -121,7 +123,7 @@ pub fn infer_possible_properties(rule_name: &str) -> Vec<String> {
     properties
 }
 
-// You might also want to add this helper function for selector name transformation
+#[allow(dead_code)]
 pub fn transform_selector_name(name: &str) -> String {
     let words: Vec<&str> = name.split_whitespace().collect();
     if words.is_empty() {

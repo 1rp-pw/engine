@@ -36,6 +36,7 @@ struct EvaluationResponse {
 
 #[derive(Clone)]
 struct AppState {
+    #[allow(dead_code)]
     flags_client: Client,
 }
 
@@ -69,7 +70,7 @@ async fn main() {
 }
 
 async fn handle_run(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     Json(package): Json<RuleDataPackage>
 ) -> (StatusCode, Json<EvaluationResponse>) {
     match parse_rules(&package.rule) {

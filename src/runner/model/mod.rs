@@ -12,12 +12,6 @@ pub mod constants {
     pub const LENGTH_OF_MARKER: &str = "__length_of__";
     pub const NUMBER_OF_MARKER: &str = "__number_of__";
     pub const EMPTY_STRING: &str = "";
-    pub const USER: &str = "user";
-    pub const AGE: &str = "age";
-    pub const NAME: &str = "name";
-    pub const STATUS: &str = "status";
-    pub const ACTIVE: &str = "active";
-    pub const PERSON: &str = "person";
 }
 
 // Caching system for performance optimization
@@ -25,17 +19,21 @@ pub mod constants {
 pub struct PerformanceCache {
     // Cache for rule fuzzy matching to avoid O(n) searches
     pub rule_fuzzy_matches: RwLock<HashMap<String, Option<String>>>,
-    
+
     // Cache for JSON property lookups to avoid repeated case-insensitive searches
+    #[allow(dead_code)]
     pub json_property_lookups: RwLock<HashMap<(String, String), Option<String>>>,
     
     // Cache for selector transformations (e.g., "user profile" -> "userProfile")
+    #[allow(dead_code)]
     pub selector_transformations: RwLock<HashMap<String, String>>,
     
     // Cache for effective selector resolutions
+    #[allow(dead_code)]
     pub effective_selectors: RwLock<HashMap<String, Option<String>>>,
     
     // Cache for property name transformations
+    #[allow(dead_code)]
     pub property_transformations: RwLock<HashMap<String, String>>,
 }
 
@@ -43,7 +41,8 @@ impl PerformanceCache {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
+    #[allow(dead_code)]
     pub fn clear(&self) {
         if let Ok(mut cache) = self.rule_fuzzy_matches.write() {
             cache.clear();
@@ -63,6 +62,7 @@ impl PerformanceCache {
     }
     
     // Get cache statistics for monitoring
+    #[allow(dead_code)]
     pub fn get_stats(&self) -> CacheStats {
         let rule_count = self.rule_fuzzy_matches.read()
             .map(|cache| cache.len())
@@ -92,10 +92,15 @@ impl PerformanceCache {
 
 #[derive(Debug, Clone)]
 pub struct CacheStats {
+    #[allow(dead_code)]
     pub rule_fuzzy_matches: usize,
+    #[allow(dead_code)]
     pub json_property_lookups: usize,
+    #[allow(dead_code)]
     pub selector_transformations: usize,
+    #[allow(dead_code)]
     pub effective_selectors: usize,
+    #[allow(dead_code)]
     pub property_transformations: usize,
 }
 
@@ -111,11 +116,13 @@ impl EfficientString {
     pub fn from_string(s: String) -> Self {
         Self(Cow::Owned(s))
     }
-    
+
+    #[allow(dead_code)]
     pub fn as_str(&self) -> &str {
         &self.0
     }
-    
+
+    #[allow(dead_code)]
     pub fn into_string(self) -> String {
         self.0.into_owned()
     }
@@ -184,6 +191,7 @@ impl fmt::Display for ComparisonOperator {
 }
 
 impl ComparisonOperator {
+    #[allow(dead_code)]
     pub fn all_representations(&self) -> Vec<&'static str> {
         match self {
             ComparisonOperator::GreaterThanOrEqual => vec![
@@ -283,7 +291,9 @@ pub struct PropertyPath {
 // Simple enum for property chain elements
 #[derive(Debug, Clone)]
 pub enum PropertyChainElement {
+    #[allow(dead_code)]
     Property(String),
+    #[allow(dead_code)]
     Selector(String),
 }
 
@@ -314,7 +324,8 @@ impl PositionedValue<String> {
     pub fn from_static(value: &'static str) -> Self {
         Self { value: value.to_string(), pos: None }
     }
-    
+
+    #[allow(dead_code)]
     pub fn from_static_with_pos(value: &'static str, pos: Option<SourcePosition>) -> Self {
         Self { value: value.to_string(), pos }
     }
@@ -378,6 +389,7 @@ pub struct RuleSet {
 }
 
 impl RuleSet {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         RuleSet {
             rules: Vec::new(),
@@ -405,7 +417,8 @@ impl RuleSet {
         self.rule_map.insert(rule.outcome.clone(), index);
         self.rules.push(rule);
     }
-    
+
+    #[allow(dead_code)]
     pub fn add_rules(&mut self, rules: Vec<Rule>) {
         // Reserve capacity to avoid reallocations
         let new_capacity = self.rules.len() + rules.len();
