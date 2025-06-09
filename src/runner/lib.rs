@@ -304,6 +304,31 @@ mod tests {
     }
 
     #[test]
+    fn test_fuzzy_name_matching() {
+        use crate::runner::utils::names_match;
+        
+        // Test camelCase <-> spaces
+        assert!(names_match("driving test", "drivingTest"));
+        assert!(names_match("drivingTest", "driving test"));
+        
+        // Test snake_case <-> camelCase  
+        assert!(names_match("driving_test", "drivingTest"));
+        assert!(names_match("drivingTest", "driving_test"));
+        
+        // Test spaces <-> snake_case
+        assert!(names_match("driving test", "driving_test"));
+        assert!(names_match("driving_test", "driving test"));
+        
+        // Test case insensitivity
+        assert!(names_match("DrivingTest", "driving test"));
+        assert!(names_match("DRIVING_TEST", "drivingTest"));
+        
+        // Test that non-matching names don't match
+        assert!(!names_match("driving test", "walking test"));
+        assert!(!names_match("drivingTest", "walkingTest"));
+    }
+
+    #[test]
     fn test_property_deduplication() {
         let properties = infer_possible_properties("test");
         // For single word "test", the function generates duplicates because

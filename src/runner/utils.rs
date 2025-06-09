@@ -140,3 +140,58 @@ pub fn transform_selector_name(name: &str) -> String {
 
     result
 }
+
+/// Normalize a name by converting it to multiple possible formats
+pub fn normalize_name(name: &str) -> Vec<String> {
+    let mut variants = Vec::new();
+    
+    // Original name
+    variants.push(name.to_string());
+    
+    // Convert spaces and underscores to camelCase
+    let camel_case = transform_property_name(name);
+    if !variants.contains(&camel_case) {
+        variants.push(camel_case);
+    }
+    
+    // Convert to snake_case
+    let words: Vec<&str> = name.split(&[' ', '_'][..])
+        .filter(|s| !s.is_empty())
+        .collect();
+    if words.len() > 1 {
+        let snake_case = words.join("_").to_lowercase();
+        if !variants.contains(&snake_case) {
+            variants.push(snake_case);
+        }
+    }
+    
+    // Convert to space-separated
+    if words.len() > 1 {
+        let space_separated = words.join(" ").to_lowercase();
+        if !variants.contains(&space_separated) {
+            variants.push(space_separated);
+        }
+    }
+    
+    variants
+}
+
+/// Check if two names match using fuzzy matching (camelCase, snake_case, spaces)
+pub fn names_match(name1: &str, name2: &str) -> bool {
+    if name1 == name2 {
+        return true;
+    }
+    
+    let variants1 = normalize_name(name1);
+    let variants2 = normalize_name(name2);
+    
+    for v1 in &variants1 {
+        for v2 in &variants2 {
+            if v1.eq_ignore_ascii_case(v2) {
+                return true;
+            }
+        }
+    }
+    
+    false
+}

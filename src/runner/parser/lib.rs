@@ -9,6 +9,9 @@ mod tests {
         let input = r#"A **user** passes the test if __age__ of **user** is greater than or equal to 18."#;
 
         let result = parse_rules(input);
+        if let Err(ref e) = result {
+            println!("Parse error: {:?}", e);
+        }
         assert!(result.is_ok());
 
         let rule_set = result.unwrap();
@@ -587,6 +590,23 @@ A **user** is valid if __score__ of **user** is in [85, 90, 95, 100].
             }
             _ => panic!("Expected comparison condition"),
         }
+    }
+
+    #[test]
+    fn test_parse_flexible_naming_conventions() {
+        // Test with spaces in object selectors (but using proper property chain syntax)
+        let input = r#"A **person** passes the theory test if the __multiple choice__ of the __theory__ of the __scores__ of the **driving test** is at least 43."#;
+
+        let result = parse_rules(input);
+        if let Err(ref e) = result {
+            println!("Parse error for flexible naming: {:?}", e);
+        }
+        assert!(result.is_ok());
+
+        let rule_set = result.unwrap();
+        assert_eq!(rule_set.rules.len(), 1);
+        let rule = &rule_set.rules[0];
+        assert_eq!(rule.selector, "person");
     }
 
     #[test]

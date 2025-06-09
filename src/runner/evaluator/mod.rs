@@ -7,7 +7,7 @@ use crate::runner::trace::{RuleSetTrace, RuleTrace, ConditionTrace, ComparisonTr
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use chrono::NaiveDate;
-use crate::runner::utils::transform_property_name;
+use crate::runner::utils::{transform_property_name, names_match};
 
 impl RuleError {
     pub fn infinite_loop_error(cycle_path: Vec<String>) -> Self {
@@ -1356,27 +1356,10 @@ fn find_effective_selector(selector: &str, json: &Value) -> Result<Option<String
         return Ok(Some(selector.to_string()));
     }
 
-    // Try case-insensitive match and return the actual key from the JSON
+    // Try fuzzy matching with all JSON keys
     if let Some(obj) = json.as_object() {
-        let selector_lower = selector.to_lowercase();
         for (key, _) in obj {
-            if key.to_lowercase() == selector_lower {
-                return Ok(Some(key.clone())); // Return the actual key from JSON
-            }
-        }
-    }
-
-    // Try transformed selector (camelCase)
-    let transformed = transform_selector_name(selector);
-    if json.get(&transformed).is_some() {
-        return Ok(Some(transformed));
-    }
-
-    // Try case-insensitive match on transformed selector
-    if let Some(obj) = json.as_object() {
-        let transformed_lower = transformed.to_lowercase();
-        for (key, _) in obj {
-            if key.to_lowercase() == transformed_lower {
+            if names_match(selector, key) {
                 return Ok(Some(key.clone())); // Return the actual key from JSON
             }
         }
@@ -1739,10 +1722,9 @@ fn get_json_value_insensitive<'a>(json: &'a serde_json::Value, key: &str) -> Opt
             return Some(value);
         }
         
-        // Then try case-insensitive match using more efficient approach
-        let key_lower = key.to_ascii_lowercase();
+        // Then try fuzzy matching (camelCase, snake_case, spaces)
         for (k, v) in obj {
-            if k.to_ascii_lowercase() == key_lower {
+            if names_match(key, k) {
                 return Some(v);
             }
         }
