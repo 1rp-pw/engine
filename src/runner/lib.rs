@@ -304,6 +304,115 @@ mod tests {
     }
 
     #[test]
+    fn test_fuzzy_name_matching() {
+        use crate::runner::utils::names_match;
+        
+        // Test camelCase <-> spaces
+        assert!(names_match("driving test", "drivingTest"));
+        assert!(names_match("drivingTest", "driving test"));
+        
+        // Test snake_case <-> camelCase  
+        assert!(names_match("driving_test", "drivingTest"));
+        assert!(names_match("drivingTest", "driving_test"));
+        
+        // Test spaces <-> snake_case
+        assert!(names_match("driving test", "driving_test"));
+        assert!(names_match("driving_test", "driving test"));
+        
+        // Test case insensitivity
+        assert!(names_match("DrivingTest", "driving test"));
+        assert!(names_match("DRIVING_TEST", "drivingTest"));
+        
+        // Test that non-matching names don't match
+        assert!(!names_match("driving test", "walking test"));
+        assert!(!names_match("drivingTest", "walkingTest"));
+    }
+
+    #[test]
+    fn test_custom_object_selector_mapping() {
+        use crate::runner::parser::parse_rules;
+
+        // Parse the rules first
+        let input = r#"
+        A **driver** is valid if the **driver** passes the test.
+        A **driver** passes the test if the __name__ of the **person** is equal to "bob".
+        "#;
+
+        let mut rule_set = parse_rules(input).unwrap();
+        
+        // Add the mapping: **driver** -> **person**
+        rule_set.map_selector("driver", "person");
+
+        // Test the mapping functionality
+        assert_eq!(rule_set.resolve_selector("driver"), "person");
+        assert_eq!(rule_set.resolve_selector("person"), "person"); // Unmapped selectors return themselves
+        assert_eq!(rule_set.resolve_selector("user"), "user"); // Unmapped selectors return themselves
+    }
+
+    #[test]
+    fn test_driving_test_corrected_syntax() {
+        use crate::runner::parser::parse_rules;
+
+        let rule = r#"A **driver** passes the age test
+  if the __date of birth__ of the __person__ of the **drivingTest** is earlier than 2008-12-12."#;
+
+        let result = parse_rules(rule);
+        if let Err(ref e) = result {
+            println!("Parse error: {:?}", e);
+        }
+        assert!(result.is_ok());
+
+        let rule_set = result.unwrap();
+        assert_eq!(rule_set.rules.len(), 1);
+    }
+
+    #[test]
+    fn test_flexible_property_access_with_object_selectors() {
+        use crate::runner::parser::parse_rules;
+
+        // Test your original failing policy exactly as provided
+        let original_failing_policy = r#"A **driver** passes the age test if the __date of birth__ of the **person** in the **driving test** is earlier than 2008-12-12."#;
+
+        let result = parse_rules(original_failing_policy);
+        if let Err(ref e) = result {
+            println!("Parse error for original failing policy: {:?}", e);
+        }
+        assert!(result.is_ok(), "Should parse original failing policy with object selectors in chain");
+
+        let rule_set = result.unwrap();
+        assert_eq!(rule_set.rules.len(), 1);
+        
+        let rule = &rule_set.rules[0];
+        assert_eq!(rule.selector, "driver");
+        assert_eq!(rule.outcome, "the age test");
+    }
+
+    #[test]
+    fn test_mixed_property_and_object_selectors() {
+        use crate::runner::parser::parse_rules;
+
+        // Test various combinations of properties and object selectors
+        let test_cases = vec![
+            // Mixed selectors and properties
+            r#"A **user** is valid if the __name__ of the **person** of the **profile** is equal to "John"."#,
+            // All object selectors
+            r#"A **user** is valid if the **id** of the **person** of the **profile** is equal to "123"."#,
+            // All properties (traditional)
+            r#"A **user** is valid if the __id__ of the __person__ of the __profile__ is equal to "123"."#,
+            // Property final selector
+            r#"A **user** is valid if the **name** of the **person** of the __profile__ is equal to "John"."#,
+        ];
+
+        for (i, rule_text) in test_cases.iter().enumerate() {
+            let result = parse_rules(rule_text);
+            if let Err(ref e) = result {
+                println!("Parse error for test case {}: {:?}", i, e);
+            }
+            assert!(result.is_ok(), "Test case {} should parse successfully: {}", i, rule_text);
+        }
+    }
+
+    #[test]
     fn test_property_deduplication() {
         let properties = infer_possible_properties("test");
         // For single word "test", the function generates duplicates because

@@ -91,7 +91,30 @@ async fn handle_run(
             
             match evaluation_result.result {
                 Ok(results) => {
-                    let result = results.values().next().cloned().unwrap_or(false);
+                    // Find the global rule to get its outcome
+                    let global_rule = match crate::runner::utils::find_global_rule(&rule_set.rules) {
+                        Ok(rule) => rule,
+                        Err(_) => {
+                            // If no global rule found, fall back to first result
+                            let result = results.values().next().cloned().unwrap_or(false);
+                            let response = EvaluationResponse {
+                                result,
+                                error: None,
+                                trace: evaluation_result.trace,
+                                labels: if labels.is_empty() {
+                                    None
+                                } else {
+                                    Some(labels)
+                                },
+                                rule,
+                                data: package.data.clone(),
+                            };
+                            return (StatusCode::OK, Json(response));
+                        }
+                    };
+                    
+                    // Get the result for the global rule's outcome
+                    let result = results.get(&global_rule.outcome).cloned().unwrap_or(false);
                     let response = EvaluationResponse {
                         result,
                         error: None,

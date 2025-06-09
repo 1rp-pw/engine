@@ -12,8 +12,10 @@ property_condition = {
 }
 
 property_access = {
-    property ~ (("of" | "in") ~ ("the")? ~ property)* ~ ("of" | "in") ~ ("the")? ~ object_selector
+    property_or_selector ~ (("of" | "in") ~ ("the")? ~ property_or_selector)*
 }
+
+property_or_selector = { property | object_selector }
 
 predicate = {
     comparison_operator ~ (property_access | value) |

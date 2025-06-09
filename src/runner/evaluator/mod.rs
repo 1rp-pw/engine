@@ -7,7 +7,7 @@ use crate::runner::trace::{RuleSetTrace, RuleTrace, ConditionTrace, ComparisonTr
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use chrono::NaiveDate;
-use crate::runner::utils::transform_property_name;
+use crate::runner::utils::{transform_property_name, names_match};
 
 impl RuleError {
     pub fn infinite_loop_error(cycle_path: Vec<String>) -> Self {
@@ -411,13 +411,39 @@ fn evaluate_rule_reference_condition(
     // Normal case with selector
     let effective_selector = find_effective_selector(&condition.selector.value, json)?;
 
-    if effective_selector.is_none() {
-        return Ok((false, create_failed_rule_reference_trace(condition)));
-    }
-
-    let part = condition.rule_name.value.trim();
-    let (result, referenced_outcome, property_check) =
-        evaluate_rule_or_property(part, &effective_selector.unwrap(), json, rule_set, evaluation_stack, call_path)?;
+    let (result, referenced_outcome, property_check) = if effective_selector.is_some() {
+        // Selector exists in JSON - use it directly
+        let part = condition.rule_name.value.trim();
+        evaluate_rule_or_property(part, &effective_selector.unwrap(), json, rule_set, evaluation_stack, call_path)?
+    } else {
+        // Conceptual selector - try to evaluate the rule without requiring the selector to exist
+        let part = condition.rule_name.value.trim();
+        
+        // First, try to find the rule globally (without a specific selector)
+        if let Some((rule_result, outcome)) = try_evaluate_by_rule(part, json, rule_set, evaluation_stack, call_path)? {
+            (rule_result, Some(outcome), None)
+        } else {
+            // If no global rule found, try to evaluate against all available objects in the JSON
+            let mut found_any_match = false;
+            let mut last_outcome = None;
+            let mut last_property_check = None;
+            
+            if let Some(obj) = json.as_object() {
+                for (key, _) in obj {
+                    if let Ok((rule_result, outcome, prop_check)) = evaluate_rule_or_property(part, key, json, rule_set, evaluation_stack, call_path) {
+                        if rule_result {
+                            found_any_match = true;
+                            last_outcome = outcome;
+                            last_property_check = prop_check;
+                            break; // Found a match, we can stop
+                        }
+                    }
+                }
+            }
+            
+            (found_any_match, last_outcome, last_property_check)
+        }
+    };
 
     let rule_reference_trace = RuleReferenceTrace {
         selector: SelectorTrace {
@@ -474,10 +500,7 @@ fn evaluate_rule_reference_condition_with_trace(
 
     // Normal case with selector
     let effective_selector = match find_effective_selector(&condition.selector.value, json) {
-        Ok(Some(sel)) => sel,
-        Ok(None) => {
-            return Ok((false, create_failed_rule_reference_trace(condition)));
-        }
+        Ok(sel) => sel,
         Err(error) => {
             let failed_trace = create_failed_rule_reference_trace(condition);
             return Err((error, Some(failed_trace)));
@@ -485,26 +508,69 @@ fn evaluate_rule_reference_condition_with_trace(
     };
 
     let part = condition.rule_name.value.trim();
-    match evaluate_rule_or_property_with_trace(part, &effective_selector, json, rule_set, evaluation_stack, call_path) {
-        Ok((result, referenced_outcome, property_check)) => {
-            let rule_reference_trace = RuleReferenceTrace {
-                selector: SelectorTrace {
-                    value: condition.selector.value.clone(),
-                    pos: condition.selector.pos.clone(),
-                },
-                rule_name: condition.rule_name.value.clone(),
-                referenced_rule_outcome: referenced_outcome,
-                property_check,
-                result,
-            };
+    let (result, referenced_outcome, property_check) = if effective_selector.is_some() {
+        // Selector exists in JSON - use it directly
+        match evaluate_rule_or_property_with_trace(part, &effective_selector.unwrap(), json, rule_set, evaluation_stack, call_path) {
+            Ok(result) => result,
+            Err((error, _)) => {
+                let failed_trace = create_failed_rule_reference_trace(condition);
+                return Err((error, Some(failed_trace)));
+            }
+        }
+    } else {
+        // Conceptual selector - try to evaluate the rule without requiring the selector to exist
+        
+        // First, try to find the rule globally (without a specific selector)
+        match try_evaluate_by_rule_with_trace(part, json, rule_set, evaluation_stack, call_path) {
+            Ok(Some((rule_result, outcome))) => {
+                (rule_result, Some(outcome), None)
+            }
+            Ok(None) => {
+                // If no global rule found, try to evaluate against all available objects in the JSON
+                let mut found_any_match = false;
+                let mut last_outcome = None;
+                let mut last_property_check = None;
+                
+                if let Some(obj) = json.as_object() {
+                    for (key, _) in obj {
+                        match evaluate_rule_or_property_with_trace(part, key, json, rule_set, evaluation_stack, call_path) {
+                            Ok((rule_result, outcome, prop_check)) => {
+                                if rule_result {
+                                    found_any_match = true;
+                                    last_outcome = outcome;
+                                    last_property_check = prop_check;
+                                    break; // Found a match, we can stop
+                                }
+                            }
+                            Err(_) => {
+                                // Ignore errors and continue to next key
+                                continue;
+                            }
+                        }
+                    }
+                }
+                
+                (found_any_match, last_outcome, last_property_check)
+            }
+            Err((error, _)) => {
+                let failed_trace = create_failed_rule_reference_trace(condition);
+                return Err((error, Some(failed_trace)));
+            }
+        }
+    };
 
-            Ok((result, ConditionTrace::RuleReference(rule_reference_trace)))
-        }
-        Err((error, _)) => {
-            let failed_trace = create_failed_rule_reference_trace(condition);
-            Err((error, Some(failed_trace)))
-        }
-    }
+    let rule_reference_trace = RuleReferenceTrace {
+        selector: SelectorTrace {
+            value: condition.selector.value.clone(),
+            pos: condition.selector.pos.clone(),
+        },
+        rule_name: condition.rule_name.value.clone(),
+        referenced_rule_outcome: referenced_outcome,
+        property_check,
+        result,
+    };
+
+    Ok((result, ConditionTrace::RuleReference(rule_reference_trace)))
 }
 
 #[allow(dead_code)]
@@ -721,24 +787,28 @@ fn try_evaluate_by_rule_with_trace(
     // Try exact outcome match
     if let Some(rule) = rule_set.get_rule(rule_name) {
         match evaluate_rule_with_trace(rule, json, rule_set, evaluation_stack, call_path) {
-            Ok((result, _)) => Ok(Some((result, rule.outcome.clone()))),
-            Err((error, partial_trace)) => Err((error, partial_trace))
+            Ok((result, _)) => return Ok(Some((result, rule.outcome.clone()))),
+            Err((error, partial_trace)) => return Err((error, partial_trace))
         }
-    } else if let Some(rule) = rule_set.get_rule_by_label(rule_name) {
-        // Try exact label match
-        match evaluate_rule_with_trace(rule, json, rule_set, evaluation_stack, call_path) {
-            Ok((result, _)) => Ok(Some((result, rule.outcome.clone()))),
-            Err((error, partial_trace)) => Err((error, partial_trace))
-        }
-    } else if let Some(rule) = find_rule_fuzzy_match(rule_name, rule_set) {
-        // Try fuzzy matching
-        match evaluate_rule_with_trace(rule, json, rule_set, evaluation_stack, call_path) {
-            Ok((result, _)) => Ok(Some((result, rule.outcome.clone()))),
-            Err((error, partial_trace)) => Err((error, partial_trace))
-        }
-    } else {
-        Ok(None)
     }
+    
+    // Try exact label match
+    if let Some(rule) = rule_set.get_rule_by_label(rule_name) {
+        match evaluate_rule_with_trace(rule, json, rule_set, evaluation_stack, call_path) {
+            Ok((result, _)) => return Ok(Some((result, rule.outcome.clone()))),
+            Err((error, partial_trace)) => return Err((error, partial_trace))
+        }
+    }
+    
+    // Try fuzzy matching
+    if let Some(rule) = find_rule_fuzzy_match(rule_name, rule_set) {
+        match evaluate_rule_with_trace(rule, json, rule_set, evaluation_stack, call_path) {
+            Ok((result, _)) => return Ok(Some((result, rule.outcome.clone()))),
+            Err((error, partial_trace)) => return Err((error, partial_trace))
+        }
+    }
+    
+    Ok(None)
 }
 
 #[allow(dead_code)]
@@ -1108,23 +1178,20 @@ fn resolve_property_path<'a>(
     path_parts[0] = final_selector.clone(); // Use the actual key from JSON
 
     let is_length_of_operator = is_length_of_operation(path);
-    if is_length_of_operator {
-        &path.properties[..path.properties.len() - 1]
-    } else {
-        &path.properties[..]
-    };
-
     let is_number_of_operator = is_number_of_operation(path);
-    if is_number_of_operator {
+    
+    let properties_to_process = if is_length_of_operator {
+        &path.properties[..path.properties.len() - 1]
+    } else if is_number_of_operator {
         &path.properties[..path.properties.len() - 1]
     } else {
         &path.properties[..]
     };
 
-    // Follow the property chain - properties are in reverse order
-    // For "__id__ of __group__ of **user**", we get properties: ["id", "group"]
-    // But we need to traverse: user -> group -> id
-    for property in path.properties.iter().rev() {
+    // Follow the property chain - properties are already in correct traversal order
+    // For "__date of birth__ of **person** of **driving test**", we get properties: ["person", "date of birth"]
+    // And we traverse: driving test -> person -> date of birth
+    for property in properties_to_process.iter() {
         let mut found_property = None;
         let mut actual_property_name = property.clone();
 
@@ -1132,10 +1199,11 @@ fn resolve_property_path<'a>(
             found_property = Some(prop_value);
         } else if let Some(prop_value) = get_json_value_insensitive(current_value, property) {
             found_property = Some(prop_value);
+            // Find the actual property name in the JSON for path tracking
             if let Some(obj) = current_value.as_object() {
                 for (key, _) in obj {
-                    if key.to_lowercase() == property.to_lowercase() {
-                        actual_property_name = key.to_string();
+                    if names_match(property, key) {
+                        actual_property_name = key.clone();
                         break;
                     }
                 }
@@ -1147,11 +1215,11 @@ fn resolve_property_path<'a>(
                 actual_property_name = transformed_property.clone();
             } else if let Some(prop_value) = get_json_value_insensitive(current_value, &transformed_property) {
                 found_property = Some(prop_value);
+                // Find the actual property name in the JSON for path tracking
                 if let Some(obj) = current_value.as_object() {
-                    let transformed_lower = transformed_property.to_lowercase();
                     for (key, _) in obj {
-                        if key.to_lowercase() == transformed_lower {
-                            actual_property_name = key.to_string();
+                        if names_match(&transformed_property, key) {
+                            actual_property_name = key.clone();
                             break;
                         }
                     }
@@ -1356,33 +1424,108 @@ fn find_effective_selector(selector: &str, json: &Value) -> Result<Option<String
         return Ok(Some(selector.to_string()));
     }
 
-    // Try case-insensitive match and return the actual key from the JSON
+    // Try fuzzy matching with all JSON keys
     if let Some(obj) = json.as_object() {
-        let selector_lower = selector.to_lowercase();
         for (key, _) in obj {
-            if key.to_lowercase() == selector_lower {
-                return Ok(Some(key.clone())); // Return the actual key from JSON
-            }
-        }
-    }
-
-    // Try transformed selector (camelCase)
-    let transformed = transform_selector_name(selector);
-    if json.get(&transformed).is_some() {
-        return Ok(Some(transformed));
-    }
-
-    // Try case-insensitive match on transformed selector
-    if let Some(obj) = json.as_object() {
-        let transformed_lower = transformed.to_lowercase();
-        for (key, _) in obj {
-            if key.to_lowercase() == transformed_lower {
+            if names_match(selector, key) {
                 return Ok(Some(key.clone())); // Return the actual key from JSON
             }
         }
     }
 
     Ok(None)
+}
+
+#[allow(dead_code)]
+fn find_effective_selector_with_mapping(selector: &str, json: &Value, rule_set: &RuleSet) -> Result<Option<String>, RuleError> {
+    // First resolve the selector through mappings
+    let actual_selector = rule_set.resolve_selector(selector);
+    
+    // Then find the effective selector in JSON
+    find_effective_selector(&actual_selector, json)
+}
+
+#[allow(dead_code)]
+fn resolve_property_path_with_mapping<'a>(
+    path: &crate::runner::model::PropertyPath,
+    json: &'a Value,
+    rule_set: &RuleSet
+) -> Result<(Option<&'a Value>, String), RuleError> {
+    let mut path_parts = vec![path.selector.clone()];
+
+    // Find effective selector with mapping support
+    let effective_selector = find_effective_selector_with_mapping(&path.selector, json, rule_set)?;
+    if effective_selector.is_none() {
+        return Ok((None, format!("$.{}", path.selector)));
+    }
+
+    let final_selector = effective_selector.unwrap();
+    let mut current_value = json.get(&final_selector)
+        .ok_or_else(|| RuleError::EvaluationError(format!("Selector '{}' not found", final_selector)))?;
+
+    path_parts[0] = final_selector.clone(); // Use the actual key from JSON
+
+    let is_length_of_operator = is_length_of_operation(path);
+    let is_number_of_operator = is_number_of_operation(path);
+    
+    let properties_to_process = if is_length_of_operator {
+        &path.properties[..path.properties.len() - 1]
+    } else if is_number_of_operator {
+        &path.properties[..path.properties.len() - 1]
+    } else {
+        &path.properties[..]
+    };
+
+    // Follow the property chain - properties are already in correct traversal order
+    // For "__date of birth__ of **person** of **driving test**", we get properties: ["person", "date of birth"]
+    // And we traverse: driving test -> person -> date of birth
+    for property in properties_to_process.iter() {
+        let mut found_property = None;
+        let mut actual_property_name = property.clone();
+
+        if let Some(prop_value) = current_value.get(property) {
+            found_property = Some(prop_value);
+        } else if let Some(prop_value) = get_json_value_insensitive(current_value, property) {
+            found_property = Some(prop_value);
+            // Find the actual property name in the JSON for path tracking
+            if let Some(obj) = current_value.as_object() {
+                for (key, _) in obj {
+                    if names_match(property, key) {
+                        actual_property_name = key.clone();
+                        break;
+                    }
+                }
+            }
+        } else {
+            let transformed_property = transform_property_name(property);
+            if let Some(prop_value) = current_value.get(&transformed_property) {
+                found_property = Some(prop_value);
+                actual_property_name = transformed_property.clone();
+            } else if let Some(prop_value) = get_json_value_insensitive(current_value, &transformed_property) {
+                found_property = Some(prop_value);
+                // Find the actual property name in the JSON for path tracking
+                if let Some(obj) = current_value.as_object() {
+                    for (key, _) in obj {
+                        if names_match(&transformed_property, key) {
+                            actual_property_name = key.clone();
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some(value) = found_property {
+            current_value = value;
+            path_parts.push(actual_property_name);
+        } else {
+            let path_so_far = format!("$.{}", path_parts.join("."));
+            return Ok((None, format!("{}.{}", path_so_far, property)));
+        }
+    }
+
+    let final_path = format!("$.{}", path_parts.join("."));
+    Ok((Some(current_value), final_path))
 }
 
 fn create_failed_rule_reference_trace(condition: &RuleReferenceCondition) -> ConditionTrace {
@@ -1739,10 +1882,9 @@ fn get_json_value_insensitive<'a>(json: &'a serde_json::Value, key: &str) -> Opt
             return Some(value);
         }
         
-        // Then try case-insensitive match using more efficient approach
-        let key_lower = key.to_ascii_lowercase();
+        // Then try fuzzy matching (camelCase, snake_case, spaces)
         for (k, v) in obj {
-            if k.to_ascii_lowercase() == key_lower {
+            if names_match(key, k) {
                 return Some(v);
             }
         }
