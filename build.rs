@@ -1,5 +1,4 @@
 use std::fs::{read_to_string, write};
-use std::path::Path;
 
 fn main() {
     let fragments = vec![
@@ -17,6 +16,7 @@ fn main() {
         combined.push('\n');
     }
 
-    write("pests/grammer.pest", combined).expect("Failed to write combined grammar");
+    write("pests/grammar.pest", combined).expect("Failed to write combined grammar");
     println!("cargo:rerun-if-changed=build.rs");
 }
+

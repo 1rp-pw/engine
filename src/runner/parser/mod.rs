@@ -9,7 +9,7 @@ use pest::iterators::Pair;
 use crate::runner::model::{ComparisonOperator, RuleSet, RuleValue, Condition, SourcePosition, ConditionOperator, ComparisonCondition, PositionedValue, RuleReferenceCondition, PropertyPath, constants};
 
 #[derive(Parser)]
-#[grammar = "pests/grammer.pest"]
+#[grammar = "pests/grammar.pest"]
 pub struct RuleParser;
 
 pub fn parse_rules(input: &str) -> Result<RuleSet, RuleError> {
