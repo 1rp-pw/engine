@@ -1393,6 +1393,163 @@ mod tests {
     }
 
     #[test]
+    fn test_case_insensitive_string_comparison() {
+        let json = json!({
+            "user": {
+                "name": "John",
+                "status": "ACTIVE"
+            }
+        });
+
+        // Test case-insensitive equality (default behavior)
+        let condition = ComparisonCondition {
+            selector: PositionedValue { value: "user".to_string(), pos: None },
+            property: PositionedValue { value: "name".to_string(), pos: None },
+            operator: ComparisonOperator::EqualTo,
+            value: PositionedValue { value: RuleValue::String("JOHN".to_string()), pos: None },
+            left_property_path: None,
+            right_property_path: None,
+            property_chain: None,
+        };
+
+        let (result, _trace) = evaluate_comparison_condition(&condition, &json).unwrap();
+        assert_eq!(result, true); // Should match case-insensitively
+
+        // Test case-insensitive with different case
+        let condition = ComparisonCondition {
+            selector: PositionedValue { value: "user".to_string(), pos: None },
+            property: PositionedValue { value: "status".to_string(), pos: None },
+            operator: ComparisonOperator::EqualTo,
+            value: PositionedValue { value: RuleValue::String("active".to_string()), pos: None },
+            left_property_path: None,
+            right_property_path: None,
+            property_chain: None,
+        };
+
+        let (result, _trace) = evaluate_comparison_condition(&condition, &json).unwrap();
+        assert_eq!(result, true); // Should match case-insensitively
+    }
+
+    #[test]
+    fn test_case_sensitive_exactly_equal_comparison() {
+        let json = json!({
+            "user": {
+                "name": "John",
+                "status": "ACTIVE"
+            }
+        });
+
+        // Test case-sensitive exact equality
+        let condition = ComparisonCondition {
+            selector: PositionedValue { value: "user".to_string(), pos: None },
+            property: PositionedValue { value: "name".to_string(), pos: None },
+            operator: ComparisonOperator::ExactlyEqualTo,
+            value: PositionedValue { value: RuleValue::String("John".to_string()), pos: None },
+            left_property_path: None,
+            right_property_path: None,
+            property_chain: None,
+        };
+
+        let (result, _trace) = evaluate_comparison_condition(&condition, &json).unwrap();
+        assert_eq!(result, true); // Should match exactly
+
+        // Test case-sensitive exact equality that should fail
+        let condition = ComparisonCondition {
+            selector: PositionedValue { value: "user".to_string(), pos: None },
+            property: PositionedValue { value: "name".to_string(), pos: None },
+            operator: ComparisonOperator::ExactlyEqualTo,
+            value: PositionedValue { value: RuleValue::String("JOHN".to_string()), pos: None },
+            left_property_path: None,
+            right_property_path: None,
+            property_chain: None,
+        };
+
+        let (result, _trace) = evaluate_comparison_condition(&condition, &json).unwrap();
+        assert_eq!(result, false); // Should NOT match due to case difference
+
+        // Test case-sensitive exact equality with status
+        let condition = ComparisonCondition {
+            selector: PositionedValue { value: "user".to_string(), pos: None },
+            property: PositionedValue { value: "status".to_string(), pos: None },
+            operator: ComparisonOperator::ExactlyEqualTo,
+            value: PositionedValue { value: RuleValue::String("active".to_string()), pos: None },
+            left_property_path: None,
+            right_property_path: None,
+            property_chain: None,
+        };
+
+        let (result, _trace) = evaluate_comparison_condition(&condition, &json).unwrap();
+        assert_eq!(result, false); // Should NOT match due to case difference
+    }
+
+    #[test]
+    fn test_case_insensitive_contains_operation() {
+        let json = json!({
+            "user": {
+                "description": "This user is a PREMIUM member"
+            }
+        });
+
+        // Test case-insensitive contains
+        let condition = ComparisonCondition {
+            selector: PositionedValue { value: "user".to_string(), pos: None },
+            property: PositionedValue { value: "description".to_string(), pos: None },
+            operator: ComparisonOperator::Contains,
+            value: PositionedValue { value: RuleValue::String("premium".to_string()), pos: None },
+            left_property_path: None,
+            right_property_path: None,
+            property_chain: None,
+        };
+
+        let (result, _trace) = evaluate_comparison_condition(&condition, &json).unwrap();
+        assert_eq!(result, true); // Should match case-insensitively
+
+        // Test case-insensitive contains with different case
+        let condition = ComparisonCondition {
+            selector: PositionedValue { value: "user".to_string(), pos: None },
+            property: PositionedValue { value: "description".to_string(), pos: None },
+            operator: ComparisonOperator::Contains,
+            value: PositionedValue { value: RuleValue::String("USER".to_string()), pos: None },
+            left_property_path: None,
+            right_property_path: None,
+            property_chain: None,
+        };
+
+        let (result, _trace) = evaluate_comparison_condition(&condition, &json).unwrap();
+        assert_eq!(result, true); // Should match case-insensitively
+    }
+
+    #[test]
+    fn test_case_insensitive_list_operations() {
+        let json = json!({
+            "user": {
+                "role": "ADMIN"
+            }
+        });
+
+        // Test case-insensitive list membership
+        let condition = ComparisonCondition {
+            selector: PositionedValue { value: "user".to_string(), pos: None },
+            property: PositionedValue { value: "role".to_string(), pos: None },
+            operator: ComparisonOperator::In,
+            value: PositionedValue { 
+                value: RuleValue::List(vec![
+                    RuleValue::String("admin".to_string()),
+                    RuleValue::String("user".to_string()),
+                    RuleValue::String("guest".to_string())
+                ]), 
+                pos: None 
+            },
+            left_property_path: None,
+            right_property_path: None,
+            property_chain: None,
+        };
+
+        let (result, _trace) = evaluate_comparison_condition(&condition, &json).unwrap();
+        assert_eq!(result, true); // Should match case-insensitively
+    }
+
+    #[test]
     fn test_comparison_of_trace_preserving_vs_regular_evaluation() {
         let json = json!({
             "user": {

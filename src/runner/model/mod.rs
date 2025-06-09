@@ -144,6 +144,7 @@ pub enum ComparisonOperator {
     GreaterThanOrEqual,
     LessThanOrEqual,
     EqualTo,
+    ExactlyEqualTo,
     NotEqualTo,
     LaterThan,
     EarlierThan,
@@ -164,6 +165,7 @@ impl fmt::Display for ComparisonOperator {
             ComparisonOperator::LessThanOrEqual => write!(f, "is less than or equal to"),
 
             ComparisonOperator::EqualTo => write!(f, "is equal to"),
+            ComparisonOperator::ExactlyEqualTo => write!(f, "is exactly equal to"),
             ComparisonOperator::NotEqualTo => write!(f, "is not equal to"),
 
             ComparisonOperator::LaterThan => write!(f, "is later than"),
@@ -195,6 +197,9 @@ impl ComparisonOperator {
             ComparisonOperator::EqualTo => vec![
                 "is equal to",
                 "is the same as"
+            ],
+            ComparisonOperator::ExactlyEqualTo => vec![
+                "is exactly equal to"
             ],
             ComparisonOperator::NotEqualTo => vec![
                 "is not equal to",

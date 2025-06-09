@@ -235,6 +235,7 @@ fn parse_length_of_condition(
                 "is at least" => ComparisonOperator::GreaterThanOrEqual,
                 "is less than or equal to" => ComparisonOperator::LessThanOrEqual,
                 "is no more than" => ComparisonOperator::LessThanOrEqual,
+                "is exactly equal to" => ComparisonOperator::ExactlyEqualTo,
                 "is equal to" => ComparisonOperator::EqualTo,
                 "is the same as" => ComparisonOperator::EqualTo,
                 "is not equal to" => ComparisonOperator::NotEqualTo,
@@ -301,6 +302,7 @@ fn parse_number_of_condition(
                 "is at least" => ComparisonOperator::GreaterThanOrEqual,
                 "is less than or equal to" => ComparisonOperator::LessThanOrEqual,
                 "is no more than" => ComparisonOperator::LessThanOrEqual,
+                "is exactly equal to" => ComparisonOperator::ExactlyEqualTo,
                 "is equal to" => ComparisonOperator::EqualTo,
                 "is the same as" => ComparisonOperator::EqualTo,
                 "is not equal to" => ComparisonOperator::NotEqualTo,
@@ -423,6 +425,7 @@ fn parse_regular_property_condition(
                 "is less than or equal to" => ComparisonOperator::LessThanOrEqual,
                 "is no more than" => ComparisonOperator::LessThanOrEqual,
 
+                "is exactly equal to" => ComparisonOperator::ExactlyEqualTo,
                 "is equal to" => ComparisonOperator::EqualTo,
                 "is the same as" => ComparisonOperator::EqualTo,
 

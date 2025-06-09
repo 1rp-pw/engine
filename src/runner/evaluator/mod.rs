@@ -1496,6 +1496,7 @@ fn evaluate_comparison(
 
         // Equality comparisons
         EqualTo => compare_equal(left, right),
+        ExactlyEqualTo => compare_exactly_equal(left, right),
         NotEqualTo => compare_not_equal(left, right),
 
         // Date comparisons
@@ -1573,14 +1574,25 @@ fn compare_numbers_lt(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleE
     }
 }
 
-// Equality comparison functions
+// Equality comparison functions (case-insensitive by default)
 fn compare_equal(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleError> {
+    match (left, right) {
+        (RuleValue::Number(l), RuleValue::Number(r)) => Ok(l == r),
+        (RuleValue::String(l), RuleValue::String(r)) => Ok(l.to_lowercase() == r.to_lowercase()),
+        (RuleValue::Date(l), RuleValue::Date(r)) => Ok(l == r),
+        (RuleValue::Boolean(l), RuleValue::Boolean(r)) => Ok(l == r),
+        _ => Err(RuleError::TypeError(format!("Cannot compare {:?} and {:?} for equality", left, right))),
+    }
+}
+
+// Case-sensitive equality comparison
+fn compare_exactly_equal(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleError> {
     match (left, right) {
         (RuleValue::Number(l), RuleValue::Number(r)) => Ok(l == r),
         (RuleValue::String(l), RuleValue::String(r)) => Ok(l == r),
         (RuleValue::Date(l), RuleValue::Date(r)) => Ok(l == r),
         (RuleValue::Boolean(l), RuleValue::Boolean(r)) => Ok(l == r),
-        _ => Err(RuleError::TypeError(format!("Cannot compare {:?} and {:?} for equality", left, right))),
+        _ => Err(RuleError::TypeError(format!("Cannot compare {:?} and {:?} for exact equality", left, right))),
     }
 }
 
@@ -1628,7 +1640,7 @@ fn compare_contains(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleErr
     match left {
         RuleValue::String(l) => {
             match right {
-                RuleValue::String(r) => Ok(l.contains(r)),
+                RuleValue::String(r) => Ok(l.to_lowercase().contains(&r.to_lowercase())),
                 _ => Err(RuleError::TypeError("String contains only works with string values".to_string())),
             }
         },
@@ -1644,11 +1656,11 @@ fn compare_contains(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleErr
     }
 }
 
-// Helper function to check equality without returning Result
+// Helper function to check equality without returning Result (case-insensitive for strings)
 fn is_equal(left: &RuleValue, right: &RuleValue) -> bool {
     match (left, right) {
         (RuleValue::Number(l), RuleValue::Number(r)) => l == r,
-        (RuleValue::String(l), RuleValue::String(r)) => l == r, // String comparison is already efficient
+        (RuleValue::String(l), RuleValue::String(r)) => l.to_lowercase() == r.to_lowercase(),
         (RuleValue::Date(l), RuleValue::Date(r)) => l == r,
         (RuleValue::Boolean(l), RuleValue::Boolean(r)) => l == r,
         _ => false,

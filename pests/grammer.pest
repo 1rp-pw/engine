@@ -71,6 +71,7 @@ comparison_operator = {
     "is less than or equal to" |
     "is no more than" |
 
+    "is exactly equal to" |
     "is equal to" |
     "is not equal to" |
     "is the same as" |
