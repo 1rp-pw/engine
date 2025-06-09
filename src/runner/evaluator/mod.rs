@@ -500,10 +500,7 @@ fn evaluate_rule_reference_condition_with_trace(
 
     // Normal case with selector
     let effective_selector = match find_effective_selector(&condition.selector.value, json) {
-        Ok(Some(sel)) => sel,
-        Ok(None) => {
-            return Ok((false, create_failed_rule_reference_trace(condition)));
-        }
+        Ok(sel) => sel,
         Err(error) => {
             let failed_trace = create_failed_rule_reference_trace(condition);
             return Err((error, Some(failed_trace)));
@@ -511,26 +508,69 @@ fn evaluate_rule_reference_condition_with_trace(
     };
 
     let part = condition.rule_name.value.trim();
-    match evaluate_rule_or_property_with_trace(part, &effective_selector, json, rule_set, evaluation_stack, call_path) {
-        Ok((result, referenced_outcome, property_check)) => {
-            let rule_reference_trace = RuleReferenceTrace {
-                selector: SelectorTrace {
-                    value: condition.selector.value.clone(),
-                    pos: condition.selector.pos.clone(),
-                },
-                rule_name: condition.rule_name.value.clone(),
-                referenced_rule_outcome: referenced_outcome,
-                property_check,
-                result,
-            };
+    let (result, referenced_outcome, property_check) = if effective_selector.is_some() {
+        // Selector exists in JSON - use it directly
+        match evaluate_rule_or_property_with_trace(part, &effective_selector.unwrap(), json, rule_set, evaluation_stack, call_path) {
+            Ok(result) => result,
+            Err((error, _)) => {
+                let failed_trace = create_failed_rule_reference_trace(condition);
+                return Err((error, Some(failed_trace)));
+            }
+        }
+    } else {
+        // Conceptual selector - try to evaluate the rule without requiring the selector to exist
+        
+        // First, try to find the rule globally (without a specific selector)
+        match try_evaluate_by_rule_with_trace(part, json, rule_set, evaluation_stack, call_path) {
+            Ok(Some((rule_result, outcome))) => {
+                (rule_result, Some(outcome), None)
+            }
+            Ok(None) => {
+                // If no global rule found, try to evaluate against all available objects in the JSON
+                let mut found_any_match = false;
+                let mut last_outcome = None;
+                let mut last_property_check = None;
+                
+                if let Some(obj) = json.as_object() {
+                    for (key, _) in obj {
+                        match evaluate_rule_or_property_with_trace(part, key, json, rule_set, evaluation_stack, call_path) {
+                            Ok((rule_result, outcome, prop_check)) => {
+                                if rule_result {
+                                    found_any_match = true;
+                                    last_outcome = outcome;
+                                    last_property_check = prop_check;
+                                    break; // Found a match, we can stop
+                                }
+                            }
+                            Err(_) => {
+                                // Ignore errors and continue to next key
+                                continue;
+                            }
+                        }
+                    }
+                }
+                
+                (found_any_match, last_outcome, last_property_check)
+            }
+            Err((error, _)) => {
+                let failed_trace = create_failed_rule_reference_trace(condition);
+                return Err((error, Some(failed_trace)));
+            }
+        }
+    };
 
-            Ok((result, ConditionTrace::RuleReference(rule_reference_trace)))
-        }
-        Err((error, _)) => {
-            let failed_trace = create_failed_rule_reference_trace(condition);
-            Err((error, Some(failed_trace)))
-        }
-    }
+    let rule_reference_trace = RuleReferenceTrace {
+        selector: SelectorTrace {
+            value: condition.selector.value.clone(),
+            pos: condition.selector.pos.clone(),
+        },
+        rule_name: condition.rule_name.value.clone(),
+        referenced_rule_outcome: referenced_outcome,
+        property_check,
+        result,
+    };
+
+    Ok((result, ConditionTrace::RuleReference(rule_reference_trace)))
 }
 
 #[allow(dead_code)]
@@ -747,24 +787,28 @@ fn try_evaluate_by_rule_with_trace(
     // Try exact outcome match
     if let Some(rule) = rule_set.get_rule(rule_name) {
         match evaluate_rule_with_trace(rule, json, rule_set, evaluation_stack, call_path) {
-            Ok((result, _)) => Ok(Some((result, rule.outcome.clone()))),
-            Err((error, partial_trace)) => Err((error, partial_trace))
+            Ok((result, _)) => return Ok(Some((result, rule.outcome.clone()))),
+            Err((error, partial_trace)) => return Err((error, partial_trace))
         }
-    } else if let Some(rule) = rule_set.get_rule_by_label(rule_name) {
-        // Try exact label match
-        match evaluate_rule_with_trace(rule, json, rule_set, evaluation_stack, call_path) {
-            Ok((result, _)) => Ok(Some((result, rule.outcome.clone()))),
-            Err((error, partial_trace)) => Err((error, partial_trace))
-        }
-    } else if let Some(rule) = find_rule_fuzzy_match(rule_name, rule_set) {
-        // Try fuzzy matching
-        match evaluate_rule_with_trace(rule, json, rule_set, evaluation_stack, call_path) {
-            Ok((result, _)) => Ok(Some((result, rule.outcome.clone()))),
-            Err((error, partial_trace)) => Err((error, partial_trace))
-        }
-    } else {
-        Ok(None)
     }
+    
+    // Try exact label match
+    if let Some(rule) = rule_set.get_rule_by_label(rule_name) {
+        match evaluate_rule_with_trace(rule, json, rule_set, evaluation_stack, call_path) {
+            Ok((result, _)) => return Ok(Some((result, rule.outcome.clone()))),
+            Err((error, partial_trace)) => return Err((error, partial_trace))
+        }
+    }
+    
+    // Try fuzzy matching
+    if let Some(rule) = find_rule_fuzzy_match(rule_name, rule_set) {
+        match evaluate_rule_with_trace(rule, json, rule_set, evaluation_stack, call_path) {
+            Ok((result, _)) => return Ok(Some((result, rule.outcome.clone()))),
+            Err((error, partial_trace)) => return Err((error, partial_trace))
+        }
+    }
+    
+    Ok(None)
 }
 
 #[allow(dead_code)]
