@@ -9,7 +9,8 @@ mod tests {
         compare_in_list, compare_not_equal, compare_not_in_list, compare_numbers_gt,
         compare_numbers_gte, compare_numbers_lt, compare_numbers_lte, evaluate_rule_set,
         evaluate_rule, evaluate_comparison_condition, convert_json_to_rule_value,
-        find_effective_selector, extract_value_from_json, compare_is_empty, compare_is_not_empty
+        find_effective_selector, extract_value_from_json, compare_is_empty, compare_is_not_empty,
+        evaluate_rule_set_with_trace, evaluate_rule_with_trace
     };
     use crate::runner::model::{
         RuleValue, Rule, RuleSet, Condition, ComparisonCondition, RuleReferenceCondition,
@@ -232,7 +233,7 @@ mod tests {
         let mut evaluation_stack = HashSet::new();
         let mut call_path = Vec::new();
 
-        let rule_set = RuleSet { rules: vec![], rule_map, label_map  };
+        let rule_set = RuleSet { rules: vec![], rule_map, label_map, cache: crate::runner::model::PerformanceCache::new() };
         let (result, _trace) = evaluate_rule(&rule, &json, &rule_set, &mut evaluation_stack, &mut call_path).unwrap();
         assert_eq!(result, true);
     }
@@ -287,7 +288,7 @@ mod tests {
         let mut evaluation_stack = HashSet::new();
         let mut call_path = Vec::new();
 
-        let rule_set = RuleSet { rules: vec![], rule_map, label_map };
+        let rule_set = RuleSet { rules: vec![], rule_map, label_map, cache: crate::runner::model::PerformanceCache::new() };
         let (result, _trace) = evaluate_rule(&rule, &json, &rule_set, &mut evaluation_stack, &mut call_path).unwrap();
         assert_eq!(result, true);
     }
@@ -341,7 +342,7 @@ mod tests {
         let mut evaluation_stack = HashSet::new();
         let mut call_path = Vec::new();
 
-        let rule_set = RuleSet { rules: vec![], rule_map, label_map };
+        let rule_set = RuleSet { rules: vec![], rule_map, label_map, cache: crate::runner::model::PerformanceCache::new() };
         let (result, _trace) = evaluate_rule(&rule, &json, &rule_set, &mut evaluation_stack, &mut call_path).unwrap();
         assert_eq!(result, true); // Should be true because vip is true, even though age < 18
     }
@@ -394,8 +395,13 @@ mod tests {
             position: None,
         };
 
-        let rule_map: HashMap<String, usize> = HashMap::new();
-        let label_map: HashMap<String, usize> = HashMap::new();
+        let mut rule_map = HashMap::new();
+        rule_map.insert("adult".to_string(), 0);    // age_rule is at index 0
+        rule_map.insert("global".to_string(), 1);   // main_rule is at index 1
+
+        let mut label_map = HashMap::new();
+        label_map.insert("age check".to_string(), 0);
+        label_map.insert("main rule".to_string(), 1);
 
         let mut evaluation_stack = HashSet::new();
         let mut call_path = Vec::new();
@@ -403,7 +409,8 @@ mod tests {
         let rule_set = RuleSet {
             rules: vec![age_rule, main_rule.clone()],
             rule_map,
-            label_map
+            label_map,
+            cache: crate::runner::model::PerformanceCache::new()
         };
 
         let (result, _trace) = evaluate_rule(&main_rule, &json, &rule_set, &mut evaluation_stack, &mut call_path).unwrap();
@@ -466,7 +473,8 @@ mod tests {
         let rule_set = RuleSet {
             rules: vec![age_rule, global_rule],
             rule_map,
-            label_map
+            label_map,
+            cache: crate::runner::model::PerformanceCache::new()
         };
 
         let (results, _trace) = evaluate_rule_set(&rule_set, &json).unwrap();
@@ -770,6 +778,7 @@ mod tests {
             rules: vec![rule1, rule2, rule3, global_rule],
             rule_map,
             label_map: HashMap::new(),
+            cache: crate::runner::model::PerformanceCache::new(),
         };
 
         // Test that cycle detection catches the infinite loop
@@ -908,6 +917,7 @@ mod tests {
             rules: vec![age_check_rule, main_rule],
             rule_map,
             label_map: HashMap::new(),
+            cache: crate::runner::model::PerformanceCache::new(),
         };
 
         // This should succeed without any cycle detection errors
@@ -922,5 +932,704 @@ mod tests {
                 panic!("Valid rule evaluation should not fail: {:?}", e);
             }
         }
+    }
+
+    // ERROR TRACE TESTS - Testing the new error tracing functionality
+
+    #[test]
+    fn test_error_trace_with_missing_selector() {
+        let json = json!({
+            "user": {
+                "age": 25,
+                "name": "John"
+            }
+        });
+
+        let rule = Rule {
+            label: Some("test rule".to_string()),
+            selector: "nonexistent_selector".to_string(),
+            selector_pos: None,
+            conditions: vec![
+                ConditionGroup {
+                    condition: Condition::Comparison(ComparisonCondition {
+                        selector: PositionedValue { value: "nonexistent_selector".to_string(), pos: None },
+                        property: PositionedValue { value: "age".to_string(), pos: None },
+                        operator: ComparisonOperator::GreaterThan,
+                        value: PositionedValue { value: RuleValue::Number(18.0), pos: None },
+                        left_property_path: None,
+                        right_property_path: None,
+                        property_chain: None,
+                    }),
+                    operator: None,
+                }
+            ],
+            outcome: "adult".to_string(),
+            position: None,
+        };
+
+        let rule_set = RuleSet {
+            rules: vec![rule.clone()],
+            rule_map: {
+                let mut map = HashMap::new();
+                map.insert("adult".to_string(), 0);
+                map
+            },
+            label_map: HashMap::new(),
+            cache: crate::runner::model::PerformanceCache::new(),
+        };
+
+        // Test with trace-preserving evaluation
+        let result = evaluate_rule_set_with_trace(&rule_set, &json);
+
+        // Should succeed but with false result (missing selectors return false, not error)
+        assert!(result.is_success());
+        assert!(result.trace.is_some());
+
+        let trace = result.unwrap_trace();
+        assert_eq!(trace.execution.len(), 1);
+        assert_eq!(trace.execution[0].result, false);
+        assert_eq!(trace.execution[0].outcome.value, "adult");
+        assert!(!trace.execution[0].conditions.is_empty());
+    }
+
+    #[test]
+    fn test_error_trace_with_missing_property() {
+        let json = json!({
+            "user": {
+                "name": "John"
+                // Missing "age" property
+            }
+        });
+
+        let rule = Rule {
+            label: Some("age check".to_string()),
+            selector: "user".to_string(),
+            selector_pos: None,
+            conditions: vec![
+                ConditionGroup {
+                    condition: Condition::Comparison(ComparisonCondition {
+                        selector: PositionedValue { value: "user".to_string(), pos: None },
+                        property: PositionedValue { value: "age".to_string(), pos: None },
+                        operator: ComparisonOperator::GreaterThan,
+                        value: PositionedValue { value: RuleValue::Number(18.0), pos: None },
+                        left_property_path: None,
+                        right_property_path: None,
+                        property_chain: None,
+                    }),
+                    operator: None,
+                }
+            ],
+            outcome: "adult".to_string(),
+            position: None,
+        };
+
+        let rule_set = RuleSet {
+            rules: vec![rule.clone()],
+            rule_map: {
+                let mut map = HashMap::new();
+                map.insert("adult".to_string(), 0);
+                map
+            },
+            label_map: HashMap::new(),
+            cache: crate::runner::model::PerformanceCache::new(),
+        };
+
+        // Test with trace-preserving evaluation
+        let result = evaluate_rule_set_with_trace(&rule_set, &json);
+
+        // Should succeed but with false result (missing properties return false, not error)
+        assert!(result.is_success());
+        assert!(result.trace.is_some());
+
+        let trace = result.unwrap_trace();
+        assert_eq!(trace.execution.len(), 1);
+        assert_eq!(trace.execution[0].result, false);
+        assert_eq!(trace.execution[0].outcome.value, "adult");
+        assert_eq!(trace.execution[0].conditions.len(), 1);
+    }
+
+    #[test]
+    fn test_error_trace_with_infinite_loop() {
+        let json = json!({
+            "person": {
+                "age": 25,
+                "driving_test_score": 85
+            }
+        });
+
+        // Create cyclic rules that will cause infinite loop
+        let rule1 = Rule {
+            label: None,
+            selector: "person".to_string(),
+            selector_pos: None,
+            conditions: vec![
+                ConditionGroup {
+                    condition: Condition::Comparison(ComparisonCondition {
+                        selector: PositionedValue { value: "person".to_string(), pos: None },
+                        property: PositionedValue { value: "age".to_string(), pos: None },
+                        operator: ComparisonOperator::GreaterThanOrEqual,
+                        value: PositionedValue { value: RuleValue::Number(18.0), pos: None },
+                        left_property_path: None,
+                        right_property_path: None,
+                        property_chain: None,
+                    }),
+                    operator: None,
+                },
+                ConditionGroup {
+                    condition: Condition::RuleReference(RuleReferenceCondition {
+                        selector: PositionedValue { value: "".to_string(), pos: None },
+                        rule_name: PositionedValue { value: "rule 2".to_string(), pos: None },
+                    }),
+                    operator: Some(ConditionOperator::And),
+                }
+            ],
+            outcome: "rule 1".to_string(),
+            position: None,
+        };
+
+        let rule2 = Rule {
+            label: None,
+            selector: "person".to_string(),
+            selector_pos: None,
+            conditions: vec![
+                ConditionGroup {
+                    condition: Condition::RuleReference(RuleReferenceCondition {
+                        selector: PositionedValue { value: "".to_string(), pos: None },
+                        rule_name: PositionedValue { value: "rule 1".to_string(), pos: None },
+                    }),
+                    operator: None,
+                }
+            ],
+            outcome: "rule 2".to_string(),
+            position: None,
+        };
+
+        let global_rule = Rule {
+            label: None,
+            selector: "person".to_string(),
+            selector_pos: None,
+            conditions: vec![
+                ConditionGroup {
+                    condition: Condition::RuleReference(RuleReferenceCondition {
+                        selector: PositionedValue { value: "".to_string(), pos: None },
+                        rule_name: PositionedValue { value: "rule 1".to_string(), pos: None },
+                    }),
+                    operator: None,
+                }
+            ],
+            outcome: "global".to_string(),
+            position: None,
+        };
+
+        let mut rule_map = HashMap::new();
+        rule_map.insert("rule 1".to_string(), 0);
+        rule_map.insert("rule 2".to_string(), 1);
+        rule_map.insert("global".to_string(), 2);
+
+        let rule_set = RuleSet {
+            rules: vec![rule1, rule2, global_rule],
+            rule_map,
+            label_map: HashMap::new(),
+            cache: crate::runner::model::PerformanceCache::new(),
+        };
+
+        // Test with trace-preserving evaluation
+        let result = evaluate_rule_set_with_trace(&rule_set, &json);
+
+        // Should have error but also trace
+        assert!(result.is_failure());
+        assert!(result.trace.is_some());
+
+        // Verify error is about infinite loop
+        if let Err(RuleError::EvaluationError(msg)) = &result.result {
+            assert!(msg.contains("Infinite loop detected"));
+        } else {
+            panic!("Expected infinite loop error");
+        }
+
+        // Verify trace contains partial execution information
+        let trace = result.unwrap_trace();
+        assert!(!trace.execution.is_empty());
+        
+        // The trace should contain the partial evaluation before the loop was detected
+        let first_rule_trace = &trace.execution[0];
+        assert_eq!(first_rule_trace.outcome.value, "global");
+        assert_eq!(first_rule_trace.result, false);
+    }
+
+    #[test]
+    fn test_error_trace_with_rule_reference_failure() {
+        let json = json!({
+            "user": {
+                "age": 25
+            }
+        });
+
+        // Create a rule that references a non-existent rule
+        let main_rule = Rule {
+            label: Some("main rule".to_string()),
+            selector: "user".to_string(),
+            selector_pos: None,
+            conditions: vec![
+                ConditionGroup {
+                    condition: Condition::RuleReference(RuleReferenceCondition {
+                        selector: PositionedValue { value: "".to_string(), pos: None },
+                        rule_name: PositionedValue { value: "nonexistent_rule".to_string(), pos: None },
+                    }),
+                    operator: None,
+                }
+            ],
+            outcome: "result".to_string(),
+            position: None,
+        };
+
+        let global_rule = Rule {
+            label: None,
+            selector: "global".to_string(),
+            selector_pos: None,
+            conditions: vec![
+                ConditionGroup {
+                    condition: Condition::RuleReference(RuleReferenceCondition {
+                        selector: PositionedValue { value: "".to_string(), pos: None },
+                        rule_name: PositionedValue { value: "result".to_string(), pos: None },
+                    }),
+                    operator: None,
+                }
+            ],
+            outcome: "global".to_string(),
+            position: None,
+        };
+
+        let mut rule_map = HashMap::new();
+        rule_map.insert("result".to_string(), 0);
+        rule_map.insert("global".to_string(), 1);
+
+        let rule_set = RuleSet {
+            rules: vec![main_rule, global_rule],
+            rule_map,
+            label_map: HashMap::new(),
+            cache: crate::runner::model::PerformanceCache::new(),
+        };
+
+        // Test with trace-preserving evaluation
+        let result = evaluate_rule_set_with_trace(&rule_set, &json);
+
+        // Should succeed (non-existent rules default to false, not error)
+        assert!(result.is_success());
+        assert!(result.trace.is_some());
+
+        let trace = result.unwrap_trace();
+        // Should have traces for both rules
+        assert_eq!(trace.execution.len(), 2);
+        
+        // Global rule should be false because referenced rule is false
+        let global_trace = &trace.execution[0];
+        assert_eq!(global_trace.outcome.value, "global");
+        assert_eq!(global_trace.result, false);
+
+        // Main rule should be false because it references non-existent rule
+        let main_trace = &trace.execution[1];
+        assert_eq!(main_trace.outcome.value, "result");
+        assert_eq!(main_trace.result, false);
+    }
+
+    #[test]
+    fn test_error_trace_preserves_successful_conditions_before_failure() {
+        let json = json!({
+            "user": {
+                "age": 25,
+                "active": true
+                // Missing "score" property
+            }
+        });
+
+        let rule = Rule {
+            label: Some("complex rule".to_string()),
+            selector: "user".to_string(),
+            selector_pos: None,
+            conditions: vec![
+                ConditionGroup {
+                    condition: Condition::Comparison(ComparisonCondition {
+                        selector: PositionedValue { value: "user".to_string(), pos: None },
+                        property: PositionedValue { value: "age".to_string(), pos: None },
+                        operator: ComparisonOperator::GreaterThan,
+                        value: PositionedValue { value: RuleValue::Number(18.0), pos: None },
+                        left_property_path: None,
+                        right_property_path: None,
+                        property_chain: None,
+                    }),
+                    operator: None,
+                },
+                ConditionGroup {
+                    condition: Condition::Comparison(ComparisonCondition {
+                        selector: PositionedValue { value: "user".to_string(), pos: None },
+                        property: PositionedValue { value: "active".to_string(), pos: None },
+                        operator: ComparisonOperator::EqualTo,
+                        value: PositionedValue { value: RuleValue::Boolean(true), pos: None },
+                        left_property_path: None,
+                        right_property_path: None,
+                        property_chain: None,
+                    }),
+                    operator: Some(ConditionOperator::And),
+                },
+                ConditionGroup {
+                    condition: Condition::Comparison(ComparisonCondition {
+                        selector: PositionedValue { value: "user".to_string(), pos: None },
+                        property: PositionedValue { value: "score".to_string(), pos: None },
+                        operator: ComparisonOperator::GreaterThan,
+                        value: PositionedValue { value: RuleValue::Number(80.0), pos: None },
+                        left_property_path: None,
+                        right_property_path: None,
+                        property_chain: None,
+                    }),
+                    operator: Some(ConditionOperator::And),
+                }
+            ],
+            outcome: "qualified".to_string(),
+            position: None,
+        };
+
+        let rule_set = RuleSet {
+            rules: vec![rule.clone()],
+            rule_map: {
+                let mut map = HashMap::new();
+                map.insert("qualified".to_string(), 0);
+                map
+            },
+            label_map: HashMap::new(),
+            cache: crate::runner::model::PerformanceCache::new(),
+        };
+
+        // Test with trace-preserving evaluation
+        let result = evaluate_rule_set_with_trace(&rule_set, &json);
+
+        // Should succeed but with false result (missing score property)
+        assert!(result.is_success());
+        assert!(result.trace.is_some());
+
+        let trace = result.unwrap_trace();
+        assert_eq!(trace.execution.len(), 1);
+        
+        let rule_trace = &trace.execution[0];
+        assert_eq!(rule_trace.outcome.value, "qualified");
+        assert_eq!(rule_trace.result, false); // AND operation fails due to missing score
+        
+        // Should have all three condition traces
+        assert_eq!(rule_trace.conditions.len(), 3);
+        
+        // Verify the first two conditions were evaluated successfully
+        // (even though final result is false due to missing property)
+        use crate::runner::trace::ConditionTrace;
+        
+        if let ConditionTrace::Comparison(comp_trace) = &rule_trace.conditions[0] {
+            assert_eq!(comp_trace.result, true); // age > 18
+        } else {
+            panic!("Expected comparison trace");
+        }
+        
+        if let ConditionTrace::Comparison(comp_trace) = &rule_trace.conditions[1] {
+            assert_eq!(comp_trace.result, true); // active == true
+        } else {
+            panic!("Expected comparison trace");
+        }
+        
+        if let ConditionTrace::Comparison(comp_trace) = &rule_trace.conditions[2] {
+            assert_eq!(comp_trace.result, false); // score is missing
+        } else {
+            panic!("Expected comparison trace");
+        }
+    }
+
+    #[test]
+    fn test_error_trace_individual_rule_evaluation() {
+        let json = json!({
+            "user": {
+                "age": 25
+            }
+        });
+
+        let rule = Rule {
+            label: Some("age check".to_string()),
+            selector: "user".to_string(),
+            selector_pos: None,
+            conditions: vec![
+                ConditionGroup {
+                    condition: Condition::Comparison(ComparisonCondition {
+                        selector: PositionedValue { value: "user".to_string(), pos: None },
+                        property: PositionedValue { value: "age".to_string(), pos: None },
+                        operator: ComparisonOperator::GreaterThan,
+                        value: PositionedValue { value: RuleValue::Number(18.0), pos: None },
+                        left_property_path: None,
+                        right_property_path: None,
+                        property_chain: None,
+                    }),
+                    operator: None,
+                }
+            ],
+            outcome: "adult".to_string(),
+            position: None,
+        };
+
+        let rule_set = RuleSet {
+            rules: vec![],
+            rule_map: HashMap::new(),
+            label_map: HashMap::new(),
+            cache: crate::runner::model::PerformanceCache::new(),
+        };
+
+        let mut evaluation_stack = HashSet::new();
+        let mut call_path = Vec::new();
+
+        // Test individual rule evaluation with trace
+        let result = evaluate_rule_with_trace(&rule, &json, &rule_set, &mut evaluation_stack, &mut call_path);
+
+        // Should succeed
+        assert!(result.is_ok());
+        let (rule_result, rule_trace) = result.unwrap();
+        assert_eq!(rule_result, true);
+        assert_eq!(rule_trace.outcome.value, "adult");
+        assert_eq!(rule_trace.result, true);
+        assert_eq!(rule_trace.conditions.len(), 1);
+    }
+
+    #[test]
+    fn test_case_insensitive_string_comparison() {
+        let json = json!({
+            "user": {
+                "name": "John",
+                "status": "ACTIVE"
+            }
+        });
+
+        // Test case-insensitive equality (default behavior)
+        let condition = ComparisonCondition {
+            selector: PositionedValue { value: "user".to_string(), pos: None },
+            property: PositionedValue { value: "name".to_string(), pos: None },
+            operator: ComparisonOperator::EqualTo,
+            value: PositionedValue { value: RuleValue::String("JOHN".to_string()), pos: None },
+            left_property_path: None,
+            right_property_path: None,
+            property_chain: None,
+        };
+
+        let (result, _trace) = evaluate_comparison_condition(&condition, &json).unwrap();
+        assert_eq!(result, true); // Should match case-insensitively
+
+        // Test case-insensitive with different case
+        let condition = ComparisonCondition {
+            selector: PositionedValue { value: "user".to_string(), pos: None },
+            property: PositionedValue { value: "status".to_string(), pos: None },
+            operator: ComparisonOperator::EqualTo,
+            value: PositionedValue { value: RuleValue::String("active".to_string()), pos: None },
+            left_property_path: None,
+            right_property_path: None,
+            property_chain: None,
+        };
+
+        let (result, _trace) = evaluate_comparison_condition(&condition, &json).unwrap();
+        assert_eq!(result, true); // Should match case-insensitively
+    }
+
+    #[test]
+    fn test_case_sensitive_exactly_equal_comparison() {
+        let json = json!({
+            "user": {
+                "name": "John",
+                "status": "ACTIVE"
+            }
+        });
+
+        // Test case-sensitive exact equality
+        let condition = ComparisonCondition {
+            selector: PositionedValue { value: "user".to_string(), pos: None },
+            property: PositionedValue { value: "name".to_string(), pos: None },
+            operator: ComparisonOperator::ExactlyEqualTo,
+            value: PositionedValue { value: RuleValue::String("John".to_string()), pos: None },
+            left_property_path: None,
+            right_property_path: None,
+            property_chain: None,
+        };
+
+        let (result, _trace) = evaluate_comparison_condition(&condition, &json).unwrap();
+        assert_eq!(result, true); // Should match exactly
+
+        // Test case-sensitive exact equality that should fail
+        let condition = ComparisonCondition {
+            selector: PositionedValue { value: "user".to_string(), pos: None },
+            property: PositionedValue { value: "name".to_string(), pos: None },
+            operator: ComparisonOperator::ExactlyEqualTo,
+            value: PositionedValue { value: RuleValue::String("JOHN".to_string()), pos: None },
+            left_property_path: None,
+            right_property_path: None,
+            property_chain: None,
+        };
+
+        let (result, _trace) = evaluate_comparison_condition(&condition, &json).unwrap();
+        assert_eq!(result, false); // Should NOT match due to case difference
+
+        // Test case-sensitive exact equality with status
+        let condition = ComparisonCondition {
+            selector: PositionedValue { value: "user".to_string(), pos: None },
+            property: PositionedValue { value: "status".to_string(), pos: None },
+            operator: ComparisonOperator::ExactlyEqualTo,
+            value: PositionedValue { value: RuleValue::String("active".to_string()), pos: None },
+            left_property_path: None,
+            right_property_path: None,
+            property_chain: None,
+        };
+
+        let (result, _trace) = evaluate_comparison_condition(&condition, &json).unwrap();
+        assert_eq!(result, false); // Should NOT match due to case difference
+    }
+
+    #[test]
+    fn test_case_insensitive_contains_operation() {
+        let json = json!({
+            "user": {
+                "description": "This user is a PREMIUM member"
+            }
+        });
+
+        // Test case-insensitive contains
+        let condition = ComparisonCondition {
+            selector: PositionedValue { value: "user".to_string(), pos: None },
+            property: PositionedValue { value: "description".to_string(), pos: None },
+            operator: ComparisonOperator::Contains,
+            value: PositionedValue { value: RuleValue::String("premium".to_string()), pos: None },
+            left_property_path: None,
+            right_property_path: None,
+            property_chain: None,
+        };
+
+        let (result, _trace) = evaluate_comparison_condition(&condition, &json).unwrap();
+        assert_eq!(result, true); // Should match case-insensitively
+
+        // Test case-insensitive contains with different case
+        let condition = ComparisonCondition {
+            selector: PositionedValue { value: "user".to_string(), pos: None },
+            property: PositionedValue { value: "description".to_string(), pos: None },
+            operator: ComparisonOperator::Contains,
+            value: PositionedValue { value: RuleValue::String("USER".to_string()), pos: None },
+            left_property_path: None,
+            right_property_path: None,
+            property_chain: None,
+        };
+
+        let (result, _trace) = evaluate_comparison_condition(&condition, &json).unwrap();
+        assert_eq!(result, true); // Should match case-insensitively
+    }
+
+    #[test]
+    fn test_case_insensitive_list_operations() {
+        let json = json!({
+            "user": {
+                "role": "ADMIN"
+            }
+        });
+
+        // Test case-insensitive list membership
+        let condition = ComparisonCondition {
+            selector: PositionedValue { value: "user".to_string(), pos: None },
+            property: PositionedValue { value: "role".to_string(), pos: None },
+            operator: ComparisonOperator::In,
+            value: PositionedValue { 
+                value: RuleValue::List(vec![
+                    RuleValue::String("admin".to_string()),
+                    RuleValue::String("user".to_string()),
+                    RuleValue::String("guest".to_string())
+                ]), 
+                pos: None 
+            },
+            left_property_path: None,
+            right_property_path: None,
+            property_chain: None,
+        };
+
+        let (result, _trace) = evaluate_comparison_condition(&condition, &json).unwrap();
+        assert_eq!(result, true); // Should match case-insensitively
+    }
+
+    #[test]
+    fn test_comparison_of_trace_preserving_vs_regular_evaluation() {
+        let json = json!({
+            "user": {
+                "age": 25,
+                "name": "John"
+            }
+        });
+
+        let rule = Rule {
+            label: Some("user check".to_string()),
+            selector: "user".to_string(),
+            selector_pos: None,
+            conditions: vec![
+                ConditionGroup {
+                    condition: Condition::Comparison(ComparisonCondition {
+                        selector: PositionedValue { value: "user".to_string(), pos: None },
+                        property: PositionedValue { value: "age".to_string(), pos: None },
+                        operator: ComparisonOperator::GreaterThan,
+                        value: PositionedValue { value: RuleValue::Number(18.0), pos: None },
+                        left_property_path: None,
+                        right_property_path: None,
+                        property_chain: None,
+                    }),
+                    operator: None,
+                }
+            ],
+            outcome: "adult".to_string(),
+            position: None,
+        };
+
+        let global_rule = Rule {
+            label: None,
+            selector: "global".to_string(),
+            selector_pos: None,
+            conditions: vec![
+                ConditionGroup {
+                    condition: Condition::RuleReference(RuleReferenceCondition {
+                        selector: PositionedValue { value: "".to_string(), pos: None },
+                        rule_name: PositionedValue { value: "adult".to_string(), pos: None },
+                    }),
+                    operator: None,
+                }
+            ],
+            outcome: "global".to_string(),
+            position: None,
+        };
+
+        let mut rule_map = HashMap::new();
+        rule_map.insert("adult".to_string(), 0);
+        rule_map.insert("global".to_string(), 1);
+
+        let rule_set = RuleSet {
+            rules: vec![rule, global_rule],
+            rule_map,
+            label_map: HashMap::new(),
+            cache: crate::runner::model::PerformanceCache::new(),
+        };
+
+        // Test both evaluation methods
+        let regular_result = evaluate_rule_set(&rule_set, &json);
+        let trace_result = evaluate_rule_set_with_trace(&rule_set, &json);
+
+        // Both should succeed with the same results
+        assert!(regular_result.is_ok());
+        assert!(trace_result.is_success());
+
+        let (regular_results, regular_trace) = regular_result.unwrap();
+        
+        // Both should have traces, and they should be similar
+        assert!(trace_result.trace.is_some());
+        assert!(trace_result.is_success());
+        
+        let trace_results = trace_result.result.as_ref().unwrap();
+        let enhanced_trace = trace_result.trace.as_ref().unwrap();
+
+        // Results should be identical
+        assert_eq!(&regular_results, trace_results);
+        
+        assert_eq!(regular_trace.execution.len(), enhanced_trace.execution.len());
+        assert_eq!(regular_trace.execution[0].result, enhanced_trace.execution[0].result);
+        assert_eq!(regular_trace.execution[1].result, enhanced_trace.execution[1].result);
     }
 }

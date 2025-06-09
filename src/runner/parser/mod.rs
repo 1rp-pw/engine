@@ -2,21 +2,27 @@ mod lib;
 
 use crate::runner::error::RuleError;
 use chrono::NaiveDate;
-use pest::error::InputLocation::Pos;
 use pest::Parser;
 use pest_derive::Parser;
 use pest::iterators::Pair;
-use crate::runner::model::{ComparisonOperator, RuleSet, RuleValue, Condition, SourcePosition, ConditionOperator, ComparisonCondition, PositionedValue, RuleReferenceCondition, PropertyPath};
+use crate::runner::model::{ComparisonOperator, RuleSet, RuleValue, Condition, SourcePosition, ConditionOperator, ComparisonCondition, PositionedValue, RuleReferenceCondition, PropertyPath, constants};
 
 #[derive(Parser)]
-#[grammar = "pests/grammer.pest"]
+#[grammar = "pests/grammar.pest"]
+#[allow(dead_code)]
 pub struct RuleParser;
 
+#[allow(dead_code)]
 pub fn parse_rules(input: &str) -> Result<RuleSet, RuleError> {
     let pairs = RuleParser::parse(Rule::rule_set, input)
         .map_err(|e| RuleError::ParseError(e.to_string()))?;
 
-    let mut rule_set = RuleSet::new();
+    // Pre-estimate rule count for better allocation
+    let estimated_rule_count = input.lines()
+        .filter(|line| line.trim_start().starts_with("A ") || line.trim_start().starts_with("An "))
+        .count();
+    
+    let mut rule_set = RuleSet::with_capacity(estimated_rule_count.max(10));
 
     for pair in pairs {
         match pair.as_rule() {
@@ -230,6 +236,7 @@ fn parse_length_of_condition(
                 "is at least" => ComparisonOperator::GreaterThanOrEqual,
                 "is less than or equal to" => ComparisonOperator::LessThanOrEqual,
                 "is no more than" => ComparisonOperator::LessThanOrEqual,
+                "is exactly equal to" => ComparisonOperator::ExactlyEqualTo,
                 "is equal to" => ComparisonOperator::EqualTo,
                 "is the same as" => ComparisonOperator::EqualTo,
                 "is not equal to" => ComparisonOperator::NotEqualTo,
@@ -263,7 +270,7 @@ fn parse_length_of_condition(
 
     Ok(ComparisonCondition {
         selector: PositionedValue::new(property_path.selector.clone()),
-        property: PositionedValue::new("__length_of__".to_string()), // Special marker for length
+        property: PositionedValue::from_static(constants::LENGTH_OF_MARKER), // Special marker for length
         operator,
         value: right_value,
         property_chain: None,
@@ -296,6 +303,7 @@ fn parse_number_of_condition(
                 "is at least" => ComparisonOperator::GreaterThanOrEqual,
                 "is less than or equal to" => ComparisonOperator::LessThanOrEqual,
                 "is no more than" => ComparisonOperator::LessThanOrEqual,
+                "is exactly equal to" => ComparisonOperator::ExactlyEqualTo,
                 "is equal to" => ComparisonOperator::EqualTo,
                 "is the same as" => ComparisonOperator::EqualTo,
                 "is not equal to" => ComparisonOperator::NotEqualTo,
@@ -329,7 +337,7 @@ fn parse_number_of_condition(
 
     Ok(ComparisonCondition {
         selector: PositionedValue::new(property_path.selector.clone()),
-        property: PositionedValue::new("__number_of__".to_string()), // Special marker for length
+        property: PositionedValue::from_static(constants::NUMBER_OF_MARKER), // Special marker for number_of
         operator,
         value: right_value,
         property_chain: None,
@@ -362,6 +370,7 @@ fn parse_number_of_expression(pair: Pair<Rule>) -> Result<PropertyPath, RuleErro
     Ok(path)
 }
 
+#[allow(dead_code)]
 fn parse_comparison_operator(pair: Pair<Rule>) -> Result<ComparisonOperator, RuleError> {
     match pair.as_str() {
         "is greater than or equal to" => Ok(ComparisonOperator::GreaterThanOrEqual),
@@ -418,6 +427,7 @@ fn parse_regular_property_condition(
                 "is less than or equal to" => ComparisonOperator::LessThanOrEqual,
                 "is no more than" => ComparisonOperator::LessThanOrEqual,
 
+                "is exactly equal to" => ComparisonOperator::ExactlyEqualTo,
                 "is equal to" => ComparisonOperator::EqualTo,
                 "is the same as" => ComparisonOperator::EqualTo,
 
@@ -518,7 +528,7 @@ fn parse_regular_property_condition(
 
     Ok(ComparisonCondition {
         selector: PositionedValue::new(left_path.selector.clone()),
-        property: PositionedValue::new(left_path.properties.last().unwrap_or(&String::new()).clone()),
+        property: PositionedValue::new(left_path.properties.last().map(|s| s.clone()).unwrap_or_else(|| constants::EMPTY_STRING.to_string())),
         operator,
         value: right_value,
         property_chain: None,
@@ -528,7 +538,8 @@ fn parse_regular_property_condition(
 }
 
 fn parse_property_access(pair: Pair<Rule>) -> Result<crate::runner::model::PropertyPath, RuleError> {
-    let mut properties = Vec::new();
+    // Pre-allocate with expected size to avoid reallocations
+    let mut properties = Vec::with_capacity(3); // Most property chains are short
     let mut selector = String::new();
 
     for inner in pair.into_inner() {
@@ -545,6 +556,9 @@ fn parse_property_access(pair: Pair<Rule>) -> Result<crate::runner::model::Prope
             _ => {}
         }
     }
+
+    // Shrink to fit if we over-allocated
+    properties.shrink_to_fit();
 
     Ok(crate::runner::model::PropertyPath {
         properties,
@@ -600,11 +614,15 @@ fn parse_rule_reference(pair: Pair<Rule>) -> Result<RuleReferenceCondition, Rule
 
 fn parse_list_value(pair: Pair<Rule>) -> Result<RuleValue, RuleError> {
     let inner_pairs = pair.into_inner();
-    let mut values = Vec::new();
+    // Pre-allocate with reasonable size - most lists are small
+    let mut values = Vec::with_capacity(5);
 
     for value_pair in inner_pairs {
         values.push(parse_value(value_pair)?);
     }
+
+    // Shrink to fit to save memory
+    values.shrink_to_fit();
 
     Ok(RuleValue::List(values))
 }

@@ -3,7 +3,7 @@ mod runner;
 use std::collections::HashMap;
 use std::env;
 use runner::parser::parse_rules;
-use runner::evaluator::evaluate_rule_set;
+use runner::evaluator::evaluate_rule_set_with_trace;
 use runner::trace::RuleSetTrace;
 use flags_rs::{Auth, Client};
 use serde_json::Value;
@@ -36,6 +36,7 @@ struct EvaluationResponse {
 
 #[derive(Clone)]
 struct AppState {
+    #[allow(dead_code)]
     flags_client: Client,
 }
 
@@ -69,63 +70,173 @@ async fn main() {
 }
 
 async fn handle_run(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     Json(package): Json<RuleDataPackage>
 ) -> (StatusCode, Json<EvaluationResponse>) {
     match parse_rules(&package.rule) {
-        Ok(rule_set) => match evaluate_rule_set(&rule_set, &package.data) {
-            Ok((results, trace)) => {
-                //eprintln!("rules: {:?}", rule_set);
-
-                let mut labels = HashMap::new();
+        Ok(rule_set) => {
+            let evaluation_result = evaluate_rule_set_with_trace(&rule_set, &package.data);
+            
+            // Extract labels from trace if available
+            let mut labels = HashMap::new();
+            if let Some(trace) = &evaluation_result.trace {
                 for rule_trace in &trace.execution {
                     if let Some(label) = &rule_trace.label {
                         labels.insert(label.to_string(), rule_trace.result);
                     }
                 }
-
-                let result = results.values().next().cloned().unwrap_or(false);
-                let rule = package.rule.lines().map(String::from).collect();
-                let response = EvaluationResponse {
-                    result,
-                    error: None,
-                    trace: Some(trace),
-                    labels: if labels.is_empty() {
-                        None
-                    } else {
-                        Some(labels)
-                    },
-                    rule,
-                    data: package.data.clone(),
-                };
-                //eprintln!("response: {:?}", response);
-                (StatusCode::OK, Json(response))
             }
-            Err(error) => {
-                let rule = package.rule.lines().map(String::from).collect();
-                let response = EvaluationResponse {
-                    result: false,
-                    error: Some(error.to_string()),
-                    trace: None,
-                    labels: None,
-                    rule,
-                    data: package.data.clone(),
-                };
-                (StatusCode::BAD_REQUEST, Json(response))
+
+            let rule = package.rule.lines().map(String::from).collect();
+            
+            match evaluation_result.result {
+                Ok(results) => {
+                    let result = results.values().next().cloned().unwrap_or(false);
+                    let response = EvaluationResponse {
+                        result,
+                        error: None,
+                        trace: evaluation_result.trace,
+                        labels: if labels.is_empty() {
+                            None
+                        } else {
+                            Some(labels)
+                        },
+                        rule,
+                        data: package.data.clone(),
+                    };
+                    (StatusCode::OK, Json(response))
+                }
+                Err(error) => {
+                    // KEY IMPROVEMENT: Now we include trace even on errors!
+                    // This allows API users to see where the error occurred in the evaluation process
+                    // without having to look through logs.
+                    let response = EvaluationResponse {
+                        result: false,
+                        error: Some(error.to_string()),
+                        trace: evaluation_result.trace, // This preserves the evaluation trace even on failure!
+                        labels: if labels.is_empty() {
+                            None
+                        } else {
+                            Some(labels)
+                        },
+                        rule,
+                        data: package.data.clone(),
+                    };
+                    (StatusCode::BAD_REQUEST, Json(response))
+                }
             }
         },
-        Err(error) => {
+        Err(parse_error) => {
             let rule = package.rule.lines().map(String::from).collect();
+            
+            // Even for parse errors, create a basic trace showing what we attempted to parse
+            let parse_trace = create_parse_error_trace(&parse_error, &package.rule);
             
             let response = EvaluationResponse {
                 result: false,
-                error: Some(error.to_string()),
-                trace: None,
+                error: Some(parse_error.to_string()),
+                trace: Some(parse_trace), // Always include trace, even for parse errors!
                 labels: None,
                 rule,
                 data: package.data.clone(),
             };
             (StatusCode::BAD_REQUEST, Json(response))
         }
+    }
+}
+
+/// Creates a trace showing parse error information
+fn create_parse_error_trace(parse_error: &runner::error::RuleError, rule_text: &str) -> RuleSetTrace {
+    use runner::trace::*;
+    
+    // Extract line information from parse error if possible
+    let error_line = extract_line_from_parse_error(&parse_error.to_string());
+    let error_location = find_error_location(rule_text, error_line);
+    
+    // Create a synthetic rule trace showing where parsing failed
+    let parse_trace = RuleTrace {
+        label: Some("Parse Error".to_string()),
+        selector: SelectorTrace {
+            value: "parser".to_string(),
+            pos: error_location.clone(),
+        },
+        outcome: OutcomeTrace {
+            value: "parse_failed".to_string(),
+            pos: error_location,
+        },
+        conditions: vec![
+            ConditionTrace::Comparison(ComparisonTrace {
+                selector: SelectorTrace {
+                    value: "rule_syntax".to_string(),
+                    pos: None,
+                },
+                property: PropertyTrace {
+                    value: serde_json::json!({
+                        "error_type": "parse_error",
+                        "failed_at_line": error_line,
+                        "rule_length": rule_text.lines().count()
+                    }),
+                    path: format!("$.rule_syntax.line_{}", error_line.unwrap_or(0)),
+                },
+                operator: runner::model::ComparisonOperator::EqualTo,
+                value: ValueTrace {
+                    value: serde_json::json!("invalid"),
+                    value_type: "string".to_string(),
+                    pos: None,
+                },
+                evaluation_details: Some(ComparisonEvaluationTrace {
+                    left_value: TypedValue {
+                        value: serde_json::json!("invalid_syntax"),
+                        value_type: "parse_error".to_string(),
+                    },
+                    right_value: TypedValue {
+                        value: serde_json::json!("valid_syntax"),
+                        value_type: "expectation".to_string(),
+                    },
+                    comparison_result: false,
+                }),
+                result: false,
+            })
+        ],
+        result: false,
+    };
+    
+    RuleSetTrace {
+        execution: vec![parse_trace],
+    }
+}
+
+/// Extract line number from parse error message
+fn extract_line_from_parse_error(error_msg: &str) -> Option<usize> {
+    // Parse error messages typically contain line numbers like "--> 13:5"
+    if let Some(arrow_pos) = error_msg.find("-->") {
+        let after_arrow = &error_msg[arrow_pos + 3..];
+        if let Some(colon_pos) = after_arrow.find(':') {
+            let line_part = &after_arrow[..colon_pos].trim();
+            line_part.parse::<usize>().ok()
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+/// Find the source position of the error in the rule text
+fn find_error_location(rule_text: &str, error_line: Option<usize>) -> Option<runner::model::SourcePosition> {
+    if let Some(line_num) = error_line {
+        let lines: Vec<&str> = rule_text.lines().collect();
+        if line_num > 0 && line_num <= lines.len() {
+            let line_content = lines[line_num - 1]; // Convert to 0-based index
+            Some(runner::model::SourcePosition {
+                line: line_num,
+                start: 0,
+                end: line_content.len(),
+            })
+        } else {
+            None
+        }
+    } else {
+        None
     }
 }

@@ -1,6 +1,6 @@
 mod lib;
 
-use crate::runner::error::RuleError;
+use crate::runner::error::{RuleError, EvaluationResult, PartialRuleTrace};
 use crate::runner::model::{Condition, ComparisonOperator, Rule, RuleSet, RuleValue, ConditionOperator, ComparisonCondition, RuleReferenceCondition, PropertyChainElement};
 use crate::runner::trace::{RuleSetTrace, RuleTrace, ConditionTrace, ComparisonTrace, ComparisonEvaluationTrace, RuleReferenceTrace, PropertyCheckTrace, PropertyTrace, TypedValue, SelectorTrace, OutcomeTrace};
 
@@ -19,6 +19,94 @@ impl RuleError {
     }
 }
 
+#[allow(dead_code)]
+pub fn evaluate_rule_set_with_trace(
+    rule_set: &RuleSet,
+    json: &Value
+) -> EvaluationResult<HashMap<String, bool>> {
+    let mut all_traces: Vec<RuleTrace> = Vec::new();
+    let mut results = HashMap::new();
+    let mut processed_rules = HashSet::new();
+    
+    // Find global rule and handle potential error
+    let global_rule = match crate::runner::utils::find_global_rule(&rule_set.rules) {
+        Ok(rule) => rule,
+        Err(error) => {
+            // Even if we can't find global rule, return what trace we can
+            let trace = RuleSetTrace { execution: all_traces };
+            return EvaluationResult::failure(error, Some(trace));
+        }
+    };
+    
+    let mut evaluation_stack = HashSet::new();
+    let mut call_path = Vec::new();
+
+    // Evaluate global rule with trace preservation
+    match evaluate_rule_with_trace(global_rule, json, rule_set, &mut evaluation_stack, &mut call_path) {
+        Ok((result, rule_trace)) => {
+            results.insert(global_rule.outcome.clone(), result);
+            all_traces.push(rule_trace);
+            processed_rules.insert(global_rule.outcome.clone());
+        }
+        Err((error, partial_trace)) => {
+            // Convert partial trace and return failure with trace
+            if let Some(trace) = partial_trace {
+                all_traces.push(trace.to_rule_trace());
+            }
+            let rule_set_trace = RuleSetTrace { execution: all_traces };
+            return EvaluationResult::failure(error, Some(rule_set_trace));
+        }
+    }
+
+    // Continue with referenced rules
+    let mut i = 0;
+    while i < all_traces.len() {
+        let mut rules_to_process = Vec::new();
+        {
+            let trace = &all_traces[i];
+            for condition in &trace.conditions {
+                if let ConditionTrace::RuleReference(ref_trace) = condition {
+                    if let Some(outcome) = &ref_trace.referenced_rule_outcome {
+                        if !processed_rules.contains(outcome) {
+                            if let Some(rule) = rule_set.get_rule(outcome) {
+                                rules_to_process.push((outcome.clone(), rule));
+                                processed_rules.insert(outcome.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Process collected rules
+        for (outcome, rule) in rules_to_process {
+            let mut sub_evaluation_stack = HashSet::new();
+            let mut sub_call_path = Vec::new();
+
+            match evaluate_rule_with_trace(rule, json, rule_set, &mut sub_evaluation_stack, &mut sub_call_path) {
+                Ok((sub_result, sub_trace)) => {
+                    results.insert(outcome, sub_result);
+                    all_traces.push(sub_trace);
+                }
+                Err((error, partial_trace)) => {
+                    // On error, include partial trace and return failure
+                    if let Some(trace) = partial_trace {
+                        all_traces.push(trace.to_rule_trace());
+                    }
+                    let rule_set_trace = RuleSetTrace { execution: all_traces };
+                    return EvaluationResult::failure(error, Some(rule_set_trace));
+                }
+            }
+        }
+
+        i += 1;
+    }
+
+    let rule_set_trace = RuleSetTrace { execution: all_traces };
+    EvaluationResult::success(results, rule_set_trace)
+}
+
+#[allow(dead_code)]
 pub fn evaluate_rule_set(
     rule_set: &RuleSet,
     json: &Value
@@ -72,6 +160,104 @@ pub fn evaluate_rule_set(
     };
 
     Ok((results, rule_set_trace))
+}
+
+/// Enhanced rule evaluation that preserves traces even on errors
+pub fn evaluate_rule_with_trace(
+    model_rule: &Rule,
+    json: &Value,
+    rule_set: &RuleSet,
+    evaluation_stack: &mut HashSet<String>,
+    call_path: &mut Vec<String>,
+) -> Result<(bool, RuleTrace), (RuleError, Option<PartialRuleTrace>)> {
+    // Initialize partial trace to capture progress
+    let mut partial_trace = PartialRuleTrace::new(
+        model_rule.label.clone(),
+        model_rule.selector.clone(),
+        model_rule.selector_pos.clone(),
+        model_rule.outcome.clone(),
+        model_rule.position.clone(),
+    );
+
+    // cycle check
+    let rule_identifier = model_rule.outcome.clone();
+    if evaluation_stack.contains(&rule_identifier) {
+        call_path.push(rule_identifier.clone());
+        let error = RuleError::infinite_loop_error(call_path.clone());
+        partial_trace.set_error(format!("Infinite loop detected: {}", error));
+        return Err((error, Some(partial_trace)));
+    }
+    evaluation_stack.insert(rule_identifier.clone());
+    call_path.push(rule_identifier.clone());
+
+    // evaluate each condition, collect results and traces
+    let mut results = Vec::new();
+    let mut ops = Vec::new();
+    let mut condition_traces = Vec::new();
+
+    for (i, cg) in model_rule.conditions.iter().enumerate() {
+        match evaluate_condition_with_trace(&cg.condition, json, rule_set, evaluation_stack, call_path) {
+            Ok((res, trace)) => {
+                results.push(res);
+                partial_trace.add_condition(trace.clone());
+                condition_traces.push(trace);
+            }
+            Err((error, condition_trace)) => {
+                // Add any partial condition trace we have
+                if let Some(trace) = condition_trace {
+                    partial_trace.add_condition(trace);
+                }
+                partial_trace.set_error(format!("Condition evaluation failed: {}", error));
+                evaluation_stack.remove(&rule_identifier);
+                call_path.pop();
+                return Err((error, Some(partial_trace)));
+            }
+        }
+
+        // record the operator that follows this condition
+        if let Some(op) = &cg.operator {
+            ops.push(op.clone());
+        } else if i != 0 {
+            ops.push(ConditionOperator::And);
+        }
+    }
+
+    evaluation_stack.remove(&rule_identifier);
+    call_path.pop();
+
+    // collapse all ANDs first
+    let mut i = 0;
+    while i < ops.len() {
+        if ops[i] == ConditionOperator::And {
+            results[i] = results[i] && results[i + 1];
+            results.remove(i + 1);
+            ops.remove(i);
+        } else {
+            i += 1;
+        }
+    }
+
+    // fold OR across what remains
+    let rule_result = results
+        .into_iter()
+        .fold(false, |acc, next| acc || next);
+
+    // build complete trace object
+    let rule_trace = RuleTrace {
+        label: model_rule.label.clone(),
+        selector: SelectorTrace {
+            value: model_rule.selector.clone(),
+            pos: model_rule.selector_pos.clone(),
+        },
+        outcome: OutcomeTrace {
+            value: model_rule.outcome.clone(),
+            pos: model_rule.position.clone(),
+        },
+        conditions: condition_traces,
+        result: rule_result,
+    };
+
+    Ok((rule_result, rule_trace))
 }
 
 pub fn evaluate_rule(
@@ -150,6 +336,30 @@ pub fn evaluate_rule(
     Ok((rule_result, rule_trace))
 }
 
+#[allow(dead_code)]
+fn evaluate_condition_with_trace(
+    condition: &Condition,
+    json: &Value,
+    rule_set: &RuleSet,
+    evaluation_stack: &mut HashSet<String>,
+    call_path: &mut Vec<String>,
+) -> Result<(bool, ConditionTrace), (RuleError, Option<ConditionTrace>)> {
+    match condition {
+        Condition::RuleReference(ref_condition) => {
+            match evaluate_rule_reference_condition_with_trace(ref_condition, json, rule_set, evaluation_stack, call_path) {
+                Ok(result) => Ok(result),
+                Err((error, trace)) => Err((error, trace))
+            }
+        },
+        Condition::Comparison(comp_condition) => {
+            match evaluate_comparison_condition_with_trace(comp_condition, json) {
+                Ok(result) => Ok(result),
+                Err((error, trace)) => Err((error, trace))
+            }
+        },
+    }
+}
+
 fn evaluate_condition(
     condition: &Condition,
     json: &Value,
@@ -223,6 +433,167 @@ fn evaluate_rule_reference_condition(
     Ok((result, ConditionTrace::RuleReference(rule_reference_trace)))
 }
 
+#[allow(dead_code)]
+fn evaluate_rule_reference_condition_with_trace(
+    condition: &RuleReferenceCondition,
+    json: &Value,
+    rule_set: &RuleSet,
+    evaluation_stack: &mut HashSet<String>,
+    call_path: &mut Vec<String>,
+) -> Result<(bool, ConditionTrace), (RuleError, Option<ConditionTrace>)> {
+    // Handle empty selector case (for label references)
+    if condition.selector.value.is_empty() {
+        let rule_name = condition.rule_name.value.trim();
+
+        // Try to find and evaluate the referenced rule
+        match try_evaluate_by_rule_with_trace(rule_name, json, rule_set, evaluation_stack, call_path) {
+            Ok(Some((result, outcome))) => {
+                let rule_reference_trace = RuleReferenceTrace {
+                    selector: SelectorTrace {
+                        value: String::new(),
+                        pos: None,
+                    },
+                    rule_name: condition.rule_name.value.clone(),
+                    referenced_rule_outcome: Some(outcome),
+                    property_check: None,
+                    result,
+                };
+                return Ok((result, ConditionTrace::RuleReference(rule_reference_trace)));
+            }
+            Ok(None) => {
+                // Rule not found
+                return Ok((false, create_failed_rule_reference_trace(condition)));
+            }
+            Err((error, _)) => {
+                // Error during rule evaluation
+                let failed_trace = create_failed_rule_reference_trace(condition);
+                return Err((error, Some(failed_trace)));
+            }
+        }
+    }
+
+    // Normal case with selector
+    let effective_selector = match find_effective_selector(&condition.selector.value, json) {
+        Ok(Some(sel)) => sel,
+        Ok(None) => {
+            return Ok((false, create_failed_rule_reference_trace(condition)));
+        }
+        Err(error) => {
+            let failed_trace = create_failed_rule_reference_trace(condition);
+            return Err((error, Some(failed_trace)));
+        }
+    };
+
+    let part = condition.rule_name.value.trim();
+    match evaluate_rule_or_property_with_trace(part, &effective_selector, json, rule_set, evaluation_stack, call_path) {
+        Ok((result, referenced_outcome, property_check)) => {
+            let rule_reference_trace = RuleReferenceTrace {
+                selector: SelectorTrace {
+                    value: condition.selector.value.clone(),
+                    pos: condition.selector.pos.clone(),
+                },
+                rule_name: condition.rule_name.value.clone(),
+                referenced_rule_outcome: referenced_outcome,
+                property_check,
+                result,
+            };
+
+            Ok((result, ConditionTrace::RuleReference(rule_reference_trace)))
+        }
+        Err((error, _)) => {
+            let failed_trace = create_failed_rule_reference_trace(condition);
+            Err((error, Some(failed_trace)))
+        }
+    }
+}
+
+#[allow(dead_code)]
+fn evaluate_comparison_condition_with_trace(
+    condition: &ComparisonCondition,
+    json: &Value
+) -> Result<(bool, ConditionTrace), (RuleError, Option<ConditionTrace>)> {
+    // Check if this is a cross-object comparison
+    if let Some(left_path) = &condition.left_property_path {
+        return match evaluate_cross_object_comparison(condition, left_path, json) {
+            Ok(result) => Ok(result),
+            Err(error) => {
+                let failed_trace = create_failed_comparison_trace(condition, None);
+                Err((error, Some(failed_trace)))
+            }
+        };
+    }
+
+    // Check if this is a chained property access
+    if let Some(property_chain) = &condition.property_chain {
+        return match evaluate_chained_comparison_condition(condition, property_chain, json) {
+            Ok(result) => Ok(result),
+            Err(error) => {
+                let failed_trace = create_failed_comparison_trace(condition, None);
+                Err((error, Some(failed_trace)))
+            }
+        };
+    }
+
+    // Original simple property condition logic
+    let effective_selector = match find_effective_selector(&condition.selector.value, json) {
+        Ok(Some(sel)) => sel,
+        Ok(None) => {
+            return Ok((false, create_failed_comparison_trace(condition, None)));
+        }
+        Err(error) => {
+            let failed_trace = create_failed_comparison_trace(condition, None);
+            return Err((error, Some(failed_trace)));
+        }
+    };
+
+    // Check if property exists
+    let property_value = json.get(&effective_selector)
+        .and_then(|obj| obj.get(&condition.property.value));
+
+    if property_value.is_none() {
+        return Ok((false, create_failed_comparison_trace(condition, Some(&effective_selector))));
+    }
+
+    // Extract and evaluate the comparison
+    let json_value = match extract_value_from_json(json, &effective_selector, &condition.property.value) {
+        Ok(value) => value,
+        Err(error) => {
+            let failed_trace = create_failed_comparison_trace(condition, Some(&effective_selector));
+            return Err((error, Some(failed_trace)));
+        }
+    };
+    
+    let (comparison_result, evaluation_details) = match perform_comparison(
+        &json_value,
+        &condition.operator,
+        &condition.value.value
+    ) {
+        Ok(result) => result,
+        Err(error) => {
+            let failed_trace = create_failed_comparison_trace(condition, Some(&effective_selector));
+            return Err((error, Some(failed_trace)));
+        }
+    };
+
+    // Build the trace
+    let comparison_trace = ComparisonTrace {
+        selector: SelectorTrace {
+            value: condition.selector.value.clone(),
+            pos: condition.selector.pos.clone(),
+        },
+        property: PropertyTrace {
+            value: property_value.unwrap().clone(),
+            path: format!("$.{}.{}", effective_selector, condition.property.value),
+        },
+        operator: condition.operator.clone(),
+        value: condition.value.value.to_value_trace(condition.value.pos.clone()),
+        evaluation_details,
+        result: comparison_result,
+    };
+
+    Ok((comparison_result, ConditionTrace::Comparison(comparison_trace)))
+}
+
 fn evaluate_rule_or_property(
     rule_name: &str,
     effective_selector: &str,
@@ -277,6 +648,13 @@ fn try_evaluate_by_rule(
 }
 
 fn find_rule_fuzzy_match<'a>(rule_name: &str, rule_set: &'a RuleSet) -> Option<&'a Rule> {
+    // Check cache first
+    if let Ok(cache) = rule_set.cache.rule_fuzzy_matches.read() {
+        if let Some(cached_outcome) = cache.get(rule_name) {
+            return cached_outcome.as_ref().and_then(|outcome| rule_set.get_rule(outcome));
+        }
+    }
+
     let rule_name_lower = rule_name.to_lowercase();
 
     // First, try to match rules where the outcome contains key parts of the rule_name
@@ -294,28 +672,111 @@ fn find_rule_fuzzy_match<'a>(rule_name: &str, rule_set: &'a RuleSet) -> Option<&
     }
 
     // Now try to find a matching rule
-    for rule in &rule_set.rules {
-        let outcome_lower = rule.outcome.to_lowercase();
-
+    let mut found_outcome: Option<String> = None;
+    
+    // Pre-allocate lowercase strings to avoid repeated allocations in loop
+    let rule_outcomes_lower: Vec<_> = rule_set.rules
+        .iter()
+        .map(|rule| rule.outcome.to_lowercase())
+        .collect();
+    
+    for (rule, outcome_lower) in rule_set.rules.iter().zip(rule_outcomes_lower.iter()) {
         // Check if the rule outcome matches the cleaned rule name
-        if outcome_lower == cleaned_rule_name {
-            return Some(rule);
+        if outcome_lower == &cleaned_rule_name {
+            found_outcome = Some(rule.outcome.clone());
+            break;
         }
 
         // Check if either contains the other
-        if outcome_lower.contains(&cleaned_rule_name) || cleaned_rule_name.contains(&outcome_lower) {
-            return Some(rule);
+        if outcome_lower.contains(&cleaned_rule_name) || cleaned_rule_name.contains(outcome_lower) {
+            found_outcome = Some(rule.outcome.clone());
+            break;
         }
 
         // Original checks with full rule_name
-        if outcome_lower == rule_name_lower ||
+        if outcome_lower == &rule_name_lower ||
             outcome_lower.contains(&rule_name_lower) ||
-            rule_name_lower.contains(&outcome_lower) {
-            return Some(rule);
+            rule_name_lower.contains(outcome_lower) {
+            found_outcome = Some(rule.outcome.clone());
+            break;
         }
     }
 
-    None
+    // Cache the result
+    if let Ok(mut cache) = rule_set.cache.rule_fuzzy_matches.write() {
+        cache.insert(rule_name.to_string(), found_outcome.clone());
+    }
+
+    found_outcome.and_then(|outcome| rule_set.get_rule(&outcome))
+}
+
+#[allow(dead_code)]
+fn try_evaluate_by_rule_with_trace(
+    rule_name: &str,
+    json: &Value,
+    rule_set: &RuleSet,
+    evaluation_stack: &mut HashSet<String>,
+    call_path: &mut Vec<String>,
+) -> Result<Option<(bool, String)>, (RuleError, Option<PartialRuleTrace>)> {
+    // Try exact outcome match
+    if let Some(rule) = rule_set.get_rule(rule_name) {
+        match evaluate_rule_with_trace(rule, json, rule_set, evaluation_stack, call_path) {
+            Ok((result, _)) => Ok(Some((result, rule.outcome.clone()))),
+            Err((error, partial_trace)) => Err((error, partial_trace))
+        }
+    } else if let Some(rule) = rule_set.get_rule_by_label(rule_name) {
+        // Try exact label match
+        match evaluate_rule_with_trace(rule, json, rule_set, evaluation_stack, call_path) {
+            Ok((result, _)) => Ok(Some((result, rule.outcome.clone()))),
+            Err((error, partial_trace)) => Err((error, partial_trace))
+        }
+    } else if let Some(rule) = find_rule_fuzzy_match(rule_name, rule_set) {
+        // Try fuzzy matching
+        match evaluate_rule_with_trace(rule, json, rule_set, evaluation_stack, call_path) {
+            Ok((result, _)) => Ok(Some((result, rule.outcome.clone()))),
+            Err((error, partial_trace)) => Err((error, partial_trace))
+        }
+    } else {
+        Ok(None)
+    }
+}
+
+#[allow(dead_code)]
+fn evaluate_rule_or_property_with_trace(
+    rule_name: &str,
+    effective_selector: &str,
+    json: &Value,
+    rule_set: &RuleSet,
+    evaluation_stack: &mut HashSet<String>,
+    call_path: &mut Vec<String>,
+) -> Result<(bool, Option<String>, Option<PropertyCheckTrace>), (RuleError, Option<PartialRuleTrace>)> {
+    // Try to find a matching rule first
+    match try_evaluate_by_rule_with_trace(rule_name, json, rule_set, evaluation_stack, call_path) {
+        Ok(Some((result, outcome))) => {
+            return Ok((result, Some(outcome), None));
+        }
+        Ok(None) => {
+            // Continue to property evaluation
+        }
+        Err((error, partial_trace)) => {
+            return Err((error, partial_trace));
+        }
+    }
+
+    // If no rule found, try to evaluate as a property
+    match try_evaluate_as_property(rule_name, effective_selector, json) {
+        Ok(Some(property_check)) => {
+            let result = evaluate_property_result(&property_check);
+            Ok((result, None, Some(property_check)))
+        }
+        Ok(None) => {
+            // If neither rule nor property found, assume true (free text condition)
+            Ok((true, None, None))
+        }
+        Err(error) => {
+            Err((error, None))
+        }
+    }
 }
 
 fn try_evaluate_as_property(
@@ -418,7 +879,7 @@ fn calculate_number_of(value: &Value) -> Result<f64, RuleError> {
 }
 
 // ===== Comparison Evaluation =====
-
+#[allow(dead_code)]
 fn evaluate_comparison_condition(
     condition: &ComparisonCondition,
     json: &Value
@@ -647,14 +1108,14 @@ fn resolve_property_path<'a>(
     path_parts[0] = final_selector.clone(); // Use the actual key from JSON
 
     let is_length_of_operator = is_length_of_operation(path);
-    let properties_to_traverse = if is_length_of_operator {
+    if is_length_of_operator {
         &path.properties[..path.properties.len() - 1]
     } else {
         &path.properties[..]
     };
 
     let is_number_of_operator = is_number_of_operation(path);
-    let properties_to_traverse = if is_number_of_operator {
+    if is_number_of_operator {
         &path.properties[..path.properties.len() - 1]
     } else {
         &path.properties[..]
@@ -707,7 +1168,7 @@ fn resolve_property_path<'a>(
     }
 
     if is_length_of_operator {
-        let length_value = calculate_length_of(current_value)?;
+        calculate_length_of(current_value)?;
         path_parts.push("length".to_string());
         let path_str = format!("$.{}", path_parts.join("."));
         return Ok((Some(current_value), path_str));
@@ -717,6 +1178,7 @@ fn resolve_property_path<'a>(
     Ok((Some(current_value), path_str))
 }
 
+#[allow(dead_code)]
 fn evaluate_chained_comparison_condition(
     condition: &ComparisonCondition,
     property_chain: &[PropertyChainElement],
@@ -1041,6 +1503,7 @@ fn evaluate_comparison(
 
         // Equality comparisons
         EqualTo => compare_equal(left, right),
+        ExactlyEqualTo => compare_exactly_equal(left, right),
         NotEqualTo => compare_not_equal(left, right),
 
         // Date comparisons
@@ -1118,14 +1581,25 @@ fn compare_numbers_lt(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleE
     }
 }
 
-// Equality comparison functions
+// Equality comparison functions (case-insensitive by default)
 fn compare_equal(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleError> {
+    match (left, right) {
+        (RuleValue::Number(l), RuleValue::Number(r)) => Ok(l == r),
+        (RuleValue::String(l), RuleValue::String(r)) => Ok(l.to_lowercase() == r.to_lowercase()),
+        (RuleValue::Date(l), RuleValue::Date(r)) => Ok(l == r),
+        (RuleValue::Boolean(l), RuleValue::Boolean(r)) => Ok(l == r),
+        _ => Err(RuleError::TypeError(format!("Cannot compare {:?} and {:?} for equality", left, right))),
+    }
+}
+
+// Case-sensitive equality comparison
+fn compare_exactly_equal(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleError> {
     match (left, right) {
         (RuleValue::Number(l), RuleValue::Number(r)) => Ok(l == r),
         (RuleValue::String(l), RuleValue::String(r)) => Ok(l == r),
         (RuleValue::Date(l), RuleValue::Date(r)) => Ok(l == r),
         (RuleValue::Boolean(l), RuleValue::Boolean(r)) => Ok(l == r),
-        _ => Err(RuleError::TypeError(format!("Cannot compare {:?} and {:?} for equality", left, right))),
+        _ => Err(RuleError::TypeError(format!("Cannot compare {:?} and {:?} for exact equality", left, right))),
     }
 }
 
@@ -1173,7 +1647,7 @@ fn compare_contains(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleErr
     match left {
         RuleValue::String(l) => {
             match right {
-                RuleValue::String(r) => Ok(l.contains(r)),
+                RuleValue::String(r) => Ok(l.to_lowercase().contains(&r.to_lowercase())),
                 _ => Err(RuleError::TypeError("String contains only works with string values".to_string())),
             }
         },
@@ -1189,11 +1663,11 @@ fn compare_contains(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleErr
     }
 }
 
-// Helper function to check equality without returning Result
+// Helper function to check equality without returning Result (case-insensitive for strings)
 fn is_equal(left: &RuleValue, right: &RuleValue) -> bool {
     match (left, right) {
         (RuleValue::Number(l), RuleValue::Number(r)) => l == r,
-        (RuleValue::String(l), RuleValue::String(r)) => l == r,
+        (RuleValue::String(l), RuleValue::String(r)) => l.to_lowercase() == r.to_lowercase(),
         (RuleValue::Date(l), RuleValue::Date(r)) => l == r,
         (RuleValue::Boolean(l), RuleValue::Boolean(r)) => l == r,
         _ => false,
@@ -1218,12 +1692,25 @@ fn transform_selector_name(name: &str) -> String {
     if words.is_empty() {
         return String::new();
     }
+    
+    if words.len() == 1 {
+        return words[0].to_lowercase();
+    }
 
-    let mut result = words[0].to_lowercase();
+    // Pre-allocate with reasonable capacity to avoid reallocations
+    let estimated_size = name.len(); // Conservative estimate
+    let mut result = String::with_capacity(estimated_size);
+    result.push_str(&words[0].to_lowercase());
+    
     for word in &words[1..] {
         if !word.is_empty() {
-            result.push_str(&word[0..1].to_uppercase());
-            result.push_str(&word[1..].to_lowercase());
+            // Capitalize first letter
+            if let Some(first_char) = word.chars().next() {
+                result.extend(first_char.to_uppercase());
+                if word.len() > 1 {
+                    result.push_str(&word[1..].to_lowercase());
+                }
+            }
         }
     }
 
@@ -1232,9 +1719,15 @@ fn transform_selector_name(name: &str) -> String {
 
 fn get_json_value_insensitive<'a>(json: &'a serde_json::Value, key: &str) -> Option<&'a serde_json::Value> {
     if let Some(obj) = json.as_object() {
-        let key_lower = key.to_lowercase();
+        // First try exact match (most common case)
+        if let Some(value) = obj.get(key) {
+            return Some(value);
+        }
+        
+        // Then try case-insensitive match using more efficient approach
+        let key_lower = key.to_ascii_lowercase();
         for (k, v) in obj {
-            if k.to_lowercase() == key_lower {
+            if k.to_ascii_lowercase() == key_lower {
                 return Some(v);
             }
         }

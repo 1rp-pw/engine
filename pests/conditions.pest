@@ -1,0 +1,46 @@
+condition = {
+    property_condition |
+    label_reference |
+    rule_reference
+}
+condition_operator = { "and" | "or" }
+
+property_condition = {
+    ("the")? ~ property_access ~ predicate |
+    number_of_expr ~ predicate |
+    length_of_expr ~ predicate
+}
+
+property_access = {
+    property ~ (("of" | "in") ~ ("the")? ~ property)* ~ ("of" | "in") ~ ("the")? ~ object_selector
+}
+
+predicate = {
+    comparison_operator ~ (property_access | value) |
+    list_operator ~ (property_access | list_value) |
+    empty_operator
+}
+
+comparison_operator = {
+    "is greater than or equal to" |
+    "is at least" |
+
+    "is less than or equal to" |
+    "is no more than" |
+
+    "is exactly equal to" |
+    "is equal to" |
+    "is not equal to" |
+    "is the same as" |
+    "is not the same as" |
+
+    "is later than" |
+    "is earlier than" |
+
+    "is greater than" |
+    "is less than" |
+
+    "contains"
+}
+list_operator = { "is in" | "is not in" }
+empty_operator = { "is not empty" | "is empty" }
