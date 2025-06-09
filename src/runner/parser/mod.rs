@@ -2,7 +2,6 @@ mod lib;
 
 use crate::runner::error::RuleError;
 use chrono::NaiveDate;
-use pest::error::InputLocation::Pos;
 use pest::Parser;
 use pest_derive::Parser;
 use pest::iterators::Pair;

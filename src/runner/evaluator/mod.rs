@@ -1102,14 +1102,14 @@ fn resolve_property_path<'a>(
     path_parts[0] = final_selector.clone(); // Use the actual key from JSON
 
     let is_length_of_operator = is_length_of_operation(path);
-    let properties_to_traverse = if is_length_of_operator {
+    if is_length_of_operator {
         &path.properties[..path.properties.len() - 1]
     } else {
         &path.properties[..]
     };
 
     let is_number_of_operator = is_number_of_operation(path);
-    let properties_to_traverse = if is_number_of_operator {
+    if is_number_of_operator {
         &path.properties[..path.properties.len() - 1]
     } else {
         &path.properties[..]
