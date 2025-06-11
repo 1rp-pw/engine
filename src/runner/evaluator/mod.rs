@@ -1163,7 +1163,7 @@ fn resolve_property_path<'a>(
     path: &crate::runner::model::PropertyPath,
     json: &'a Value
 ) -> Result<(Option<&'a Value>, String), RuleError> {
-    let mut path_parts = vec![path.selector.clone()];
+    let mut path_parts = Vec::new();
     let mut current_value = json;
 
     // Check if the selector contains dots (nested path)
@@ -1190,7 +1190,7 @@ fn resolve_property_path<'a>(
         let final_selector = effective_selector.unwrap();
         current_value = json.get(&final_selector)
             .ok_or_else(|| RuleError::EvaluationError(format!("Selector '{}' not found", final_selector)))?;
-        path_parts[0] = final_selector.clone(); // Use the actual key from JSON
+        path_parts.push(final_selector); // Use the actual key from JSON
     }
 
     let is_length_of_operator = is_length_of_operation(path);

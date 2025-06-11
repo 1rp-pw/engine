@@ -1644,6 +1644,43 @@ A **driver** has taken the test in the time period
             }
         }
     }
+
+    #[test]
+    fn test_nested_selector_path_format() {
+        let rule_text = r#"
+        A **user** is valid if __center__ of **drivingTest.testDates.practical** is equal to "Manchester".
+        "#;
+
+        let rule_set = parse_rules(rule_text).unwrap();
+
+        let json_data = json!({
+            "drivingTest": {
+                "testDates": {
+                    "practical": {
+                        "center": "Manchester"
+                    }
+                }
+            }
+        });
+        
+        let eval_result = crate::runner::evaluator::evaluate_rule_set_with_trace(&rule_set, &json_data);
+        assert!(eval_result.result.is_ok());
+        
+        let results = eval_result.result.unwrap();
+        assert!(results["valid"]);
+        
+        let trace = eval_result.trace.unwrap();
+        let rule_trace = &trace.execution[0];
+        let condition_trace = &rule_trace.conditions[0];
+        
+        // Check that the path is correctly formatted as $.drivingTest.testDates.practical.center
+        // and NOT $.drivingTest.testDates.practical.drivingTest.testDates.practical.center
+        if let runner::trace::ConditionTrace::Comparison(comp_trace) = condition_trace {
+            assert_eq!(comp_trace.property.path, "$.drivingTest.testDates.practical.center");
+        } else {
+            panic!("Expected comparison trace");
+        }
+    }
 }
 
 
