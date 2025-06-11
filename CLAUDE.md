@@ -41,7 +41,7 @@ This is a Policy Engine that evaluates business rules written in a custom DSL ag
 3. **HTTP API** (`main.rs`) - Axum server exposing POST endpoint for rule evaluation
 
 ### Key Design Patterns
-- **Grammar Composition**: Multiple `.pest` files are combined at build time via `build.rs`
+- **Grammar Composition**: Multiple `.pest` files are combined at build time via `build.rs`, never alter grammar.pest directly
 - **Error Tracing**: All evaluations can produce detailed execution traces for debugging
 - **Property Transformation**: Automatic conversion between snake_case and camelCase for JSON access
 - **Caching**: Performance optimizations through selector mapping in RuleSet

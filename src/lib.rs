@@ -1497,6 +1497,190 @@ A **driver** has taken the test in the time period
         let (results_bad, _trace_bad) = evaluate_rule_set(&rule_set, &json_bad).unwrap();
         assert!(!results_bad["a driving licence"]);
     }
+
+    #[test]
+    fn test_nested_selector_evaluation() {
+        let rule_text = r#"
+        A **user** is valid if __prop__ of **top.second** is equal to "test".
+        "#;
+
+        let rule_set = parse_rules(rule_text).unwrap();
+
+        // Test successful case
+        let json_success = json!({
+            "top": {
+                "second": {
+                    "prop": "test"
+                }
+            }
+        });
+        let (results, _trace) = evaluate_rule_set(&rule_set, &json_success).unwrap();
+        assert!(results["valid"]);
+
+        // Test failure case
+        let json_failure = json!({
+            "top": {
+                "second": {
+                    "prop": "wrong"
+                }
+            }
+        });
+        let (results, _trace) = evaluate_rule_set(&rule_set, &json_failure).unwrap();
+        assert!(!results["valid"]);
+    }
+
+    #[test]
+    fn test_deep_nested_selector_evaluation() {
+        let rule_text = r#"
+        A **user** passes the test if __value__ of **data.config.settings** is greater than 10.
+        "#;
+
+        let rule_set = parse_rules(rule_text).unwrap();
+
+        // Test successful case
+        let json_success = json!({
+            "data": {
+                "config": {
+                    "settings": {
+                        "value": 15
+                    }
+                }
+            }
+        });
+        let (results, _trace) = evaluate_rule_set(&rule_set, &json_success).unwrap();
+        assert!(results["the test"]);
+
+        // Test failure case
+        let json_failure = json!({
+            "data": {
+                "config": {
+                    "settings": {
+                        "value": 5
+                    }
+                }
+            }
+        });
+        let (results, _trace) = evaluate_rule_set(&rule_set, &json_failure).unwrap();
+        assert!(!results["the test"]);
+    }
+
+    #[test]
+    fn test_nested_selector_case_insensitive() {
+        let rule_text = r#"
+        A **user** is valid if __myProp__ of **Top.Second** is equal to "test".
+        "#;
+
+        let rule_set = parse_rules(rule_text).unwrap();
+
+        // Test with different case combinations
+        let json_test = json!({
+            "top": {
+                "second": {
+                    "my_prop": "test"
+                }
+            }
+        });
+        let (results, _trace) = evaluate_rule_set(&rule_set, &json_test).unwrap();
+        assert!(results["valid"]);
+    }
+
+    #[test]
+    fn test_nested_selector_with_backward_compatibility() {
+        // Test that regular selectors still work
+        let rule_text1 = r#"
+        A **user** is valid if __name__ of **user** is equal to "John".
+        "#;
+
+        let rule_set1 = parse_rules(rule_text1).unwrap();
+        let json1 = json!({
+            "user": {
+                "name": "John"
+            }
+        });
+        let (results1, _trace1) = evaluate_rule_set(&rule_set1, &json1).unwrap();
+        assert!(results1["valid"]);
+
+        // Test nested selectors
+        let rule_text2 = r#"
+        A **user** is valid if __name__ of **user.profile** is equal to "John".
+        "#;
+
+        let rule_set2 = parse_rules(rule_text2).unwrap();
+        let json2 = json!({
+            "user": {
+                "profile": {
+                    "name": "John"
+                }
+            }
+        });
+        let (results2, _trace2) = evaluate_rule_set(&rule_set2, &json2).unwrap();
+        assert!(results2["valid"]);
+    }
+
+    #[test]
+    fn test_nested_selector_error_handling() {
+        let rule_text = r#"
+        A **user** is valid if __prop__ of **nonexistent.path** is equal to "test".
+        "#;
+
+        let rule_set = parse_rules(rule_text).unwrap();
+
+        // Test with missing path
+        let json_missing = json!({
+            "user": {
+                "name": "John"
+            }
+        });
+        
+        let result = evaluate_rule_set(&rule_set, &json_missing);
+        match result {
+            Ok((results, _)) => {
+                // The evaluation succeeded but the result should be false
+                // since the path doesn't exist
+                assert!(!results["valid"], "Should return false when nested path doesn't exist");
+            },
+            Err(_) => {
+                // Also acceptable - immediate error is fine
+            }
+        }
+    }
+
+    #[test]
+    fn test_nested_selector_path_format() {
+        let rule_text = r#"
+        A **user** is valid if __center__ of **drivingTest.testDates.practical** is equal to "Manchester".
+        "#;
+
+        let rule_set = parse_rules(rule_text).unwrap();
+
+        let json_data = json!({
+            "drivingTest": {
+                "testDates": {
+                    "practical": {
+                        "center": "Manchester"
+                    }
+                }
+            }
+        });
+        
+        let eval_result = crate::runner::evaluator::evaluate_rule_set_with_trace(&rule_set, &json_data);
+        assert!(eval_result.result.is_ok());
+        
+        let results = eval_result.result.unwrap();
+        assert!(results["valid"]);
+        
+        let trace = eval_result.trace.unwrap();
+        let rule_trace = &trace.execution[0];
+        let condition_trace = &rule_trace.conditions[0];
+        
+        // Check that the path is correctly formatted as $.drivingTest.testDates.practical.center
+        // and NOT $.drivingTest.testDates.practical.drivingTest.testDates.practical.center
+        if let runner::trace::ConditionTrace::Comparison(comp_trace) = condition_trace {
+            assert_eq!(comp_trace.property.path, "$.drivingTest.testDates.practical.center");
+        } else {
+            panic!("Expected comparison trace");
+        }
+    }
 }
 
 
