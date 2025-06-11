@@ -646,4 +646,103 @@ A **user** is valid if __score__ of **user** is in [85, 90, 95, 100].
             }
         }
     }
+
+    #[test]
+    fn test_parse_nested_selector_paths() {
+        let input = r#"A **user** is valid if __prop__ of the **top.second** is equal to "test"."#;
+
+        let result = parse_rules(input);
+        assert!(result.is_ok(), "Failed to parse nested selector");
+
+        let rule_set = result.unwrap();
+        let rule = &rule_set.rules[0];
+
+        match &rule.conditions[0].condition {
+            Condition::Comparison(comp) => {
+                assert_eq!(comp.selector.value, "top.second");
+                assert_eq!(comp.property.value, "prop");
+                assert_eq!(comp.operator, ComparisonOperator::EqualTo);
+                match &comp.value.value {
+                    RuleValue::String(s) => assert_eq!(s, "test"),
+                    _ => panic!("Expected string value"),
+                }
+            }
+            _ => panic!("Expected comparison condition"),
+        }
+    }
+
+    #[test]
+    fn test_parse_multiple_nested_levels() {
+        let input = r#"A **user** passes the test if __value__ of the **data.config.settings** is greater than 10."#;
+
+        let result = parse_rules(input);
+        assert!(result.is_ok(), "Failed to parse deeply nested selector");
+
+        let rule_set = result.unwrap();
+        let rule = &rule_set.rules[0];
+
+        match &rule.conditions[0].condition {
+            Condition::Comparison(comp) => {
+                assert_eq!(comp.selector.value, "data.config.settings");
+                assert_eq!(comp.property.value, "value");
+                assert_eq!(comp.operator, ComparisonOperator::GreaterThan);
+                match &comp.value.value {
+                    RuleValue::Number(n) => assert_eq!(*n, 10.0),
+                    _ => panic!("Expected number value"),
+                }
+            }
+            _ => panic!("Expected comparison condition"),
+        }
+    }
+
+    #[test]
+    fn test_parse_single_nested_path() {
+        let input = r#"A **person** is eligible if the **second** of the **top** passes the test."#;
+
+        let result = parse_rules(input);
+        assert!(result.is_ok(), "Failed to parse single nested reference");
+
+        let rule_set = result.unwrap();
+        let rule = &rule_set.rules[0];
+
+        match &rule.conditions[0].condition {
+            Condition::RuleReference(ref_cond) => {
+                assert_eq!(ref_cond.selector.value, "second");
+                assert_eq!(ref_cond.rule_name.value, "of the **top** passes the test");
+            }
+            _ => panic!("Expected rule reference condition"),
+        }
+    }
+
+    #[test]
+    fn test_nested_vs_regular_selector() {
+        // Test that regular selectors still work
+        let input1 = r#"A **user** is valid if __name__ of **user** is equal to "John"."#;
+        let result1 = parse_rules(input1);
+        assert!(result1.is_ok(), "Failed to parse regular selector");
+
+        // Test that nested selectors work
+        let input2 = r#"A **user** is valid if __name__ of **user.profile** is equal to "John"."#;
+        let result2 = parse_rules(input2);
+        assert!(result2.is_ok(), "Failed to parse nested selector");
+
+        let rule_set1 = result1.unwrap();
+        let rule_set2 = result2.unwrap();
+
+        // Check regular selector
+        match &rule_set1.rules[0].conditions[0].condition {
+            Condition::Comparison(comp) => {
+                assert_eq!(comp.selector.value, "user");
+            }
+            _ => panic!("Expected comparison condition"),
+        }
+
+        // Check nested selector
+        match &rule_set2.rules[0].conditions[0].condition {
+            Condition::Comparison(comp) => {
+                assert_eq!(comp.selector.value, "user.profile");
+            }
+            _ => panic!("Expected comparison condition"),
+        }
+    }
 }

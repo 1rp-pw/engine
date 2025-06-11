@@ -76,7 +76,7 @@ fn parse_rule(pair: Pair<Rule>) -> Result<crate::runner::model::Rule, RuleError>
                     end: end_col,
                 });
                 let s = header_part.as_str();
-                selector = s[2..s.len() - 2].to_string();
+                selector = s[2..s.len() - 2].to_string(); // Extract content between **
             }
             _ => {}
         }
@@ -556,7 +556,7 @@ fn parse_property_access(pair: Pair<Rule>) -> Result<crate::runner::model::Prope
                         }
                         Rule::object_selector => {
                             let selector_text = sub_inner.as_str();
-                            let selector_name = selector_text[2..selector_text.len()-2].to_string();
+                            let selector_name = selector_text[2..selector_text.len()-2].to_string(); // Extract content between **
                             elements.push(("object", selector_name));
                         }
                         _ => {}
@@ -571,7 +571,7 @@ fn parse_property_access(pair: Pair<Rule>) -> Result<crate::runner::model::Prope
             }
             Rule::object_selector => {
                 let selector_text = inner.as_str();
-                let selector_name = selector_text[2..selector_text.len()-2].to_string();
+                let selector_name = selector_text[2..selector_text.len()-2].to_string(); // Extract content between **
                 elements.push(("object", selector_name));
             }
             _ => {}

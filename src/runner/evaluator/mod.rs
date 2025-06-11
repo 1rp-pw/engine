@@ -1164,18 +1164,34 @@ fn resolve_property_path<'a>(
     json: &'a Value
 ) -> Result<(Option<&'a Value>, String), RuleError> {
     let mut path_parts = vec![path.selector.clone()];
+    let mut current_value = json;
 
-    // Find effective selector
-    let effective_selector = find_effective_selector(&path.selector, json)?;
-    if effective_selector.is_none() {
-        return Ok((None, format!("$.{}", path.selector)));
+    // Check if the selector contains dots (nested path)
+    if path.selector.contains('.') {
+        // Handle nested selector path
+        let selector_parts: Vec<&str> = path.selector.split('.').collect();
+        for part in &selector_parts {
+            let effective_part = find_effective_selector(part, current_value)?;
+            if effective_part.is_none() {
+                return Ok((None, format!("$.{}", path.selector)));
+            }
+            let final_part = effective_part.unwrap();
+            current_value = current_value.get(&final_part)
+                .ok_or_else(|| RuleError::EvaluationError(format!("Selector part '{}' not found", final_part)))?;
+            path_parts.push(final_part);
+        }
+    } else {
+        // Handle regular single selector
+        let effective_selector = find_effective_selector(&path.selector, json)?;
+        if effective_selector.is_none() {
+            return Ok((None, format!("$.{}", path.selector)));
+        }
+
+        let final_selector = effective_selector.unwrap();
+        current_value = json.get(&final_selector)
+            .ok_or_else(|| RuleError::EvaluationError(format!("Selector '{}' not found", final_selector)))?;
+        path_parts[0] = final_selector.clone(); // Use the actual key from JSON
     }
-
-    let final_selector = effective_selector.unwrap();
-    let mut current_value = json.get(&final_selector)
-        .ok_or_else(|| RuleError::EvaluationError(format!("Selector '{}' not found", final_selector)))?;
-
-    path_parts[0] = final_selector.clone(); // Use the actual key from JSON
 
     let is_length_of_operator = is_length_of_operation(path);
     let is_number_of_operator = is_number_of_operation(path);
@@ -1592,6 +1608,11 @@ fn extract_value_from_json(
     selector: &str,
     property: &str
 ) -> Result<RuleValue, RuleError> {
+    // Check if selector contains dots (nested path)
+    if selector.contains('.') {
+        return extract_value_from_nested_selector(json, selector, property);
+    }
+
     // First try to get the object using the selector
     let obj = if let Some(obj) = json.get(selector) {
         obj
@@ -1622,6 +1643,58 @@ fn extract_value_from_json(
         } else {
             return Err(RuleError::EvaluationError(
                 format!("Property '{}' not found in selector '{}'", property, selector)
+            ));
+        }
+    };
+
+    convert_json_to_rule_value(value)
+}
+
+fn extract_value_from_nested_selector(
+    json: &Value,
+    nested_selector: &str,
+    property: &str
+) -> Result<RuleValue, RuleError> {
+    // Split the nested selector by dots (e.g., "top.second" -> ["top", "second"])
+    let path_parts: Vec<&str> = nested_selector.split('.').collect();
+    
+    // Navigate through the JSON using the path
+    let mut current_value = json;
+    
+    for part in &path_parts {
+        // Try to navigate to the next level
+        if let Some(next_val) = current_value.get(part) {
+            current_value = next_val;
+        } else if let Some(next_val) = get_json_value_insensitive(current_value, part) {
+            current_value = next_val;
+        } else {
+            let transformed_part = transform_selector_name(part);
+            if let Some(next_val) = current_value.get(&transformed_part) {
+                current_value = next_val;
+            } else if let Some(next_val) = get_json_value_insensitive(current_value, &transformed_part) {
+                current_value = next_val;
+            } else {
+                return Err(RuleError::EvaluationError(
+                    format!("Path segment '{}' not found in nested selector '{}'", part, nested_selector)
+                ));
+            }
+        }
+    }
+
+    // Now extract the property from the final object
+    let value = if let Some(val) = current_value.get(property) {
+        val
+    } else if let Some(val) = get_json_value_insensitive(current_value, property) {
+        val
+    } else {
+        let transformed_property = transform_selector_name(property);
+        if let Some(val) = current_value.get(&transformed_property) {
+            val
+        } else if let Some(val) = get_json_value_insensitive(current_value, &transformed_property) {
+            val
+        } else {
+            return Err(RuleError::EvaluationError(
+                format!("Property '{}' not found in nested selector '{}'", property, nested_selector)
             ));
         }
     };
