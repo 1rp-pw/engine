@@ -1670,10 +1670,29 @@ fn evaluate_comparison(
 // Helper function to try to convert a string to a date
 fn try_parse_date(value: &RuleValue) -> Option<NaiveDate> {
     if let RuleValue::String(s) = value {
-        if s.len() == 10 && s.chars().nth(4) == Some('-') && s.chars().nth(7) == Some('-') {
-            NaiveDate::parse_from_str(s, "%Y-%m-%d").ok()
-        } else {
-            None
+        match s.len() {
+            10 => {
+                if let Ok(date) = NaiveDate::parse_from_str(s, "%Y-%m-%d") {
+                    Some(date)
+                } else {
+                    None
+                }
+            },
+            18 => {
+                if let Ok(date) = NaiveDate::parse_from_str(s, "%Y-%m-%dT%H:%M:%S") {
+                    Some(date)
+                } else {
+                    None
+                }
+            }
+            24 => {
+                if let Ok(date) = NaiveDate::parse_from_str(s, "%Y-%m-%dT%H:%M:%S.%fZ") {
+                    Some(date)
+                } else {
+                    None
+                }
+            }
+            _ => None
         }
     } else {
         None
@@ -1694,6 +1713,18 @@ fn coerce_to_dates(left: &RuleValue, right: &RuleValue) -> Option<(NaiveDate, Na
 
     match (left_date, right_date) {
         (Some(l), Some(r)) => Some((l, r)),
+        _ => None,
+    }
+}
+
+fn coerce_to_date(value: &RuleValue) -> Option<NaiveDate> {
+    let date = match value {
+        RuleValue::Date(d) => Some(*d),
+        _ => try_parse_date(value),
+    };
+    
+    match date {
+        Some(d) => Some(d),
         _ => None,
     }
 }
@@ -1834,14 +1865,21 @@ pub fn compare_is_not_empty(value: &RuleValue) -> Result<bool, RuleError> {
 }
 
 fn compare_within(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleError> {
-    match (left, right) {
-        (RuleValue::Date(date_value), RuleValue::Duration(duration)) => {
+    match right {
+        RuleValue::Duration(duration) => {
+            let date_value = coerce_to_date(left)
+                .ok_or_else(|| RuleError::TypeError(
+                    format!("Within operator requires a date or convertible value, got {:?}", left)
+                ))?;
+
             let now = chrono::Utc::now().naive_utc().date();
-            let diff_days = (*date_value - now).num_days().abs() as f64;
-            let duration_days = duration.to_seconds() / 86400.0; // Convert to days
+            let diff_days = (date_value - now).num_days().abs() as f64;
+            let duration_days = duration.to_seconds() / 86400.0;
             Ok(diff_days <= duration_days)
         },
-        _ => Err(RuleError::TypeError("Within operator requires a date and a duration".to_string())),
+        _ => Err(RuleError::TypeError(
+            "Within operator requires a duration as the right operand".to_string()
+        )),
     }
 }
 
