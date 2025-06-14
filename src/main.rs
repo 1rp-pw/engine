@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use axum::{
     extract::{Json, State},
     http::StatusCode,
-    routing::post,
+    routing::{get, post},
     Router,
 };
 
@@ -57,6 +57,7 @@ async fn main() {
 
     let app = Router::new()
         .route("/", post(handle_run))
+        .route("/health", get(health_check))
         .with_state(state);
 
     let port: u16 = std::env::var("PORT")
@@ -67,6 +68,13 @@ async fn main() {
     let addr = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await.unwrap();
     println!("Listening on http://0.0.0.0:{}", port);
     axum::serve(addr, app).await.unwrap();
+}
+
+async fn health_check() -> (StatusCode, Json<serde_json::Value>) {
+    (StatusCode::OK, Json(serde_json::json!({
+        "status": "healthy",
+        "service": "policy-engine"
+    })))
 }
 
 async fn handle_run(

@@ -1,0 +1,51 @@
+# Rust build artifacts
+target/
+**/*.rs.bk
+Cargo.lock
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Documentation (except CLAUDE.md which might be needed)
+README.md
+docs/
+*.md
+!CLAUDE.md
+
+# Test files
+tests/
+**/*_test.rs
+**/*test*.rs
+
+# Logs
+*.log
+logs/
+
+# Environment files
+.env*
+
+# Temporary files
+tmp/
+temp/

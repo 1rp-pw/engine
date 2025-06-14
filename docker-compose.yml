@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  policy-engine:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      # Feature flag configuration - set these to actual values for testing
+      FF_ENV_ID: "test-env"
+      FF_AGENT_ID: "test-agent"
+      FF_PROJECT_ID: "test-project"
+      PORT: 3000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  # Example test container setup
+  policy-engine-test:
+    build: .
+    ports:
+      - "3001:3000"
+    environment:
+      FF_ENV_ID: "test-env"
+      FF_AGENT_ID: "test-agent"
+      FF_PROJECT_ID: "test-project"
+      PORT: 3000
+    profiles:
+      - test
+    command: ./engine
