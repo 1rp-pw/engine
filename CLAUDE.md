@@ -31,6 +31,27 @@ cargo run                   # Run with default port 3000
 PORT=8080 cargo run        # Run with custom port
 ```
 
+### Docker Commands
+```bash
+# Build Docker image
+docker build -t policy-engine:latest .
+
+# Run container
+docker run -p 3000:3000 \
+  -e FF_ENV_ID="test-env" \
+  -e FF_AGENT_ID="test-agent" \
+  -e FF_PROJECT_ID="test-project" \
+  policy-engine:latest
+
+# Run with docker-compose
+docker-compose up           # Start the service
+docker-compose up -d        # Start in background
+docker-compose down         # Stop the service
+
+# Run test profile
+docker-compose --profile test up
+```
+
 ## Architecture Overview
 
 This is a Policy Engine that evaluates business rules written in a custom DSL against JSON data. The system uses a Pest parser to convert human-readable rules into executable conditions.
@@ -59,3 +80,36 @@ A **Order** gets expedited_shipping
 
 ### Testing Approach
 Tests are embedded in `src/lib.rs` covering all operators, property access patterns, and edge cases. When adding new operators or functionality, follow the existing test pattern with both positive and negative test cases.
+
+## Testcontainer Integration
+
+The Policy Engine can be used as a testcontainer for integration testing in other systems.
+
+### Rust Testcontainer Example
+```rust
+use policy_engine_testcontainer::PolicyEngineContainer;
+use testcontainers::clients::Cli;
+use serde_json::json;
+
+#[tokio::test]
+async fn test_policy_integration() {
+    let docker = Cli::default();
+    let policy_engine = PolicyEngineContainer::new(&docker);
+    
+    let result = policy_engine.evaluate_policy(
+        "A **User** gets access if the __role__ of the **User** is equal to \"admin\".",
+        json!({"role": "admin"}),
+        false
+    ).await.unwrap();
+    
+    assert!(result.to_string().contains("access"));
+}
+```
+
+### Setup for Integration Testing
+1. Build the Docker image: `docker build -t policy-engine:latest .`
+2. Use the testcontainer in your integration tests
+3. The container automatically configures feature flag environment variables
+4. Access the policy evaluation endpoint at the container's mapped port
+
+See `examples/testcontainers/rust/` for complete implementation examples.
