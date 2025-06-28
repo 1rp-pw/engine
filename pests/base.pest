@@ -7,7 +7,22 @@ property = @{ "__" ~ property_name ~ "__" }
 property_name = @{ (!("__") ~ ANY)+ }
 
 label_name = @{(ASCII_ALPHANUMERIC | ".")+}
-label_predicate = _{ "is valid" | "is approved" | "has passed" }
+label_predicate = _{
+    "clears"
+  | "succeeds"
+  | "qualifies"
+  | "passes"
+  | "meets requirements"
+  | "satisfies"
+  | "is valid"
+  | "is approved"
+  | "has passed"
+  | "is authorized"
+  | "is sanctioned"
+  | "is certified"
+  | "is permitted"
+  | "is legitimate"
+}
 label_reference = { "§" ~ label_name ~ label_predicate? }
 
 rule_reference = { "the"? ~ object_selector ~ reference_name }
