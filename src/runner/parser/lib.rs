@@ -1048,6 +1048,9 @@ tester. A **driver** passes the age test
             "rule1. ",
             "1. ",
             "test.123. ",
+            "driver.bob. ",
+            "1.0. ",
+            "1.1. ",
         ];
 
         for label in valid_labels {
@@ -1071,6 +1074,130 @@ tester. A **driver** passes the age test
         }
     }
 
+    #[test]
+    fn test_label_reference_with_dots() {
+        // Test that label references with dots work correctly
+        let input = r#"
+A **driver** gets a driving licence
+  if §driver.bob is valid.
+
+driver.bob. A **driver** passes the age test
+  if __age__ of **driver** is greater than 18.
+        "#;
+
+        let result = parse_rules(input);
+        if let Err(ref e) = result {
+            println!("Parse error: {:?}", e);
+        }
+        assert!(result.is_ok(), "Should parse label references with dots");
+        
+        let rule_set = result.unwrap();
+        assert_eq!(rule_set.rules.len(), 2);
+        
+        // Check the label on the second rule
+        assert_eq!(rule_set.rules[1].label, Some("driver.bob".to_string()));
+        
+        // Check that the first rule has a label reference condition
+        match &rule_set.rules[0].conditions[0].condition {
+            crate::runner::model::Condition::RuleReference(ref_cond) => {
+                assert_eq!(ref_cond.rule_name.value, "driver.bob");
+            }
+            _ => panic!("Expected rule reference condition"),
+        }
+    }
+    
+    #[test]
+    fn test_numeric_labels() {
+        // Test that numeric labels like 1.0, 1.1 work correctly
+        let input = r#"
+1.0. A **driver** gets a driving licence
+  if the **driver** passes the age test.
+
+1.1. A **driver** passes the age test
+  if __age__ of **driver** is greater than 18.
+        "#;
+
+        let result = parse_rules(input);
+        if let Err(ref e) = result {
+            println!("Parse error: {:?}", e);
+        }
+        assert!(result.is_ok(), "Should parse numeric labels");
+        
+        let rule_set = result.unwrap();
+        assert_eq!(rule_set.rules.len(), 2);
+        
+        // Check the labels
+        assert_eq!(rule_set.rules[0].label, Some("1.0".to_string()));
+        assert_eq!(rule_set.rules[1].label, Some("1.1".to_string()));
+    }
+
+    #[test]
+    fn test_full_driving_test_with_label_references() {
+        // Test the full driving test example with driver.bob label reference
+        let input = r#"
+# Driving Test Example
+
+A **driver** gets a driving licence
+  if §driver.bob is valid
+  and the **driver** passes the test requirements
+  and the **driver** has taken the test in the time period
+  and the **driver** did their test at a valid center.
+
+A **driver** did their test at a valid center
+  if the __center__ of the **drivingTest.testDates.practical** is in ["Manchester", "Coventry"]
+  and the __center__ of the **practical** of the **test dates** in the **driving test** is in ["Manchester", "Coventry"].
+
+driver.bob. A **driver** passes the age test
+  if the __date of birth__ of the **person** in the **driving test** is earlier than 2008-12-12.
+
+A **driver** passes the test requirements
+  if **driver** passes the theory test
+  and the **driver** passes the practical test.
+
+A **driver** passes the theory test
+  if the __multiple choice__ of the **theory** of the **scores** in the **driving test** is at least 43
+  and the __hazard perception__ of the **theory** of the **scores** in the **driving test** is at least 44.
+
+A **driver** passes the practical test
+  if the __minor__ in the **practical** of the **scores** in the **driving test** is no more than 15
+  and the __major__ in the **practical** of the **scores** in the **driving test** is equal to false.
+
+A **driver** has taken the test in the time period
+  if the __date__ of the __theory__ of the **testDates** in the **driving test** is within 2 years
+  and the __date__ of the __practical__ of the **testDates** in the **driving test** is within 30 days.
+        "#;
+
+        let result = parse_rules(input);
+        if let Err(ref e) = result {
+            println!("Parse error: {:?}", e);
+        }
+        assert!(
+            result.is_ok(),
+            "Should parse driving test with label references"
+        );
+
+        let rule_set = result.unwrap();
+        
+        // Should have all 7 rules  
+        assert_eq!(rule_set.rules.len(), 7);
+        
+        // The third rule should have the driver.bob label
+        assert_eq!(rule_set.rules[2].label, Some("driver.bob".to_string()));
+        
+        // The first rule should have a label reference as its first condition
+        match &rule_set.rules[0].conditions[0].condition {
+            crate::runner::model::Condition::RuleReference(ref_cond) => {
+                assert_eq!(ref_cond.rule_name.value, "driver.bob");
+            }
+            _ => panic!("Expected label reference condition"),
+        }
+        
+        // Should identify "a driving licence" as the only global rule
+        let global_rule_result = crate::runner::utils::find_global_rule(&rule_set.rules);
+        assert!(global_rule_result.is_ok());
+        assert_eq!(global_rule_result.unwrap().outcome, "a driving licence");
+    }
+    
     #[test]
     fn test_driving_test_with_labels_fixed() {
         // This is the full driving test example from the user, with label prefix
