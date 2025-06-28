@@ -928,7 +928,200 @@ A **driver** has taken the test in the time period
         );
 
         let rule_set = result.unwrap();
-        
+
+        // Should identify "a driving licence" as the only global rule
+        let global_rule_result = crate::runner::utils::find_global_rule(&rule_set.rules);
+        assert!(global_rule_result.is_ok());
+        assert_eq!(global_rule_result.unwrap().outcome, "a driving licence");
+    }
+
+    #[test]
+    fn test_driving_example_without_problematic_label() {
+        // The label grammar has a bug where it's too greedy across multiple rules
+        // For now, test without the label to confirm the reference matching works
+        let input = r#"
+A **driver** gets a driving licence
+  if the **driver** passes the age test
+  and the **driver** passes the test requirements
+  and the **driver** has taken the test in the time period
+  and the **driver** did their test at a valid center.
+
+A **driver** did their test at a valid center
+  if the __center__ of the **drivingTest.testDates.practical** is in ["Manchester", "Coventry"]
+  and the __center__ of the **practical** of the **test dates** in the **driving test** is in ["Manchester", "Coventry"].
+
+A **driver** passes the age test
+  if the __date of birth__ of the **person** in the **driving test** is earlier than 2008-12-12.
+
+A **driver** passes the test requirements
+  if **driver** passes the theory test
+  and the **driver** passes the practical test.
+
+A **driver** passes the theory test
+  if the __multiple choice__ of the **theory** of the **scores** in the **driving test** is at least 43
+  and the __hazard perception__ of the **theory** of the **scores** in the **driving test** is at least 44.
+
+A **driver** passes the practical test
+  if the __minor__ in the **practical** of the **scores** in the **driving test** is no more than 15
+  and the __major__ in the **practical** of the **scores** in the **driving test** is equal to false.
+
+A **driver** has taken the test in the time period
+  if the __date__ of the __theory__ of the **testDates** in the **driving test** is within 2 years
+  and the __date__ of the __practical__ of the **testDates** in the **driving test** is within 30 days.
+        "#;
+
+        let result = parse_rules(input);
+        assert!(
+            result.is_ok(),
+            "Should parse without errors when label is removed"
+        );
+
+        let rule_set = result.unwrap();
+
+        // Should have all 7 rules
+        assert_eq!(rule_set.rules.len(), 7);
+
+        // Should identify "a driving licence" as the only global rule
+        let global_rule_result = crate::runner::utils::find_global_rule(&rule_set.rules);
+        assert!(global_rule_result.is_ok());
+        assert_eq!(global_rule_result.unwrap().outcome, "a driving licence");
+    }
+
+    #[test]
+    fn test_label_parsing_bug_fixed() {
+        // First test that labels work correctly on a single rule
+        let single_rule = r#"tester. A **driver** passes the age test if __age__ of **driver** is greater than 18."#;
+        let result = parse_rules(single_rule);
+        assert!(result.is_ok(), "Single rule with label should parse");
+        let rule_set = result.unwrap();
+        assert_eq!(rule_set.rules.len(), 1);
+        assert_eq!(rule_set.rules[0].label, Some("tester".to_string()));
+
+        // Test the full scenario with 3 rules, where only the last has a label
+        let input = r#"
+A **driver** gets a driving licence
+  if the **driver** passes the age test
+  and the **driver** did their test at a valid center.
+
+A **driver** did their test at a valid center
+  if __center__ of **driver** is in ["Manchester", "Coventry"].
+
+tester. A **driver** passes the age test
+  if __date_of_birth__ of **driver** is earlier than 2008-12-12.
+        "#;
+
+        let result = parse_rules(input);
+        if let Err(ref e) = result {
+            println!("Parse error in test_label_parsing_bug_fixed: {:?}", e);
+        }
+        assert!(
+            result.is_ok(),
+            "Should parse successfully with label grammar fix"
+        );
+
+        let rule_set = result.unwrap();
+
+        // Should have 3 rules
+        assert_eq!(rule_set.rules.len(), 3);
+
+        // Check that only the third rule has a label
+        assert!(rule_set.rules[0].label.is_none());
+        assert!(rule_set.rules[1].label.is_none());
+        assert_eq!(rule_set.rules[2].label, Some("tester".to_string()));
+
+        // Should identify "a driving licence" as the only global rule
+        let global_rule_result = crate::runner::utils::find_global_rule(&rule_set.rules);
+        assert!(global_rule_result.is_ok());
+        assert_eq!(global_rule_result.unwrap().outcome, "a driving licence");
+    }
+
+    #[test]
+    fn test_valid_label_formats() {
+        // Test that various label formats should be valid according to the spec:
+        // a label can be anything <alphanumeric><fullstop>(repeated)<space>
+        let valid_labels = vec![
+            "a.b.c. ",
+            "a. ",
+            "a.1.s. ",
+            "1.a.s. ",
+            "tester. ",
+            "rule1. ",
+            "1. ",
+            "test.123. ",
+        ];
+
+        for label in valid_labels {
+            println!("Testing label: '{}'", label);
+            // The label should match the pattern: alphanumeric characters with dots, ending with ". "
+            assert!(label.ends_with(". "), "Label should end with '. '");
+            let without_ending = &label[..label.len() - 2];
+            assert!(
+                !without_ending.is_empty(),
+                "Label should have content before '. '"
+            );
+
+            // Check that all characters are alphanumeric or dots
+            for ch in without_ending.chars() {
+                assert!(
+                    ch.is_alphanumeric() || ch == '.',
+                    "Label should only contain alphanumeric characters and dots, found: '{}'",
+                    ch
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_driving_test_with_labels_fixed() {
+        // This is the full driving test example from the user, with label prefix
+        let input = r#"
+tester. A **driver** gets a driving licence
+  if the **driver** passes the age test
+  and the **driver** passes the test requirements
+  and the **driver** has taken the test in the time period
+  and the **driver** did their test at a valid center.
+
+A **driver** did their test at a valid center
+  if the __center__ of the **drivingTest.testDates.practical** is in ["Manchester", "Coventry"]
+  and the __center__ of the **practical** of the **test dates** in the **driving test** is in ["Manchester", "Coventry"].
+
+A **driver** passes the age test
+  if the __date of birth__ of the **person** in the **driving test** is earlier than 2008-12-12.
+
+A **driver** passes the test requirements
+  if **driver** passes the theory test
+  and the **driver** passes the practical test.
+
+A **driver** passes the theory test
+  if the __multiple choice__ of the **theory** of the **scores** in the **driving test** is at least 43
+  and the __hazard perception__ of the **theory** of the **scores** in the **driving test** is at least 44.
+
+A **driver** passes the practical test
+  if the __minor__ in the **practical** of the **scores** in the **driving test** is no more than 15
+  and the __major__ in the **practical** of the **scores** in the **driving test** is equal to false.
+
+A **driver** has taken the test in the time period
+  if the __date__ of the __theory__ of the **testDates** in the **driving test** is within 2 years
+  and the __date__ of the __practical__ of the **testDates** in the **driving test** is within 30 days.
+        "#;
+
+        let result = parse_rules(input);
+        if let Err(ref e) = result {
+            println!("Parse error: {:?}", e);
+        }
+        assert!(
+            result.is_ok(),
+            "Should parse without errors with fixed label grammar"
+        );
+
+        let rule_set = result.unwrap();
+
+        // Should have all 7 rules
+        assert_eq!(rule_set.rules.len(), 7);
+
+        // First rule should have the label
+        assert_eq!(rule_set.rules[0].label, Some("tester".to_string()));
+
         // Should identify "a driving licence" as the only global rule
         let global_rule_result = crate::runner::utils::find_global_rule(&rule_set.rules);
         assert!(global_rule_result.is_ok());

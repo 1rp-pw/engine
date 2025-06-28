@@ -1,5 +1,5 @@
 rule_start = {"A " | "An "}
-label = @{ (!(". " ~ rule_start)  ~ ANY)+ ~ ". " }
+label = @{ (!("\n" | (". " ~ (rule_start | "\n"))) ~ ANY)+ ~ ". " }
 
 object_selector = @{ "**" ~ (nested_selector | identifier) ~ "**" }
 nested_selector = @{ identifier ~ ("." ~ identifier)+ }
