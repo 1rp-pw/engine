@@ -812,4 +812,126 @@ A **user** is valid if __score__ of **user** is in [85, 90, 95, 100].
             _ => panic!("Expected rule reference condition"),
         }
     }
+
+    #[test]
+    fn test_driving_test_example_should_not_error() {
+        let input = r#"
+A **driver** gets a driving licence
+  if the **driver** is valid
+  and the **driver** passes the theory test
+  and the **driver** passes the practical test
+  and the **driver** has a provisional licence.
+
+A **driver** is valid
+  if __age__ of **driver** is greater than or equal to 17.
+
+A **driver** passes the theory test
+  if __theory_score__ of **driver** is greater than or equal to 43.
+
+A **driver** passes the practical test
+  if __practical_score__ of **driver** is greater than or equal to 50.
+
+A **driver** has a provisional licence
+  if __provisional__ of **driver** is equal to true.
+        "#;
+
+        let result = parse_rules(input);
+        if let Err(ref e) = result {
+            println!("Parse error: {:?}", e);
+        }
+        assert!(
+            result.is_ok(),
+            "Should parse without errors - rule references should not be considered global rules"
+        );
+
+        let rule_set = result.unwrap();
+        assert_eq!(rule_set.rules.len(), 5);
+
+        // The first rule should be the global rule since it references others
+        // The other rules are supporting rules that are referenced
+        assert_eq!(rule_set.rules[0].outcome, "a driving licence");
+    }
+
+    #[test]
+    fn test_partial_matching_issue() {
+        // This test demonstrates a potential issue with partial matching
+        let input = r#"
+A **person** gets access 
+  if the **person** is valid 
+  and the **person** has valid_license.
+
+A **person** is valid if __age__ of **person** is greater than 18.
+
+A **person** has valid_license if __license__ of **person** is equal to true.
+        "#;
+
+        let result = parse_rules(input);
+        assert!(
+            result.is_ok(),
+            "Should parse successfully with improved matching logic"
+        );
+
+        let rule_set = result.unwrap();
+
+        // Verify that the system correctly identifies the global rule
+        // and doesn't confuse similar rule names
+        let referenced = crate::runner::utils::find_referenced_outcomes(&rule_set.rules);
+
+        // Should have exactly the right references: valid, valid_license
+        assert_eq!(referenced.len(), 2);
+        assert!(referenced.contains("valid"));
+        assert!(referenced.contains("valid_license"));
+
+        // Should identify "access" as the only global rule
+        let global_rule_result = crate::runner::utils::find_global_rule(&rule_set.rules);
+        assert!(global_rule_result.is_ok());
+        assert_eq!(global_rule_result.unwrap().outcome, "access");
+    }
+
+    #[test]
+    fn test_complex_driving_test_example() {
+        let input = r#"
+A **driver** gets a driving licence
+  if the **driver** passes the age test
+  and the **driver** passes the test requirements
+  and the **driver** has taken the test in the time period
+  and the **driver** did their test at a valid center.
+
+A **driver** did their test at a valid center
+  if the __center__ of the **drivingTest.testDates.practical** is in ["Manchester", "Coventry"]
+  and the __center__ of the **practical** of the **test dates** in the **driving test** is in ["Manchester", "Coventry"].
+
+A **driver** passes the age test
+  if the __date of birth__ of the **person** in the **driving test** is earlier than 2008-12-12.
+
+A **driver** passes the test requirements
+  if **driver** passes the theory test
+  and the **driver** passes the practical test.
+
+A **driver** passes the theory test
+  if the __multiple choice__ of the **theory** of the **scores** in the **driving test** is at least 43
+  and the __hazard perception__ of the **theory** of the **scores** in the **driving test** is at least 44.
+
+A **driver** passes the practical test
+  if the __minor__ in the **practical** of the **scores** in the **driving test** is no more than 15
+  and the __major__ in the **practical** of the **scores** in the **driving test** is equal to false.
+
+A **driver** has taken the test in the time period
+  if the __date__ of the __theory__ of the **testDates** in the **driving test** is within 2 years
+  and the __date__ of the __practical__ of the **testDates** in the **driving test** is within 30 days.
+        "#;
+
+        let result = parse_rules(input);
+        assert!(
+            result.is_ok(),
+            "Should parse without errors - rule references should match rule outcomes"
+        );
+
+        let rule_set = result.unwrap();
+        
+        // Should identify "a driving licence" as the only global rule
+        let global_rule_result = crate::runner::utils::find_global_rule(&rule_set.rules);
+        assert!(global_rule_result.is_ok());
+        assert_eq!(global_rule_result.unwrap().outcome, "a driving licence");
+    }
 }

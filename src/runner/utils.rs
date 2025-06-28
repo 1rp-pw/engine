@@ -23,10 +23,54 @@ pub fn find_referenced_outcomes(rules: &[Rule]) -> std::collections::HashSet<Str
                         let outcome_match = other_rule.outcome == *rule_name;
 
                         // Check if this rule matches by partial outcome (case insensitive)
+                        // Improve matching logic to be more precise
                         let rule_name_lower = rule_name.to_lowercase();
                         let outcome_lower = other_rule.outcome.to_lowercase();
-                        let partial_match = outcome_lower.contains(&rule_name_lower)
-                            || rule_name_lower.contains(&outcome_lower);
+
+                        // More conservative partial matching:
+                        // Focus on significant words and avoid common stop words
+                        let partial_match = if rule_name_lower.len() >= 3
+                            && outcome_lower.len() >= 3
+                        {
+                            // Common stop words that shouldn't be used for matching
+                            let stop_words: std::collections::HashSet<&str> = [
+                                "the", "a", "an", "is", "are", "was", "were", "has", "have", "had",
+                                "gets", "passes", "of",
+                            ]
+                            .iter()
+                            .cloned()
+                            .collect();
+
+                            let reference_words: std::collections::HashSet<&str> = rule_name_lower
+                                .split_whitespace()
+                                .filter(|word| !stop_words.contains(word) && word.len() > 2)
+                                .collect();
+                            let outcome_words: std::collections::HashSet<&str> = outcome_lower
+                                .split_whitespace()
+                                .filter(|word| !stop_words.contains(word) && word.len() > 2)
+                                .collect();
+
+                            // Need at least one significant word to match
+                            if reference_words.is_empty() || outcome_words.is_empty() {
+                                false
+                            } else {
+                                let matching_words =
+                                    reference_words.intersection(&outcome_words).count();
+                                let reference_word_count = reference_words.len();
+
+                                // For single significant word, require exact match
+                                if reference_word_count == 1 {
+                                    matching_words == 1
+                                } else {
+                                    // For multi-word, require ALL significant words to match for precise matching
+                                    // This prevents "theory test" from matching "practical test"
+                                    matching_words == reference_word_count
+                                }
+                            }
+                        } else {
+                            // For very short strings, require exact match
+                            false
+                        };
 
                         if label_match || outcome_match || partial_match {
                             referenced.insert(other_rule.outcome.clone());

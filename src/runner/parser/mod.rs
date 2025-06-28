@@ -48,7 +48,7 @@ pub fn parse_rules(input: &str) -> Result<RuleSet, RuleError> {
     Ok(rule_set)
 }
 
-fn parse_rule(pair: Pair<Rule>) -> Result<crate::runner::model::Rule, RuleError> {
+pub fn parse_rule(pair: Pair<Rule>) -> Result<crate::runner::model::Rule, RuleError> {
     let span = pair.as_span();
     let (line, _) = span.start_pos().line_col();
     let start = span.start();
