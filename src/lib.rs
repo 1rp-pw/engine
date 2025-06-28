@@ -1487,6 +1487,44 @@ A **driving test** has taken the test in the time period
     }
 
     #[test]
+    fn test_labels_in_evaluation_result() {
+        use runner::evaluator::evaluate_rule_set_with_trace;
+        
+        let rules = r#"
+A **driver** gets a driving licence
+  if §driver.test is valid.
+
+driver.test. A **driver** passes the age test
+  if __age__ of **driver** is greater than or equal to 18.
+        "#;
+
+        let data = json!({
+            "driver": {
+                "age": 25
+            }
+        });
+
+        let result = parse_rules(rules).unwrap();
+        let eval_result = evaluate_rule_set_with_trace(&result, &data);
+        
+        assert!(eval_result.result.is_ok());
+        assert!(eval_result.trace.is_some());
+        
+        // Check that the trace contains labeled rules
+        let trace = eval_result.trace.unwrap();
+        let mut found_label = false;
+        for rule_trace in &trace.execution {
+            if let Some(label) = &rule_trace.label {
+                if label == "driver.test" {
+                    found_label = true;
+                    assert!(rule_trace.result, "Labeled rule should have passed");
+                }
+            }
+        }
+        assert!(found_label, "Should have found the driver.test label in trace");
+    }
+
+    #[test]
     fn full_driving_test_custom_object() {
         let input = r#"A **driver** gets a driving licence
   if the **driver** passes the age test
