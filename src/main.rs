@@ -1,19 +1,19 @@
 mod runner;
 
-use std::collections::HashMap;
-use std::env;
-use runner::parser::parse_rules;
-use runner::evaluator::evaluate_rule_set_with_trace;
-use runner::trace::RuleSetTrace;
-use flags_rs::{Auth, Client};
-use serde_json::Value;
-use serde::{Deserialize, Serialize};
 use axum::{
     extract::{Json, State},
     http::StatusCode,
     routing::{get, post},
     Router,
 };
+use flags_rs::{Auth, Client};
+use runner::evaluator::evaluate_rule_set_with_trace;
+use runner::parser::parse_rules;
+use runner::trace::RuleSetTrace;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::HashMap;
+use std::env;
 
 #[derive(Deserialize)]
 struct RuleDataPackage {
@@ -24,11 +24,11 @@ struct RuleDataPackage {
 #[derive(Serialize, Debug)]
 struct EvaluationResponse {
     result: bool,
-    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
-    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     trace: Option<RuleSetTrace>,
-    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     labels: Option<HashMap<String, bool>>,
     rule: Vec<String>,
     data: Value,
@@ -51,9 +51,7 @@ async fn main() {
         })
         .build();
 
-    let state = AppState {
-        flags_client,
-    };
+    let state = AppState { flags_client };
 
     let app = Router::new()
         .route("/", post(handle_run))
@@ -65,26 +63,31 @@ async fn main() {
         .parse()
         .expect("PORT must be a number");
 
-    let addr = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await.unwrap();
+    let addr = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port))
+        .await
+        .unwrap();
     println!("Listening on http://0.0.0.0:{}", port);
     axum::serve(addr, app).await.unwrap();
 }
 
 async fn health_check() -> (StatusCode, Json<serde_json::Value>) {
-    (StatusCode::OK, Json(serde_json::json!({
-        "status": "healthy",
-        "service": "policy-engine"
-    })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "status": "healthy",
+            "service": "policy-engine"
+        })),
+    )
 }
 
 async fn handle_run(
     State(_state): State<AppState>,
-    Json(package): Json<RuleDataPackage>
+    Json(package): Json<RuleDataPackage>,
 ) -> (StatusCode, Json<EvaluationResponse>) {
     match parse_rules(&package.rule) {
         Ok(rule_set) => {
             let evaluation_result = evaluate_rule_set_with_trace(&rule_set, &package.data);
-            
+
             // Extract labels from trace if available
             let mut labels = HashMap::new();
             if let Some(trace) = &evaluation_result.trace {
@@ -96,11 +99,12 @@ async fn handle_run(
             }
 
             let rule = package.rule.lines().map(String::from).collect();
-            
+
             match evaluation_result.result {
                 Ok(results) => {
                     // Find the global rule to get its outcome
-                    let global_rule = match crate::runner::utils::find_global_rule(&rule_set.rules) {
+                    let global_rule = match crate::runner::utils::find_global_rule(&rule_set.rules)
+                    {
                         Ok(rule) => rule,
                         Err(_) => {
                             // If no global rule found, fall back to first result
@@ -120,7 +124,7 @@ async fn handle_run(
                             return (StatusCode::OK, Json(response));
                         }
                     };
-                    
+
                     // Get the result for the global rule's outcome
                     let result = results.get(&global_rule.outcome).cloned().unwrap_or(false);
                     let response = EvaluationResponse {
@@ -156,13 +160,13 @@ async fn handle_run(
                     (StatusCode::BAD_REQUEST, Json(response))
                 }
             }
-        },
+        }
         Err(parse_error) => {
             let rule = package.rule.lines().map(String::from).collect();
-            
+
             // Even for parse errors, create a basic trace showing what we attempted to parse
             let parse_trace = create_parse_error_trace(&parse_error, &package.rule);
-            
+
             let response = EvaluationResponse {
                 result: false,
                 error: Some(parse_error.to_string()),
@@ -177,13 +181,16 @@ async fn handle_run(
 }
 
 /// Creates a trace showing parse error information
-fn create_parse_error_trace(parse_error: &runner::error::RuleError, rule_text: &str) -> RuleSetTrace {
+fn create_parse_error_trace(
+    parse_error: &runner::error::RuleError,
+    rule_text: &str,
+) -> RuleSetTrace {
     use runner::trace::*;
-    
+
     // Extract line information from parse error if possible
     let error_line = extract_line_from_parse_error(&parse_error.to_string());
     let error_location = find_error_location(rule_text, error_line);
-    
+
     // Create a synthetic rule trace showing where parsing failed
     let parse_trace = RuleTrace {
         label: Some("Parse Error".to_string()),
@@ -195,43 +202,41 @@ fn create_parse_error_trace(parse_error: &runner::error::RuleError, rule_text: &
             value: "parse_failed".to_string(),
             pos: error_location,
         },
-        conditions: vec![
-            ConditionTrace::Comparison(ComparisonTrace {
-                selector: SelectorTrace {
-                    value: "rule_syntax".to_string(),
-                    pos: None,
-                },
-                property: PropertyTrace {
-                    value: serde_json::json!({
-                        "error_type": "parse_error",
-                        "failed_at_line": error_line,
-                        "rule_length": rule_text.lines().count()
-                    }),
-                    path: format!("$.rule_syntax.line_{}", error_line.unwrap_or(0)),
-                },
-                operator: runner::model::ComparisonOperator::EqualTo,
-                value: ValueTrace {
-                    value: serde_json::json!("invalid"),
-                    value_type: "string".to_string(),
-                    pos: None,
-                },
-                evaluation_details: Some(ComparisonEvaluationTrace {
-                    left_value: TypedValue {
-                        value: serde_json::json!("invalid_syntax"),
-                        value_type: "parse_error".to_string(),
-                    },
-                    right_value: TypedValue {
-                        value: serde_json::json!("valid_syntax"),
-                        value_type: "expectation".to_string(),
-                    },
-                    comparison_result: false,
+        conditions: vec![ConditionTrace::Comparison(ComparisonTrace {
+            selector: SelectorTrace {
+                value: "rule_syntax".to_string(),
+                pos: None,
+            },
+            property: PropertyTrace {
+                value: serde_json::json!({
+                    "error_type": "parse_error",
+                    "failed_at_line": error_line,
+                    "rule_length": rule_text.lines().count()
                 }),
-                result: false,
-            })
-        ],
+                path: format!("$.rule_syntax.line_{}", error_line.unwrap_or(0)),
+            },
+            operator: runner::model::ComparisonOperator::EqualTo,
+            value: ValueTrace {
+                value: serde_json::json!("invalid"),
+                value_type: "string".to_string(),
+                pos: None,
+            },
+            evaluation_details: Some(ComparisonEvaluationTrace {
+                left_value: TypedValue {
+                    value: serde_json::json!("invalid_syntax"),
+                    value_type: "parse_error".to_string(),
+                },
+                right_value: TypedValue {
+                    value: serde_json::json!("valid_syntax"),
+                    value_type: "expectation".to_string(),
+                },
+                comparison_result: false,
+            }),
+            result: false,
+        })],
         result: false,
     };
-    
+
     RuleSetTrace {
         execution: vec![parse_trace],
     }
@@ -254,7 +259,10 @@ fn extract_line_from_parse_error(error_msg: &str) -> Option<usize> {
 }
 
 /// Find the source position of the error in the rule text
-fn find_error_location(rule_text: &str, error_line: Option<usize>) -> Option<runner::model::SourcePosition> {
+fn find_error_location(
+    rule_text: &str,
+    error_line: Option<usize>,
+) -> Option<runner::model::SourcePosition> {
     if let Some(line_num) = error_line {
         let lines: Vec<&str> = rule_text.lines().collect();
         if line_num > 0 && line_num <= lines.len() {

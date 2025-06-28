@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use std::io;
-    use serde_json;
     use crate::runner::error::RuleError;
+    use serde_json;
+    use std::io;
 
     #[test]
     fn test_parse_error_creation() {
@@ -117,7 +117,9 @@ mod tests {
         where
             S: serde::Serializer,
         {
-            Err(serde::ser::Error::custom("Intentional serialization failure"))
+            Err(serde::ser::Error::custom(
+                "Intentional serialization failure",
+            ))
         }
 
         let bad_struct = BadStruct { field: 42 };
@@ -231,7 +233,9 @@ mod tests {
             // but should contain the error type description
             match error {
                 RuleError::ParseError(_) => assert!(display_str.starts_with("Parse error:")),
-                RuleError::EvaluationError(_) => assert!(display_str.starts_with("Evaluation error:")),
+                RuleError::EvaluationError(_) => {
+                    assert!(display_str.starts_with("Evaluation error:"))
+                }
                 RuleError::TypeError(_) => assert!(display_str.starts_with("Type error:")),
                 RuleError::IoError(_) => assert!(display_str.starts_with("IO error:")),
                 RuleError::JsonError(_) => assert!(display_str.starts_with("JSON error:")),

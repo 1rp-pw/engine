@@ -1,21 +1,40 @@
 #[cfg(test)]
 mod tests {
+    use crate::runner::model::{
+        ComparisonCondition, ComparisonOperator, Condition, ConditionGroup, ConditionOperator,
+        PositionedValue, PropertyChainElement, PropertyPath, Rule, RuleReferenceCondition, RuleSet,
+        RuleValue, SourcePosition,
+    };
     use chrono::NaiveDate;
-    use crate::runner::model::{ComparisonCondition, ComparisonOperator, Condition, ConditionGroup, ConditionOperator, PositionedValue, PropertyChainElement, PropertyPath, Rule, RuleReferenceCondition, RuleSet, RuleValue, SourcePosition};
 
     #[test]
     fn test_comparison_operator_display() {
-        assert_eq!(ComparisonOperator::GreaterThanOrEqual.to_string(), "is greater than or equal to");
+        assert_eq!(
+            ComparisonOperator::GreaterThanOrEqual.to_string(),
+            "is greater than or equal to"
+        );
 
-        assert_eq!(ComparisonOperator::LessThanOrEqual.to_string(), "is less than or equal to");
+        assert_eq!(
+            ComparisonOperator::LessThanOrEqual.to_string(),
+            "is less than or equal to"
+        );
 
         assert_eq!(ComparisonOperator::EqualTo.to_string(), "is equal to");
-        assert_eq!(ComparisonOperator::NotEqualTo.to_string(), "is not equal to");
+        assert_eq!(
+            ComparisonOperator::NotEqualTo.to_string(),
+            "is not equal to"
+        );
 
         assert_eq!(ComparisonOperator::LaterThan.to_string(), "is later than");
-        assert_eq!(ComparisonOperator::EarlierThan.to_string(), "is earlier than");
+        assert_eq!(
+            ComparisonOperator::EarlierThan.to_string(),
+            "is earlier than"
+        );
 
-        assert_eq!(ComparisonOperator::GreaterThan.to_string(), "is greater than");
+        assert_eq!(
+            ComparisonOperator::GreaterThan.to_string(),
+            "is greater than"
+        );
         assert_eq!(ComparisonOperator::LessThan.to_string(), "is less than");
 
         assert_eq!(ComparisonOperator::In.to_string(), "is in");
@@ -71,7 +90,8 @@ mod tests {
             start: 0,
             end: 4,
         };
-        let pos_val_with_pos = PositionedValue::with_position("test".to_string(), Some(source_pos.clone()));
+        let pos_val_with_pos =
+            PositionedValue::with_position("test".to_string(), Some(source_pos.clone()));
         assert_eq!(pos_val_with_pos.value, "test");
         assert!(pos_val_with_pos.pos.is_some());
         assert_eq!(pos_val_with_pos.pos.unwrap().line, 1);
@@ -292,7 +312,10 @@ mod tests {
 
         assert_eq!(complex_condition.selector.value, "transaction");
         assert_eq!(complex_condition.property.value, "amount");
-        assert_eq!(complex_condition.operator, ComparisonOperator::LessThanOrEqual);
+        assert_eq!(
+            complex_condition.operator,
+            ComparisonOperator::LessThanOrEqual
+        );
         assert!(complex_condition.property_chain.is_some());
         assert!(complex_condition.left_property_path.is_some());
         assert!(complex_condition.right_property_path.is_some());

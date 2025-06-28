@@ -3,8 +3,8 @@ mod runner;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use runner::parser::parse_rules;
     use runner::evaluator::evaluate_rule_set;
+    use runner::parser::parse_rules;
     use serde_json::json;
 
     #[test]
@@ -23,7 +23,6 @@ mod tests {
         });
         let (results_true, _trace_true) = evaluate_rule_set(&rule_set, &json_true).unwrap();
         assert!(results_true["senior_discount"]);
-
 
         let json_false = json!({
             "Person": {
@@ -149,7 +148,7 @@ A **Document** is archived
 
         let rule_set = parse_rules(rule_text).expect("Parse error: failed to parse rules");
 
-        // Test case where condition is true  
+        // Test case where condition is true
         let json_true = json!({
             "Document": {
                 "creationDate": "2019-06-15"
@@ -282,7 +281,8 @@ A **Document** is archived
                 "firstName": "John"
             }
         });
-        let (results_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
+        let (results_true, _trace_true) =
+            runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
         assert!(results_true["discount"]);
 
         let json_false = serde_json::json!({
@@ -290,7 +290,8 @@ A **Document** is archived
                 "firstName": "Jane"
             }
         });
-        let (results_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
+        let (results_false, _trace_false) =
+            runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
         assert!(!results_false["discount"]);
     }
 
@@ -304,12 +305,13 @@ A **Document** is archived
     "#;
         let rule_set = runner::parser::parse_rules(rule_text).unwrap();
         let json_true = serde_json::json!({
-        "Person": {
-            "age": 18,
-            "drivingTestScore": 60
-        }
-    });
-        let (result_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
+            "Person": {
+                "age": 18,
+                "drivingTestScore": 60
+            }
+        });
+        let (result_true, _trace_true) =
+            runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
         assert!(result_true["a full driving license"]);
 
         let json_false = serde_json::json!({
@@ -318,7 +320,8 @@ A **Document** is archived
                 "drivingTestScore": 59
             }
         });
-        let (result_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
+        let (result_false, _trace_false) =
+            runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
         assert!(!result_false["a full driving license"]);
     }
 
@@ -341,7 +344,8 @@ A **Document** is archived
                 "drivingTestScore": 60
             }
         });
-        let (result_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
+        let (result_true, _trace_true) =
+            runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
         assert!(result_true["a full driving license"]);
 
         let json_false = serde_json::json!({
@@ -350,7 +354,8 @@ A **Document** is archived
                 "drivingTestScore": 59
             }
         });
-        let (result_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
+        let (result_false, _trace_false) =
+            runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
         assert!(!result_false["a full driving license"]);
     }
 
@@ -373,7 +378,8 @@ A **Document** is archived
                 "drivingTestScore": 60
             }
         });
-        let (result_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
+        let (result_true, _trace_true) =
+            runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
         assert!(result_true["a full driving license"]);
 
         let json_true_or = serde_json::json!({
@@ -382,7 +388,8 @@ A **Document** is archived
                 "drivingTestScore": 50
             }
         });
-        let (result_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true_or).unwrap();
+        let (result_true, _trace_true) =
+            runner::evaluator::evaluate_rule_set(&rule_set, &json_true_or).unwrap();
         assert!(result_true["a full driving license"]);
 
         let json_false = serde_json::json!({
@@ -391,7 +398,8 @@ A **Document** is archived
                 "drivingTestScore": 59
             }
         });
-        let (result_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
+        let (result_false, _trace_false) =
+            runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
         assert!(!result_false["a full driving license"]);
     }
 
@@ -413,7 +421,8 @@ A **Document** is archived
                 "drivingTestScore": 60
             }
         });
-        let (result_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
+        let (result_true, _trace_true) =
+            runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
         assert!(result_true["a full driving license"]);
 
         let json_false = serde_json::json!({
@@ -422,7 +431,8 @@ A **Document** is archived
                 "drivingTestScore": 59
             }
         });
-        let (result_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
+        let (result_false, _trace_false) =
+            runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
         assert!(!result_false["a full driving license"]);
     }
 
@@ -448,7 +458,8 @@ A **Document** is archived
                 "theory": 5
             }
         });
-        let (result_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
+        let (result_true, _trace_true) =
+            runner::evaluator::evaluate_rule_set(&rule_set, &json_true).unwrap();
         assert!(result_true["a full driving license"]);
 
         let json_false = serde_json::json!({
@@ -460,7 +471,8 @@ A **Document** is archived
                 "theory": 5
             }
         });
-        let (result_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
+        let (result_false, _trace_false) =
+            runner::evaluator::evaluate_rule_set(&rule_set, &json_false).unwrap();
         assert!(!result_false["a full driving license"]);
     }
 
@@ -558,7 +570,8 @@ A **Document** is archived
         });
 
         // Parse the rules
-        let (result_true, _trace_true) = runner::evaluator::evaluate_rule_set(&rule_set, &data_true).unwrap();
+        let (result_true, _trace_true) =
+            runner::evaluator::evaluate_rule_set(&rule_set, &data_true).unwrap();
         assert!(result_true["can access a system"]);
 
         let data_false = json!({
@@ -575,7 +588,8 @@ A **Document** is archived
         });
 
         // Evaluate the rules
-        let (result_false, _trace_false) = runner::evaluator::evaluate_rule_set(&rule_set, &data_false).unwrap();
+        let (result_false, _trace_false) =
+            runner::evaluator::evaluate_rule_set(&rule_set, &data_false).unwrap();
         assert!(!result_false["can access a system"]);
     }
 
@@ -597,11 +611,14 @@ A **Document** is archived
         let rule_set = parse_rules(rule_text).expect("Failed to parse rules");
 
         // Evaluate the rules
-        let (results, _trace) = evaluate_rule_set(&rule_set, &data)
-            .expect("Failed to evaluate rules");
+        let (results, _trace) =
+            evaluate_rule_set(&rule_set, &data).expect("Failed to evaluate rules");
 
         // Check that the user passes the test
-        assert!(results.get("the test").unwrap_or(&false), "User should pass the test");
+        assert!(
+            results.get("the test").unwrap_or(&false),
+            "User should pass the test"
+        );
     }
 
     #[test]
@@ -677,25 +694,29 @@ A **Document** is archived
 
         // Test case where array length is not greater than 3
         let json_false = json!({
-        "user": {
-            "items": [1, 2]  // 2 items
-        }
-    });
+            "user": {
+                "items": [1, 2]  // 2 items
+            }
+        });
         let (results_false, _trace_false) = evaluate_rule_set(&rule_set, &json_false).unwrap();
         assert!(!results_false["valid"]);
 
         // Test case where "number of" is used on a string - should return an error
         let json_error = json!({
-        "user": {
-            "items": "tester"  // string, not an array
-        }
-    });
+            "user": {
+                "items": "tester"  // string, not an array
+            }
+        });
         let result = evaluate_rule_set(&rule_set, &json_error);
         assert!(result.is_err());
         // Optionally check that the error message indicates the invalid use of "number of" on a string
         if let Err(error) = result {
             let error_msg = error.to_string();
-            assert!(error_msg.contains("number of") || error_msg.contains("array") || error_msg.contains("string"));
+            assert!(
+                error_msg.contains("number of")
+                    || error_msg.contains("array")
+                    || error_msg.contains("string")
+            );
         }
     }
 
@@ -808,7 +829,8 @@ A **Document** is archived
                 "name": "AB"  // 2 characters, less than 3
             }
         });
-        let (results_false, _trace_false) = evaluate_rule_set(&rule_set, &json_false_short).unwrap();
+        let (results_false, _trace_false) =
+            evaluate_rule_set(&rule_set, &json_false_short).unwrap();
         assert!(!results_false["valid"]);
 
         // Test case too long
@@ -877,7 +899,8 @@ A **Document** is archived
                 "other_field": "value"
             }
         });
-        let (results_missing, _trace_missing) = evaluate_rule_set(&rule_set, &json_missing).unwrap();
+        let (results_missing, _trace_missing) =
+            evaluate_rule_set(&rule_set, &json_missing).unwrap();
         assert!(!results_missing["valid"]); // Should fail when property doesn't exist
     }
 
@@ -902,14 +925,14 @@ A **Document** is archived
     #[test]
     fn test_length_comparison_with_different_operators() {
         let operators_and_expected = vec![
-            ("is greater than", 5, "longname", true),     // 8 > 5
-            ("is greater than", 10, "longname", false),   // 8 > 10 = false
-            ("is less than", 10, "short", true),          // 5 < 10
-            ("is less than", 3, "short", false),          // 5 < 3 = false
-            ("is greater than or equal to", 5, "hello", true),  // 5 >= 5
-            ("is less than or equal to", 5, "hello", true),     // 5 <= 5
-            ("is equal to", 4, "test", true),             // 4 == 4
-            ("is not equal to", 5, "test", true),         // 4 != 5
+            ("is greater than", 5, "longname", true),          // 8 > 5
+            ("is greater than", 10, "longname", false),        // 8 > 10 = false
+            ("is less than", 10, "short", true),               // 5 < 10
+            ("is less than", 3, "short", false),               // 5 < 3 = false
+            ("is greater than or equal to", 5, "hello", true), // 5 >= 5
+            ("is less than or equal to", 5, "hello", true),    // 5 <= 5
+            ("is equal to", 4, "test", true),                  // 4 == 4
+            ("is not equal to", 5, "test", true),              // 4 != 5
         ];
 
         for (operator, threshold, name, expected) in operators_and_expected {
@@ -928,16 +951,21 @@ A **Document** is archived
 
             let (results, _trace) = evaluate_rule_set(&rule_set, &json_data).unwrap();
             assert_eq!(
-                results["valid"], expected,
+                results["valid"],
+                expected,
                 "Failed for operator '{}' with threshold {} and name '{}' (length {})",
-                operator, threshold, name, name.len()
+                operator,
+                threshold,
+                name,
+                name.len()
             );
         }
     }
 
     #[test]
     fn test_existing_simple_rule_still_works() {
-        let input = r#"A **user** passes the test if __age__ of **user** is greater than or equal to 18."#;
+        let input =
+            r#"A **user** passes the test if __age__ of **user** is greater than or equal to 18."#;
 
         let result = parse_rules(input);
         assert!(result.is_ok());
@@ -1009,7 +1037,8 @@ A **user** is valid if __status__ of **user** is equal to "active".
 
     #[test]
     fn test_new_length_functionality_works() {
-        let input = r#"A **user** is valid if the length of __name__ of **user** is greater than 5."#;
+        let input =
+            r#"A **user** is valid if the length of __name__ of **user** is greater than 5."#;
 
         let result = parse_rules(input);
         assert!(result.is_ok());
@@ -1091,7 +1120,10 @@ A **user** is valid if __age__ of **user** is greater than 18
         });
 
         let (results, _trace) = evaluate_rule_set(&rule_set, &json_data).unwrap();
-        assert!(results["premium"], "Should match exact property name 'is_premium'");
+        assert!(
+            results["premium"],
+            "Should match exact property name 'is_premium'"
+        );
     }
 
     #[test]
@@ -1107,7 +1139,10 @@ A **user** is valid if __age__ of **user** is greater than 18
         });
 
         let (results, _trace) = evaluate_rule_set(&rule_set, &json_data).unwrap();
-        assert!(results["premium"], "Should match transformed property name 'isPremium'");
+        assert!(
+            results["premium"],
+            "Should match transformed property name 'isPremium'"
+        );
     }
 
     #[test]
@@ -1123,7 +1158,10 @@ A **user** is valid if __age__ of **user** is greater than 18
         });
 
         let (results, _trace) = evaluate_rule_set(&rule_set, &json_data).unwrap();
-        assert!(results["premium"], "Should match case-insensitive property name 'IS_PREMIUM'");
+        assert!(
+            results["premium"],
+            "Should match case-insensitive property name 'IS_PREMIUM'"
+        );
     }
 
     #[test]
@@ -1139,7 +1177,10 @@ A **user** is valid if __age__ of **user** is greater than 18
         });
 
         let (results, _trace) = evaluate_rule_set(&rule_set, &json_data).unwrap();
-        assert!(results["premium"], "Should match case-insensitive transformed property name 'ISPREMIUM'");
+        assert!(
+            results["premium"],
+            "Should match case-insensitive transformed property name 'ISPREMIUM'"
+        );
     }
 
     #[test]
@@ -1178,7 +1219,10 @@ A **user** is valid if __age__ of **user** is greater than 18
             }
         });
         let (results, _trace) = evaluate_rule_set(&rule_set, &json_camel).unwrap();
-        assert!(results["valid"], "Should transform 'first name' to 'firstName'");
+        assert!(
+            results["valid"],
+            "Should transform 'first name' to 'firstName'"
+        );
     }
 
     #[test]
@@ -1195,7 +1239,10 @@ A **user** is valid if __age__ of **user** is greater than 18
         });
 
         let (results, _trace) = evaluate_rule_set(&rule_set, &json_data).unwrap();
-        assert!(results["valid"], "Should prefer exact match 'is_premium' over 'isPremium'");
+        assert!(
+            results["valid"],
+            "Should prefer exact match 'is_premium' over 'isPremium'"
+        );
     }
 
     #[test]
@@ -1213,12 +1260,16 @@ A **user** is valid if __age__ of **user** is greater than 18
         });
 
         let (results, _trace) = evaluate_rule_set(&rule_set, &json_data).unwrap();
-        assert!(results["valid"], "Should handle nested property transformations");
+        assert!(
+            results["valid"],
+            "Should handle nested property transformations"
+        );
     }
 
     #[test]
     fn test_date_property_transformation() {
-        let input = r#"A **user** is young if __birth_date__ of **user** is later than "2000-01-01"."#;
+        let input =
+            r#"A **user** is young if __birth_date__ of **user** is later than "2000-01-01"."#;
         let rule_set = parse_rules(input).unwrap();
 
         let json_data = json!({
@@ -1228,12 +1279,16 @@ A **user** is valid if __age__ of **user** is greater than 18
         });
 
         let (results, _trace) = evaluate_rule_set(&rule_set, &json_data).unwrap();
-        assert!(results["young"], "Should handle date comparison with transformed property");
+        assert!(
+            results["young"],
+            "Should handle date comparison with transformed property"
+        );
     }
 
     #[test]
     fn test_length_with_property_transformation() {
-        let input = r#"A **user** is valid if the length of __full_name__ of **user** is greater than 5."#;
+        let input =
+            r#"A **user** is valid if the length of __full_name__ of **user** is greater than 5."#;
         let rule_set = parse_rules(input).unwrap();
 
         let json_data = json!({
@@ -1243,12 +1298,16 @@ A **user** is valid if __age__ of **user** is greater than 18
         });
 
         let (results, _trace) = evaluate_rule_set(&rule_set, &json_data).unwrap();
-        assert!(results["valid"], "Should handle length calculation with transformed property");
+        assert!(
+            results["valid"],
+            "Should handle length calculation with transformed property"
+        );
     }
 
     #[test]
     fn test_property_not_found_error() {
-        let input = r#"A **user** is valid if __nonexistent_property__ of **user** is equal to true."#;
+        let input =
+            r#"A **user** is valid if __nonexistent_property__ of **user** is equal to true."#;
         let rule_set = parse_rules(input).unwrap();
 
         let json_data = json!({
@@ -1258,7 +1317,10 @@ A **user** is valid if __age__ of **user** is greater than 18
         });
 
         let (results, _trace) = evaluate_rule_set(&rule_set, &json_data).unwrap();
-        assert!(!results["valid"], "Should return false when property is not found");
+        assert!(
+            !results["valid"],
+            "Should return false when property is not found"
+        );
     }
 
     #[test]
@@ -1307,7 +1369,8 @@ A **login** passes the password tests
                 "password": "<PASSWORD>"
             }
         });
-        let (results_bad_username, _trace_bad_username) = evaluate_rule_set(&rule_set, &json_bad_username).unwrap();
+        let (results_bad_username, _trace_bad_username) =
+            evaluate_rule_set(&rule_set, &json_bad_username).unwrap();
         assert!(!results_bad_username["valid"]);
     }
 
@@ -1316,26 +1379,32 @@ A **login** passes the password tests
         let input = r#"A **bob** is valid if **bob** passes the test.
 
 A **bob** passes the test if __name__ of **user** is equal to "bob"."#;
-        
+
         let rule_set = parse_rules(input).unwrap();
-        
+
         let json_data = json!({
             "user": {
                 "name": "bob"
             }
         });
-        
+
         let (results, _trace) = evaluate_rule_set(&rule_set, &json_data).unwrap();
-        assert!(results["valid"], "Bob should be valid when user name is bob");
-        
+        assert!(
+            results["valid"],
+            "Bob should be valid when user name is bob"
+        );
+
         let json_data_false = json!({
             "user": {
                 "name": "alice"
             }
         });
-        
+
         let (results_false, _trace_false) = evaluate_rule_set(&rule_set, &json_data_false).unwrap();
-        assert!(!results_false["valid"], "Bob should not be valid when user name is alice");
+        assert!(
+            !results_false["valid"],
+            "Bob should not be valid when user name is alice"
+        );
     }
 
     #[test]
@@ -1416,8 +1485,6 @@ A **driving test** has taken the test in the time period
         let (results_bad, _trace_bad) = evaluate_rule_set(&rule_set, &json_bad).unwrap();
         assert!(!results_bad["a driving licence"]);
     }
-
-
 
     #[test]
     fn full_driving_test_custom_object() {
@@ -1631,14 +1698,17 @@ A **driver** has taken the test in the time period
                 "name": "John"
             }
         });
-        
+
         let result = evaluate_rule_set(&rule_set, &json_missing);
         match result {
             Ok((results, _)) => {
                 // The evaluation succeeded but the result should be false
                 // since the path doesn't exist
-                assert!(!results["valid"], "Should return false when nested path doesn't exist");
-            },
+                assert!(
+                    !results["valid"],
+                    "Should return false when nested path doesn't exist"
+                );
+            }
             Err(_) => {
                 // Also acceptable - immediate error is fine
             }
@@ -1662,26 +1732,27 @@ A **driver** has taken the test in the time period
                 }
             }
         });
-        
-        let eval_result = crate::runner::evaluator::evaluate_rule_set_with_trace(&rule_set, &json_data);
+
+        let eval_result =
+            crate::runner::evaluator::evaluate_rule_set_with_trace(&rule_set, &json_data);
         assert!(eval_result.result.is_ok());
-        
+
         let results = eval_result.result.unwrap();
         assert!(results["valid"]);
-        
+
         let trace = eval_result.trace.unwrap();
         let rule_trace = &trace.execution[0];
         let condition_trace = &rule_trace.conditions[0];
-        
+
         // Check that the path is correctly formatted as $.drivingTest.testDates.practical.center
         // and NOT $.drivingTest.testDates.practical.drivingTest.testDates.practical.center
         if let runner::trace::ConditionTrace::Comparison(comp_trace) = condition_trace {
-            assert_eq!(comp_trace.property.path, "$.drivingTest.testDates.practical.center");
+            assert_eq!(
+                comp_trace.property.path,
+                "$.drivingTest.testDates.practical.center"
+            );
         } else {
             panic!("Expected comparison trace");
         }
     }
 }
-
-
-

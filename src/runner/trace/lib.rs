@@ -1,9 +1,13 @@
 #[cfg(test)]
 mod tests {
     use crate::runner::model::{ComparisonOperator, RuleValue, SourcePosition};
+    use crate::runner::trace::{
+        ComparisonEvaluationTrace, ComparisonTrace, ConditionTrace, OutcomeTrace,
+        PropertyCheckTrace, PropertyTrace, RuleReferenceTrace, RuleSetTrace, RuleTrace,
+        SelectorTrace, TypedValue, ValueTrace,
+    };
     use chrono::NaiveDate;
     use serde_json;
-    use crate::runner::trace::{ComparisonEvaluationTrace, ComparisonTrace, ConditionTrace, OutcomeTrace, PropertyCheckTrace, PropertyTrace, RuleReferenceTrace, RuleSetTrace, RuleTrace, SelectorTrace, TypedValue, ValueTrace};
 
     #[test]
     fn test_source_position_serialization() {
@@ -23,7 +27,11 @@ mod tests {
     fn test_selector_trace_serialization() {
         let trace = SelectorTrace {
             value: "user".to_string(),
-            pos: Some(SourcePosition { line: 1, start: 5, end: 9 }),
+            pos: Some(SourcePosition {
+                line: 1,
+                start: 5,
+                end: 9,
+            }),
         };
 
         let json = serde_json::to_value(&trace).unwrap();
@@ -47,7 +55,11 @@ mod tests {
     fn test_outcome_trace_serialization() {
         let trace = OutcomeTrace {
             value: "eligible".to_string(),
-            pos: Some(SourcePosition { line: 2, start: 15, end: 23 }),
+            pos: Some(SourcePosition {
+                line: 2,
+                start: 15,
+                end: 23,
+            }),
         };
 
         let json = serde_json::to_value(&trace).unwrap();
@@ -120,9 +132,9 @@ mod tests {
 
     #[test]
     fn test_typed_value_from_rule_value_nested_list() {
-        let rule_value = RuleValue::List(vec![
-            RuleValue::List(vec![RuleValue::String("nested".to_string())]),
-        ]);
+        let rule_value = RuleValue::List(vec![RuleValue::List(vec![RuleValue::String(
+            "nested".to_string(),
+        )])]);
         let typed_value = TypedValue::from(&rule_value);
 
         assert_eq!(typed_value.value_type, "list");
@@ -132,7 +144,11 @@ mod tests {
 
     #[test]
     fn test_rule_value_to_value_trace() {
-        let pos = Some(SourcePosition { line: 1, start: 0, end: 5 });
+        let pos = Some(SourcePosition {
+            line: 1,
+            start: 0,
+            end: 5,
+        });
         let rule_value = RuleValue::String("test".to_string());
 
         let value_trace = rule_value.to_value_trace(pos.clone());
@@ -239,7 +255,11 @@ mod tests {
         let trace = ComparisonTrace {
             selector: SelectorTrace {
                 value: "user".to_string(),
-                pos: Some(SourcePosition { line: 1, start: 0, end: 4 }),
+                pos: Some(SourcePosition {
+                    line: 1,
+                    start: 0,
+                    end: 4,
+                }),
             },
             property: PropertyTrace {
                 value: serde_json::json!(25),
@@ -376,21 +396,19 @@ mod tests {
     #[test]
     fn test_rule_set_trace_serialization() {
         let rule_set_trace = RuleSetTrace {
-            execution: vec![
-                RuleTrace {
-                    label: None,
-                    selector: SelectorTrace {
-                        value: "user".to_string(),
-                        pos: None,
-                    },
-                    outcome: OutcomeTrace {
-                        value: "eligible".to_string(),
-                        pos: None,
-                    },
-                    conditions: vec![],
-                    result: true,
+            execution: vec![RuleTrace {
+                label: None,
+                selector: SelectorTrace {
+                    value: "user".to_string(),
+                    pos: None,
                 },
-            ],
+                outcome: OutcomeTrace {
+                    value: "eligible".to_string(),
+                    pos: None,
+                },
+                conditions: vec![],
+                result: true,
+            }],
         };
 
         let json = serde_json::to_value(&rule_set_trace).unwrap();

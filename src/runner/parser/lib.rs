@@ -1,12 +1,13 @@
 #[cfg(test)]
 mod tests {
-    use crate::runner::model::{ComparisonOperator, RuleValue, Condition, ConditionOperator};
-    use chrono::NaiveDate;
+    use crate::runner::model::{ComparisonOperator, Condition, ConditionOperator, RuleValue};
     use crate::runner::parser::parse_rules;
+    use chrono::NaiveDate;
 
     #[test]
     fn test_parse_simple_rule() {
-        let input = r#"A **user** passes the test if __age__ of **user** is greater than or equal to 18."#;
+        let input =
+            r#"A **user** passes the test if __age__ of **user** is greater than or equal to 18."#;
 
         let result = parse_rules(input);
         if let Err(ref e) = result {
@@ -38,7 +39,8 @@ mod tests {
 
     #[test]
     fn test_parse_rule_with_label() {
-        let input = r#"Age Check. A **person** is eligible if __age__ of **user** is greater than 21."#;
+        let input =
+            r#"Age Check. A **person** is eligible if __age__ of **user** is greater than 21."#;
 
         let result = parse_rules(input);
         assert!(result.is_ok());
@@ -66,7 +68,7 @@ mod tests {
 
         // Second condition should have AND operator
         match &rule.conditions[1].operator {
-            Some(ConditionOperator::And) => {},
+            Some(ConditionOperator::And) => {}
             _ => panic!("Expected AND operator"),
         }
     }
@@ -84,7 +86,7 @@ mod tests {
 
         // Second condition should have OR operator
         match &rule.conditions[1].operator {
-            Some(ConditionOperator::Or) => {},
+            Some(ConditionOperator::Or) => {}
             _ => panic!("Expected OR operator"),
         }
     }
@@ -147,19 +149,18 @@ mod tests {
         let rule = &rule_set.rules[0];
 
         match &rule.conditions[0].condition {
-            Condition::Comparison(comp) => {
-                match &comp.value.value {
-                    RuleValue::Boolean(b) => assert!(*b),
-                    _ => panic!("Expected boolean value"),
-                }
-            }
+            Condition::Comparison(comp) => match &comp.value.value {
+                RuleValue::Boolean(b) => assert!(*b),
+                _ => panic!("Expected boolean value"),
+            },
             _ => panic!("Expected comparison condition"),
         }
     }
 
     #[test]
     fn test_parse_list_operations() {
-        let input = r#"A **user** is valid if __role__ of **user** is in ["admin", "moderator", "user"]."#;
+        let input =
+            r#"A **user** is valid if __role__ of **user** is in ["admin", "moderator", "user"]."#;
 
         let result = parse_rules(input);
         assert!(result.is_ok());
@@ -253,29 +254,32 @@ A **user** is valid if __id__ of __group__ of **user** is equal to 1.
     #[test]
     fn test_parse_all_comparison_operators() {
         let operators = vec![
-            ("is greater than or equal to", ComparisonOperator::GreaterThanOrEqual),
+            (
+                "is greater than or equal to",
+                ComparisonOperator::GreaterThanOrEqual,
+            ),
             ("is at least", ComparisonOperator::GreaterThanOrEqual),
-
-            ("is less than or equal to", ComparisonOperator::LessThanOrEqual),
+            (
+                "is less than or equal to",
+                ComparisonOperator::LessThanOrEqual,
+            ),
             ("is no more than", ComparisonOperator::LessThanOrEqual),
-
             ("is equal to", ComparisonOperator::EqualTo),
             ("is the same as", ComparisonOperator::EqualTo),
-
             ("is not equal to", ComparisonOperator::NotEqualTo),
             ("is not the same as", ComparisonOperator::NotEqualTo),
-
             ("is later than", ComparisonOperator::LaterThan),
             ("is earlier than", ComparisonOperator::EarlierThan),
-
             ("is greater than", ComparisonOperator::GreaterThan),
             ("is less than", ComparisonOperator::LessThan),
-
             ("contains", ComparisonOperator::Contains),
         ];
 
         for (op_str, expected_op) in operators {
-            let input = format!(r#"A **user** passes the test if __value__ of **user** {} 10."#, op_str);
+            let input = format!(
+                r#"A **user** passes the test if __value__ of **user** {} 10."#,
+                op_str
+            );
             let result = parse_rules(&input);
             if let Err(ref e) = result {
                 println!("Parse error for '{}': {:?}", op_str, e);
@@ -287,7 +291,11 @@ A **user** is valid if __id__ of __group__ of **user** is equal to 1.
 
             match &rule.conditions[0].condition {
                 Condition::Comparison(comp) => {
-                    assert_eq!(comp.operator, expected_op, "Operator mismatch for: {}", op_str);
+                    assert_eq!(
+                        comp.operator, expected_op,
+                        "Operator mismatch for: {}",
+                        op_str
+                    );
                 }
                 _ => panic!("Expected comparison condition for operator: {}", op_str),
             }
@@ -302,7 +310,10 @@ A **user** is valid if __id__ of __group__ of **user** is equal to 1.
         ];
 
         for (op_str, expected_op) in operators {
-            let input = format!(r#"A **user** passes the test if __role__ of **user** {} ["admin", "user"]."#, op_str);
+            let input = format!(
+                r#"A **user** passes the test if __role__ of **user** {} ["admin", "user"]."#,
+                op_str
+            );
             let result = parse_rules(&input);
             assert!(result.is_ok(), "Failed to parse list operator: {}", op_str);
 
@@ -311,7 +322,11 @@ A **user** is valid if __id__ of __group__ of **user** is equal to 1.
 
             match &rule.conditions[0].condition {
                 Condition::Comparison(comp) => {
-                    assert_eq!(comp.operator, expected_op, "Operator mismatch for: {}", op_str);
+                    assert_eq!(
+                        comp.operator, expected_op,
+                        "Operator mismatch for: {}",
+                        op_str
+                    );
                 }
                 _ => panic!("Expected comparison condition for operator: {}", op_str),
             }
@@ -320,16 +335,32 @@ A **user** is valid if __id__ of __group__ of **user** is equal to 1.
 
     #[test]
     fn test_parse_various_outcome_verbs() {
-        let verbs = vec!["gets", "passes", "is", "has", "receives", "qualifies for", "meets", "satisfies"];
+        let verbs = vec![
+            "gets",
+            "passes",
+            "is",
+            "has",
+            "receives",
+            "qualifies for",
+            "meets",
+            "satisfies",
+        ];
 
         for verb in verbs {
-            let input = format!(r#"A **user** {} approved if __age__ of **user** is greater than 18."#, verb);
+            let input = format!(
+                r#"A **user** {} approved if __age__ of **user** is greater than 18."#,
+                verb
+            );
             let result = parse_rules(&input);
             assert!(result.is_ok(), "Failed to parse verb: {}", verb);
 
             let rule_set = result.unwrap();
             let rule = &rule_set.rules[0];
-            assert_eq!(rule.outcome, "approved", "Outcome mismatch for verb: {}", verb);
+            assert_eq!(
+                rule.outcome, "approved",
+                "Outcome mismatch for verb: {}",
+                verb
+            );
         }
     }
 
@@ -428,15 +459,13 @@ A **user** passes the test if __age__ of **user** is greater than 18.
             let rule = &rule_set.rules[0];
 
             match &rule.conditions[0].condition {
-                Condition::Comparison(comp) => {
-                    match &comp.value.value {
-                        RuleValue::Date(d) => {
-                            let expected = NaiveDate::from_ymd_opt(2023, 12, 1).unwrap();
-                            assert_eq!(*d, expected);
-                        }
-                        _ => panic!("Expected date value"),
+                Condition::Comparison(comp) => match &comp.value.value {
+                    RuleValue::Date(d) => {
+                        let expected = NaiveDate::from_ymd_opt(2023, 12, 1).unwrap();
+                        assert_eq!(*d, expected);
                     }
-                }
+                    _ => panic!("Expected date value"),
+                },
                 _ => panic!("Expected comparison condition"),
             }
         }
@@ -455,20 +484,18 @@ A **user** is valid if __score__ of **user** is in [85, 90, 95, 100].
         let rule = &rule_set.rules[0];
 
         match &rule.conditions[0].condition {
-            Condition::Comparison(comp) => {
-                match &comp.value.value {
-                    RuleValue::List(items) => {
-                        assert_eq!(items.len(), 4);
-                        for (i, expected) in [85.0, 90.0, 95.0, 100.0].iter().enumerate() {
-                            match &items[i] {
-                                RuleValue::Number(n) => assert_eq!(*n, *expected),
-                                _ => panic!("Expected number in list"),
-                            }
+            Condition::Comparison(comp) => match &comp.value.value {
+                RuleValue::List(items) => {
+                    assert_eq!(items.len(), 4);
+                    for (i, expected) in [85.0, 90.0, 95.0, 100.0].iter().enumerate() {
+                        match &items[i] {
+                            RuleValue::Number(n) => assert_eq!(*n, *expected),
+                            _ => panic!("Expected number in list"),
                         }
                     }
-                    _ => panic!("Expected list value"),
                 }
-            }
+                _ => panic!("Expected list value"),
+            },
             _ => panic!("Expected comparison condition"),
         }
     }
@@ -612,16 +639,19 @@ A **user** is valid if __score__ of **user** is in [85, 90, 95, 100].
     #[test]
     fn test_parse_within_different_time_units() {
         let test_cases = vec![
-            ("30 minutes", 30.0 * 60.0), // Should normalize to seconds
-            ("2 hours", 2.0 * 3600.0),   // Should normalize to seconds  
-            ("5 days", 5.0 * 86400.0),   // Should normalize to days (5 days in seconds)
-            ("1 month", 1.0 * 2629746.0), // Should normalize to days (1 month in seconds)
+            ("30 minutes", 30.0 * 60.0),   // Should normalize to seconds
+            ("2 hours", 2.0 * 3600.0),     // Should normalize to seconds
+            ("5 days", 5.0 * 86400.0),     // Should normalize to days (5 days in seconds)
+            ("1 month", 1.0 * 2629746.0),  // Should normalize to days (1 month in seconds)
             ("2 years", 2.0 * 31556952.0), // Should normalize to days (2 years in seconds)
         ];
 
         for (duration_str, expected_seconds) in test_cases {
-            let input = format!(r#"A **user** is valid if __test_date__ of **user** is within {}."#, duration_str);
-            
+            let input = format!(
+                r#"A **user** is valid if __test_date__ of **user** is within {}."#,
+                duration_str
+            );
+
             let result = parse_rules(&input);
             assert!(result.is_ok(), "Failed to parse: {}", duration_str);
 
@@ -636,8 +666,13 @@ A **user** is valid if __score__ of **user** is in [85, 90, 95, 100].
                             // Allow for small floating point differences (within 1%)
                             let diff = (actual_seconds - expected_seconds).abs();
                             let tolerance = expected_seconds * 0.01; // 1% tolerance
-                            assert!(diff < tolerance.max(1.0), "Duration mismatch for {}: expected {} seconds, got {} seconds", 
-                                   duration_str, expected_seconds, actual_seconds);
+                            assert!(
+                                diff < tolerance.max(1.0),
+                                "Duration mismatch for {}: expected {} seconds, got {} seconds",
+                                duration_str,
+                                expected_seconds,
+                                actual_seconds
+                            );
                         }
                         _ => panic!("Expected Duration value for: {}", duration_str),
                     }
@@ -743,6 +778,38 @@ A **user** is valid if __score__ of **user** is in [85, 90, 95, 100].
                 assert_eq!(comp.selector.value, "user.profile");
             }
             _ => panic!("Expected comparison condition"),
+        }
+    }
+
+    #[test]
+    fn test_citation_functionality_already_works() {
+        // Citation support is already implemented and working!
+        // This test demonstrates the existing functionality
+
+        // Test label reference (the existing test works fine)
+        let label_input = r#"A **user** is eligible if §ageCheck is valid."#;
+        let result = parse_rules(label_input);
+        assert!(result.is_ok());
+        let rule_set = result.unwrap();
+        match &rule_set.rules[0].conditions[0].condition {
+            crate::runner::model::Condition::RuleReference(ref_cond) => {
+                assert_eq!(ref_cond.selector.value, "");
+                assert_eq!(ref_cond.rule_name.value, "ageCheck");
+            }
+            _ => panic!("Expected rule reference condition"),
+        }
+
+        // Test rule name reference (the existing test works fine)
+        let rule_input = r#"A **user** passes the test if the **user** passes the age check."#;
+        let result = parse_rules(rule_input);
+        assert!(result.is_ok());
+        let rule_set = result.unwrap();
+        match &rule_set.rules[0].conditions[0].condition {
+            crate::runner::model::Condition::RuleReference(ref_cond) => {
+                assert_eq!(ref_cond.selector.value, "user");
+                assert_eq!(ref_cond.rule_name.value, "passes the age check");
+            }
+            _ => panic!("Expected rule reference condition"),
         }
     }
 }

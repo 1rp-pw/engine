@@ -14,7 +14,9 @@ pub fn find_referenced_outcomes(rules: &[Rule]) -> std::collections::HashSet<Str
                     // Find all rules that this reference might match
                     for other_rule in rules {
                         // Check if this rule matches by label
-                        let label_match = other_rule.label.as_ref()
+                        let label_match = other_rule
+                            .label
+                            .as_ref()
                             .map_or(false, |label| label == rule_name);
 
                         // Check if this rule matches by exact outcome
@@ -23,14 +25,14 @@ pub fn find_referenced_outcomes(rules: &[Rule]) -> std::collections::HashSet<Str
                         // Check if this rule matches by partial outcome (case insensitive)
                         let rule_name_lower = rule_name.to_lowercase();
                         let outcome_lower = other_rule.outcome.to_lowercase();
-                        let partial_match = outcome_lower.contains(&rule_name_lower) ||
-                            rule_name_lower.contains(&outcome_lower);
+                        let partial_match = outcome_lower.contains(&rule_name_lower)
+                            || rule_name_lower.contains(&outcome_lower);
 
                         if label_match || outcome_match || partial_match {
                             referenced.insert(other_rule.outcome.clone());
                         }
                     }
-                },
+                }
                 Condition::Comparison(_) => {
                     // Comparison conditions don't reference other rules
                 }
@@ -44,7 +46,7 @@ pub fn find_referenced_outcomes(rules: &[Rule]) -> std::collections::HashSet<Str
 #[allow(dead_code)]
 pub fn find_global_rule(rules: &[Rule]) -> Result<&Rule, RuleError> {
     if rules.len() == 1 {
-        return Ok(&rules[0])
+        return Ok(&rules[0]);
     }
 
     let referenced = find_referenced_outcomes(rules);
@@ -56,12 +58,17 @@ pub fn find_global_rule(rules: &[Rule]) -> Result<&Rule, RuleError> {
     match globals.len() {
         1 => Ok(globals[0]),
         0 => Err(RuleError::ParseError("No global rule found".to_string())),
-        _ => Err(RuleError::ParseError("Multiple global rules found".to_string())),
+        _ => Err(RuleError::ParseError(
+            "Multiple global rules found".to_string(),
+        )),
     }
 }
 
 pub fn transform_property_name(name: &str) -> String {
-    let words: Vec<&str> = name.split(&[' ', '_'][..]).filter(|s| !s.is_empty()).collect();
+    let words: Vec<&str> = name
+        .split(&[' ', '_'][..])
+        .filter(|s| !s.is_empty())
+        .collect();
     if words.is_empty() {
         return String::new();
     }
@@ -86,11 +93,26 @@ pub fn infer_possible_properties(rule_name: &str) -> Vec<String> {
 
     // Remove common qualification phrases
     let qualification_phrases = [
-        "passes the", "passes", "qualifies for the", "qualifies for", "qualifies",
-        "meets the", "meets", "satisfies the", "satisfies", "is eligible for the",
-        "is eligible for", "is eligible", "has passed the", "has passed",
-        "has qualified for the", "has qualified for", "has qualified",
-        "is approved for the", "is approved for", "is approved"
+        "passes the",
+        "passes",
+        "qualifies for the",
+        "qualifies for",
+        "qualifies",
+        "meets the",
+        "meets",
+        "satisfies the",
+        "satisfies",
+        "is eligible for the",
+        "is eligible for",
+        "is eligible",
+        "has passed the",
+        "has passed",
+        "has qualified for the",
+        "has qualified for",
+        "has qualified",
+        "is approved for the",
+        "is approved for",
+        "is approved",
     ];
 
     let mut cleaned = rule_name.to_string();
@@ -144,18 +166,19 @@ pub fn transform_selector_name(name: &str) -> String {
 /// Normalize a name by converting it to multiple possible formats
 pub fn normalize_name(name: &str) -> Vec<String> {
     let mut variants = Vec::new();
-    
+
     // Original name
     variants.push(name.to_string());
-    
+
     // Convert spaces and underscores to camelCase
     let camel_case = transform_property_name(name);
     if !variants.contains(&camel_case) {
         variants.push(camel_case);
     }
-    
+
     // Convert to snake_case
-    let words: Vec<&str> = name.split(&[' ', '_'][..])
+    let words: Vec<&str> = name
+        .split(&[' ', '_'][..])
         .filter(|s| !s.is_empty())
         .collect();
     if words.len() > 1 {
@@ -164,7 +187,7 @@ pub fn normalize_name(name: &str) -> Vec<String> {
             variants.push(snake_case);
         }
     }
-    
+
     // Convert to space-separated
     if words.len() > 1 {
         let space_separated = words.join(" ").to_lowercase();
@@ -172,7 +195,7 @@ pub fn normalize_name(name: &str) -> Vec<String> {
             variants.push(space_separated);
         }
     }
-    
+
     variants
 }
 
@@ -181,10 +204,10 @@ pub fn names_match(name1: &str, name2: &str) -> bool {
     if name1 == name2 {
         return true;
     }
-    
+
     let variants1 = normalize_name(name1);
     let variants2 = normalize_name(name2);
-    
+
     for v1 in &variants1 {
         for v2 in &variants2 {
             if v1.eq_ignore_ascii_case(v2) {
@@ -192,6 +215,6 @@ pub fn names_match(name1: &str, name2: &str) -> bool {
             }
         }
     }
-    
+
     false
 }
