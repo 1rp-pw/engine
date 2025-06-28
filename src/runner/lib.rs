@@ -1,7 +1,13 @@
 #[cfg(test)]
 mod tests {
-    use crate::runner::model::{Rule, Condition, ComparisonCondition, RuleReferenceCondition, PositionedValue, ComparisonOperator, RuleValue};
-    use crate::runner::utils::{find_global_rule, find_referenced_outcomes, infer_possible_properties, transform_property_name, transform_selector_name};
+    use crate::runner::model::{
+        ComparisonCondition, ComparisonOperator, Condition, PositionedValue, Rule,
+        RuleReferenceCondition, RuleValue,
+    };
+    use crate::runner::utils::{
+        find_global_rule, find_referenced_outcomes, infer_possible_properties,
+        transform_property_name, transform_selector_name,
+    };
 
     fn create_test_rule(label: Option<&str>, selector: &str, outcome: &str) -> Rule {
         Rule::new(
@@ -68,7 +74,10 @@ mod tests {
     #[test]
     fn test_find_referenced_outcomes_label_match() {
         let mut rule1 = create_test_rule(None, "user", "eligible");
-        rule1.add_condition(create_rule_reference_condition("account", "account_check"), None);
+        rule1.add_condition(
+            create_rule_reference_condition("account", "account_check"),
+            None,
+        );
 
         let mut rule2 = create_test_rule(Some("account_check"), "account", "active");
         rule2.add_condition(create_comparison_condition("account", "status"), None);
@@ -143,7 +152,10 @@ mod tests {
         let rules = vec![rule1, rule2];
         let result = find_global_rule(&rules);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("No global rule found"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("No global rule found"));
     }
 
     #[test]
@@ -154,7 +166,10 @@ mod tests {
         let rules = vec![rule1, rule2];
         let result = find_global_rule(&rules);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Multiple global rules found"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Multiple global rules found"));
     }
 
     #[test]
@@ -174,7 +189,10 @@ mod tests {
         assert_eq!(transform_property_name("first name"), "firstName");
         assert_eq!(transform_property_name("last name value"), "lastNameValue");
         assert_eq!(transform_property_name("FIRST LAST"), "firstLast");
-        assert_eq!(transform_property_name("account status check"), "accountStatusCheck");
+        assert_eq!(
+            transform_property_name("account status check"),
+            "accountStatusCheck"
+        );
     }
 
     #[test]
@@ -198,7 +216,10 @@ mod tests {
     #[test]
     fn test_transform_selector_name_multiple_words() {
         assert_eq!(transform_selector_name("user account"), "userAccount");
-        assert_eq!(transform_selector_name("primary user data"), "primaryUserData");
+        assert_eq!(
+            transform_selector_name("primary user data"),
+            "primaryUserData"
+        );
         assert_eq!(transform_selector_name("ACCOUNT STATUS"), "accountStatus");
     }
 
@@ -306,23 +327,23 @@ mod tests {
     #[test]
     fn test_fuzzy_name_matching() {
         use crate::runner::utils::names_match;
-        
+
         // Test camelCase <-> spaces
         assert!(names_match("driving test", "drivingTest"));
         assert!(names_match("drivingTest", "driving test"));
-        
-        // Test snake_case <-> camelCase  
+
+        // Test snake_case <-> camelCase
         assert!(names_match("driving_test", "drivingTest"));
         assert!(names_match("drivingTest", "driving_test"));
-        
+
         // Test spaces <-> snake_case
         assert!(names_match("driving test", "driving_test"));
         assert!(names_match("driving_test", "driving test"));
-        
+
         // Test case insensitivity
         assert!(names_match("DrivingTest", "driving test"));
         assert!(names_match("DRIVING_TEST", "drivingTest"));
-        
+
         // Test that non-matching names don't match
         assert!(!names_match("driving test", "walking test"));
         assert!(!names_match("drivingTest", "walkingTest"));
@@ -339,7 +360,7 @@ mod tests {
         "#;
 
         let mut rule_set = parse_rules(input).unwrap();
-        
+
         // Add the mapping: **driver** -> **person**
         rule_set.map_selector("driver", "person");
 
@@ -377,11 +398,14 @@ mod tests {
         if let Err(ref e) = result {
             println!("Parse error for original failing policy: {:?}", e);
         }
-        assert!(result.is_ok(), "Should parse original failing policy with object selectors in chain");
+        assert!(
+            result.is_ok(),
+            "Should parse original failing policy with object selectors in chain"
+        );
 
         let rule_set = result.unwrap();
         assert_eq!(rule_set.rules.len(), 1);
-        
+
         let rule = &rule_set.rules[0];
         assert_eq!(rule.selector, "driver");
         assert_eq!(rule.outcome, "the age test");
@@ -408,7 +432,12 @@ mod tests {
             if let Err(ref e) = result {
                 println!("Parse error for test case {}: {:?}", i, e);
             }
-            assert!(result.is_ok(), "Test case {} should parse successfully: {}", i, rule_text);
+            assert!(
+                result.is_ok(),
+                "Test case {} should parse successfully: {}",
+                i,
+                rule_text
+            );
         }
     }
 

@@ -1,7 +1,7 @@
 mod lib;
 
+use crate::runner::trace::{ConditionTrace, RuleSetTrace, RuleTrace};
 use thiserror::Error;
-use crate::runner::trace::{RuleSetTrace, RuleTrace, ConditionTrace};
 
 #[derive(Error, Debug)]
 pub enum RuleError {
@@ -36,7 +36,7 @@ impl<T> EvaluationResult<T> {
             trace: Some(trace),
         }
     }
-    
+
     pub fn failure(error: RuleError, trace: Option<RuleSetTrace>) -> Self {
         Self {
             result: Err(error),
@@ -97,7 +97,7 @@ impl PartialRuleTrace {
             error: None,
         }
     }
-    
+
     pub fn add_condition(&mut self, condition_trace: ConditionTrace) {
         self.conditions.push(condition_trace);
     }
@@ -106,12 +106,12 @@ impl PartialRuleTrace {
     pub fn set_result(&mut self, result: bool) {
         self.result = Some(result);
     }
-    
+
     pub fn set_error(&mut self, error: String) {
         self.error = Some(error);
         self.result = Some(false);
     }
-    
+
     pub fn to_rule_trace(self) -> RuleTrace {
         RuleTrace {
             label: self.label,

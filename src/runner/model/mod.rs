@@ -1,10 +1,10 @@
 mod lib;
 
 use chrono::NaiveDate;
-use std::collections::HashMap;
-use std::fmt;
 use serde::Serialize;
 use std::borrow::Cow;
+use std::collections::HashMap;
+use std::fmt;
 use std::sync::RwLock;
 
 // String constants to avoid allocations
@@ -23,15 +23,15 @@ pub struct PerformanceCache {
     // Cache for JSON property lookups to avoid repeated case-insensitive searches
     #[allow(dead_code)]
     pub json_property_lookups: RwLock<HashMap<(String, String), Option<String>>>,
-    
+
     // Cache for selector transformations (e.g., "user profile" -> "userProfile")
     #[allow(dead_code)]
     pub selector_transformations: RwLock<HashMap<String, String>>,
-    
+
     // Cache for effective selector resolutions
     #[allow(dead_code)]
     pub effective_selectors: RwLock<HashMap<String, Option<String>>>,
-    
+
     // Cache for property name transformations
     #[allow(dead_code)]
     pub property_transformations: RwLock<HashMap<String, String>>,
@@ -60,26 +60,36 @@ impl PerformanceCache {
             cache.clear();
         }
     }
-    
+
     // Get cache statistics for monitoring
     #[allow(dead_code)]
     pub fn get_stats(&self) -> CacheStats {
-        let rule_count = self.rule_fuzzy_matches.read()
+        let rule_count = self
+            .rule_fuzzy_matches
+            .read()
             .map(|cache| cache.len())
             .unwrap_or(0);
-        let json_count = self.json_property_lookups.read()
+        let json_count = self
+            .json_property_lookups
+            .read()
             .map(|cache| cache.len())
             .unwrap_or(0);
-        let selector_count = self.selector_transformations.read()
+        let selector_count = self
+            .selector_transformations
+            .read()
             .map(|cache| cache.len())
             .unwrap_or(0);
-        let effective_count = self.effective_selectors.read()
+        let effective_count = self
+            .effective_selectors
+            .read()
             .map(|cache| cache.len())
             .unwrap_or(0);
-        let property_count = self.property_transformations.read()
+        let property_count = self
+            .property_transformations
+            .read()
             .map(|cache| cache.len())
             .unwrap_or(0);
-            
+
         CacheStats {
             rule_fuzzy_matches: rule_count,
             json_property_lookups: json_count,
@@ -112,7 +122,7 @@ impl EfficientString {
     pub fn from_static(s: &'static str) -> Self {
         Self(Cow::Borrowed(s))
     }
-    
+
     pub fn from_string(s: String) -> Self {
         Self(Cow::Owned(s))
     }
@@ -196,25 +206,15 @@ impl ComparisonOperator {
     #[allow(dead_code)]
     pub fn all_representations(&self) -> Vec<&'static str> {
         match self {
-            ComparisonOperator::GreaterThanOrEqual => vec![
-                "is greater than or equal to",
-                "is at least"
-            ],
-            ComparisonOperator::LessThanOrEqual => vec![
-                "is less than or equal to",
-                "is no more than"
-            ],
-            ComparisonOperator::EqualTo => vec![
-                "is equal to",
-                "is the same as"
-            ],
-            ComparisonOperator::ExactlyEqualTo => vec![
-                "is exactly equal to"
-            ],
-            ComparisonOperator::NotEqualTo => vec![
-                "is not equal to",
-                "is not the same as"
-            ],
+            ComparisonOperator::GreaterThanOrEqual => {
+                vec!["is greater than or equal to", "is at least"]
+            }
+            ComparisonOperator::LessThanOrEqual => {
+                vec!["is less than or equal to", "is no more than"]
+            }
+            ComparisonOperator::EqualTo => vec!["is equal to", "is the same as"],
+            ComparisonOperator::ExactlyEqualTo => vec!["is exactly equal to"],
+            ComparisonOperator::NotEqualTo => vec!["is not equal to", "is not the same as"],
             ComparisonOperator::LaterThan => vec!["is later than"],
             ComparisonOperator::EarlierThan => vec!["is earlier than"],
             ComparisonOperator::GreaterThan => vec!["is greater than"],
@@ -268,7 +268,7 @@ impl Duration {
     pub fn new(amount: f64, unit: TimeUnit) -> Self {
         Self { amount, unit }
     }
-    
+
     /// Convert to seconds for comparison purposes
     pub fn to_seconds(&self) -> f64 {
         match self.unit {
@@ -283,16 +283,16 @@ impl Duration {
             TimeUnit::Centuries => self.amount * 3155695200.0,
         }
     }
-    
+
     /// Auto-reduce to appropriate unit
     pub fn normalize(self) -> Self {
         let seconds = self.to_seconds();
-        
+
         // If less than a day, reduce to seconds for precision
         if seconds < 86400.0 {
             return Duration::new(seconds, TimeUnit::Seconds);
         }
-        
+
         // Otherwise, reduce to days
         Duration::new(seconds / 86400.0, TimeUnit::Days)
     }
@@ -323,17 +323,71 @@ impl fmt::Display for RuleValue {
 impl fmt::Display for Duration {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let unit_str = match self.unit {
-            TimeUnit::Seconds => if self.amount == 1.0 { "second" } else { "seconds" },
-            TimeUnit::Minutes => if self.amount == 1.0 { "minute" } else { "minutes" },
-            TimeUnit::Hours => if self.amount == 1.0 { "hour" } else { "hours" },
-            TimeUnit::Days => if self.amount == 1.0 { "day" } else { "days" },
-            TimeUnit::Weeks => if self.amount == 1.0 { "week" } else { "weeks" },
-            TimeUnit::Months => if self.amount == 1.0 { "month" } else { "months" },
-            TimeUnit::Years => if self.amount == 1.0 { "year" } else { "years" },
-            TimeUnit::Decades => if self.amount == 1.0 { "decade" } else { "decades" },
-            TimeUnit::Centuries => if self.amount == 1.0 { "century" } else { "centuries" },
+            TimeUnit::Seconds => {
+                if self.amount == 1.0 {
+                    "second"
+                } else {
+                    "seconds"
+                }
+            }
+            TimeUnit::Minutes => {
+                if self.amount == 1.0 {
+                    "minute"
+                } else {
+                    "minutes"
+                }
+            }
+            TimeUnit::Hours => {
+                if self.amount == 1.0 {
+                    "hour"
+                } else {
+                    "hours"
+                }
+            }
+            TimeUnit::Days => {
+                if self.amount == 1.0 {
+                    "day"
+                } else {
+                    "days"
+                }
+            }
+            TimeUnit::Weeks => {
+                if self.amount == 1.0 {
+                    "week"
+                } else {
+                    "weeks"
+                }
+            }
+            TimeUnit::Months => {
+                if self.amount == 1.0 {
+                    "month"
+                } else {
+                    "months"
+                }
+            }
+            TimeUnit::Years => {
+                if self.amount == 1.0 {
+                    "year"
+                } else {
+                    "years"
+                }
+            }
+            TimeUnit::Decades => {
+                if self.amount == 1.0 {
+                    "decade"
+                } else {
+                    "decades"
+                }
+            }
+            TimeUnit::Centuries => {
+                if self.amount == 1.0 {
+                    "century"
+                } else {
+                    "centuries"
+                }
+            }
         };
-        
+
         if self.amount.fract() == 0.0 {
             write!(f, "{} {}", self.amount as i64, unit_str)
         } else {
@@ -402,12 +456,18 @@ impl<T> PositionedValue<T> {
 // Specialized constructors for common string values to avoid allocations
 impl PositionedValue<String> {
     pub fn from_static(value: &'static str) -> Self {
-        Self { value: value.to_string(), pos: None }
+        Self {
+            value: value.to_string(),
+            pos: None,
+        }
     }
 
     #[allow(dead_code)]
     pub fn from_static_with_pos(value: &'static str, pos: Option<SourcePosition>) -> Self {
-        Self { value: value.to_string(), pos }
+        Self {
+            value: value.to_string(),
+            pos,
+        }
     }
 }
 
@@ -483,7 +543,7 @@ impl RuleSet {
             selector_mappings: HashMap::new(),
         }
     }
-    
+
     pub fn with_capacity(capacity: usize) -> Self {
         RuleSet {
             rules: Vec::with_capacity(capacity),
@@ -511,7 +571,7 @@ impl RuleSet {
         self.rules.reserve(new_capacity);
         self.rule_map.reserve(rules.len());
         self.label_map.reserve(rules.len());
-        
+
         for rule in rules {
             self.add_rule(rule);
         }
@@ -529,18 +589,21 @@ impl RuleSet {
     /// e.g., map_selector("driver", "person") allows **driver** to reference the "person" object
     #[allow(dead_code)]
     pub fn map_selector(&mut self, custom_selector: &str, actual_path: &str) {
-        self.selector_mappings.insert(custom_selector.to_string(), actual_path.to_string());
+        self.selector_mappings
+            .insert(custom_selector.to_string(), actual_path.to_string());
     }
 
     /// Get the actual JSON path for a selector, applying mappings if they exist
     #[allow(dead_code)]
     pub fn resolve_selector(&self, selector: &str) -> String {
-        self.selector_mappings.get(selector).cloned().unwrap_or_else(|| selector.to_string())
+        self.selector_mappings
+            .get(selector)
+            .cloned()
+            .unwrap_or_else(|| selector.to_string())
     }
 }
 
-#[derive(Debug, Serialize, Clone)]
-#[derive(PartialEq)]
+#[derive(Debug, Serialize, Clone, PartialEq)]
 pub struct SourcePosition {
     pub line: usize,
     pub start: usize,

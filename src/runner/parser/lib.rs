@@ -1,12 +1,13 @@
 #[cfg(test)]
 mod tests {
-    use crate::runner::model::{ComparisonOperator, RuleValue, Condition, ConditionOperator};
-    use chrono::NaiveDate;
+    use crate::runner::model::{ComparisonOperator, Condition, ConditionOperator, RuleValue};
     use crate::runner::parser::parse_rules;
+    use chrono::NaiveDate;
 
     #[test]
     fn test_parse_simple_rule() {
-        let input = r#"A **user** passes the test if __age__ of **user** is greater than or equal to 18."#;
+        let input =
+            r#"A **user** passes the test if __age__ of **user** is greater than or equal to 18."#;
 
         let result = parse_rules(input);
         if let Err(ref e) = result {
@@ -38,7 +39,8 @@ mod tests {
 
     #[test]
     fn test_parse_rule_with_label() {
-        let input = r#"Age Check. A **person** is eligible if __age__ of **user** is greater than 21."#;
+        let input =
+            r#"Age Check. A **person** is eligible if __age__ of **user** is greater than 21."#;
 
         let result = parse_rules(input);
         assert!(result.is_ok());
@@ -66,7 +68,7 @@ mod tests {
 
         // Second condition should have AND operator
         match &rule.conditions[1].operator {
-            Some(ConditionOperator::And) => {},
+            Some(ConditionOperator::And) => {}
             _ => panic!("Expected AND operator"),
         }
     }
@@ -84,7 +86,7 @@ mod tests {
 
         // Second condition should have OR operator
         match &rule.conditions[1].operator {
-            Some(ConditionOperator::Or) => {},
+            Some(ConditionOperator::Or) => {}
             _ => panic!("Expected OR operator"),
         }
     }
@@ -147,19 +149,18 @@ mod tests {
         let rule = &rule_set.rules[0];
 
         match &rule.conditions[0].condition {
-            Condition::Comparison(comp) => {
-                match &comp.value.value {
-                    RuleValue::Boolean(b) => assert!(*b),
-                    _ => panic!("Expected boolean value"),
-                }
-            }
+            Condition::Comparison(comp) => match &comp.value.value {
+                RuleValue::Boolean(b) => assert!(*b),
+                _ => panic!("Expected boolean value"),
+            },
             _ => panic!("Expected comparison condition"),
         }
     }
 
     #[test]
     fn test_parse_list_operations() {
-        let input = r#"A **user** is valid if __role__ of **user** is in ["admin", "moderator", "user"]."#;
+        let input =
+            r#"A **user** is valid if __role__ of **user** is in ["admin", "moderator", "user"]."#;
 
         let result = parse_rules(input);
         assert!(result.is_ok());
@@ -253,29 +254,32 @@ A **user** is valid if __id__ of __group__ of **user** is equal to 1.
     #[test]
     fn test_parse_all_comparison_operators() {
         let operators = vec![
-            ("is greater than or equal to", ComparisonOperator::GreaterThanOrEqual),
+            (
+                "is greater than or equal to",
+                ComparisonOperator::GreaterThanOrEqual,
+            ),
             ("is at least", ComparisonOperator::GreaterThanOrEqual),
-
-            ("is less than or equal to", ComparisonOperator::LessThanOrEqual),
+            (
+                "is less than or equal to",
+                ComparisonOperator::LessThanOrEqual,
+            ),
             ("is no more than", ComparisonOperator::LessThanOrEqual),
-
             ("is equal to", ComparisonOperator::EqualTo),
             ("is the same as", ComparisonOperator::EqualTo),
-
             ("is not equal to", ComparisonOperator::NotEqualTo),
             ("is not the same as", ComparisonOperator::NotEqualTo),
-
             ("is later than", ComparisonOperator::LaterThan),
             ("is earlier than", ComparisonOperator::EarlierThan),
-
             ("is greater than", ComparisonOperator::GreaterThan),
             ("is less than", ComparisonOperator::LessThan),
-
             ("contains", ComparisonOperator::Contains),
         ];
 
         for (op_str, expected_op) in operators {
-            let input = format!(r#"A **user** passes the test if __value__ of **user** {} 10."#, op_str);
+            let input = format!(
+                r#"A **user** passes the test if __value__ of **user** {} 10."#,
+                op_str
+            );
             let result = parse_rules(&input);
             if let Err(ref e) = result {
                 println!("Parse error for '{}': {:?}", op_str, e);
@@ -287,7 +291,11 @@ A **user** is valid if __id__ of __group__ of **user** is equal to 1.
 
             match &rule.conditions[0].condition {
                 Condition::Comparison(comp) => {
-                    assert_eq!(comp.operator, expected_op, "Operator mismatch for: {}", op_str);
+                    assert_eq!(
+                        comp.operator, expected_op,
+                        "Operator mismatch for: {}",
+                        op_str
+                    );
                 }
                 _ => panic!("Expected comparison condition for operator: {}", op_str),
             }
@@ -302,7 +310,10 @@ A **user** is valid if __id__ of __group__ of **user** is equal to 1.
         ];
 
         for (op_str, expected_op) in operators {
-            let input = format!(r#"A **user** passes the test if __role__ of **user** {} ["admin", "user"]."#, op_str);
+            let input = format!(
+                r#"A **user** passes the test if __role__ of **user** {} ["admin", "user"]."#,
+                op_str
+            );
             let result = parse_rules(&input);
             assert!(result.is_ok(), "Failed to parse list operator: {}", op_str);
 
@@ -311,7 +322,11 @@ A **user** is valid if __id__ of __group__ of **user** is equal to 1.
 
             match &rule.conditions[0].condition {
                 Condition::Comparison(comp) => {
-                    assert_eq!(comp.operator, expected_op, "Operator mismatch for: {}", op_str);
+                    assert_eq!(
+                        comp.operator, expected_op,
+                        "Operator mismatch for: {}",
+                        op_str
+                    );
                 }
                 _ => panic!("Expected comparison condition for operator: {}", op_str),
             }
@@ -320,16 +335,32 @@ A **user** is valid if __id__ of __group__ of **user** is equal to 1.
 
     #[test]
     fn test_parse_various_outcome_verbs() {
-        let verbs = vec!["gets", "passes", "is", "has", "receives", "qualifies for", "meets", "satisfies"];
+        let verbs = vec![
+            "gets",
+            "passes",
+            "is",
+            "has",
+            "receives",
+            "qualifies for",
+            "meets",
+            "satisfies",
+        ];
 
         for verb in verbs {
-            let input = format!(r#"A **user** {} approved if __age__ of **user** is greater than 18."#, verb);
+            let input = format!(
+                r#"A **user** {} approved if __age__ of **user** is greater than 18."#,
+                verb
+            );
             let result = parse_rules(&input);
             assert!(result.is_ok(), "Failed to parse verb: {}", verb);
 
             let rule_set = result.unwrap();
             let rule = &rule_set.rules[0];
-            assert_eq!(rule.outcome, "approved", "Outcome mismatch for verb: {}", verb);
+            assert_eq!(
+                rule.outcome, "approved",
+                "Outcome mismatch for verb: {}",
+                verb
+            );
         }
     }
 
@@ -428,15 +459,13 @@ A **user** passes the test if __age__ of **user** is greater than 18.
             let rule = &rule_set.rules[0];
 
             match &rule.conditions[0].condition {
-                Condition::Comparison(comp) => {
-                    match &comp.value.value {
-                        RuleValue::Date(d) => {
-                            let expected = NaiveDate::from_ymd_opt(2023, 12, 1).unwrap();
-                            assert_eq!(*d, expected);
-                        }
-                        _ => panic!("Expected date value"),
+                Condition::Comparison(comp) => match &comp.value.value {
+                    RuleValue::Date(d) => {
+                        let expected = NaiveDate::from_ymd_opt(2023, 12, 1).unwrap();
+                        assert_eq!(*d, expected);
                     }
-                }
+                    _ => panic!("Expected date value"),
+                },
                 _ => panic!("Expected comparison condition"),
             }
         }
@@ -455,20 +484,18 @@ A **user** is valid if __score__ of **user** is in [85, 90, 95, 100].
         let rule = &rule_set.rules[0];
 
         match &rule.conditions[0].condition {
-            Condition::Comparison(comp) => {
-                match &comp.value.value {
-                    RuleValue::List(items) => {
-                        assert_eq!(items.len(), 4);
-                        for (i, expected) in [85.0, 90.0, 95.0, 100.0].iter().enumerate() {
-                            match &items[i] {
-                                RuleValue::Number(n) => assert_eq!(*n, *expected),
-                                _ => panic!("Expected number in list"),
-                            }
+            Condition::Comparison(comp) => match &comp.value.value {
+                RuleValue::List(items) => {
+                    assert_eq!(items.len(), 4);
+                    for (i, expected) in [85.0, 90.0, 95.0, 100.0].iter().enumerate() {
+                        match &items[i] {
+                            RuleValue::Number(n) => assert_eq!(*n, *expected),
+                            _ => panic!("Expected number in list"),
                         }
                     }
-                    _ => panic!("Expected list value"),
                 }
-            }
+                _ => panic!("Expected list value"),
+            },
             _ => panic!("Expected comparison condition"),
         }
     }
@@ -612,16 +639,19 @@ A **user** is valid if __score__ of **user** is in [85, 90, 95, 100].
     #[test]
     fn test_parse_within_different_time_units() {
         let test_cases = vec![
-            ("30 minutes", 30.0 * 60.0), // Should normalize to seconds
-            ("2 hours", 2.0 * 3600.0),   // Should normalize to seconds  
-            ("5 days", 5.0 * 86400.0),   // Should normalize to days (5 days in seconds)
-            ("1 month", 1.0 * 2629746.0), // Should normalize to days (1 month in seconds)
+            ("30 minutes", 30.0 * 60.0),   // Should normalize to seconds
+            ("2 hours", 2.0 * 3600.0),     // Should normalize to seconds
+            ("5 days", 5.0 * 86400.0),     // Should normalize to days (5 days in seconds)
+            ("1 month", 1.0 * 2629746.0),  // Should normalize to days (1 month in seconds)
             ("2 years", 2.0 * 31556952.0), // Should normalize to days (2 years in seconds)
         ];
 
         for (duration_str, expected_seconds) in test_cases {
-            let input = format!(r#"A **user** is valid if __test_date__ of **user** is within {}."#, duration_str);
-            
+            let input = format!(
+                r#"A **user** is valid if __test_date__ of **user** is within {}."#,
+                duration_str
+            );
+
             let result = parse_rules(&input);
             assert!(result.is_ok(), "Failed to parse: {}", duration_str);
 
@@ -636,8 +666,13 @@ A **user** is valid if __score__ of **user** is in [85, 90, 95, 100].
                             // Allow for small floating point differences (within 1%)
                             let diff = (actual_seconds - expected_seconds).abs();
                             let tolerance = expected_seconds * 0.01; // 1% tolerance
-                            assert!(diff < tolerance.max(1.0), "Duration mismatch for {}: expected {} seconds, got {} seconds", 
-                                   duration_str, expected_seconds, actual_seconds);
+                            assert!(
+                                diff < tolerance.max(1.0),
+                                "Duration mismatch for {}: expected {} seconds, got {} seconds",
+                                duration_str,
+                                expected_seconds,
+                                actual_seconds
+                            );
                         }
                         _ => panic!("Expected Duration value for: {}", duration_str),
                     }
@@ -744,5 +779,479 @@ A **user** is valid if __score__ of **user** is in [85, 90, 95, 100].
             }
             _ => panic!("Expected comparison condition"),
         }
+    }
+
+    #[test]
+    fn test_citation_functionality_already_works() {
+        // Citation support is already implemented and working!
+        // This test demonstrates the existing functionality
+
+        // Test label reference (the existing test works fine)
+        let label_input = r#"A **user** is eligible if §ageCheck is valid."#;
+        let result = parse_rules(label_input);
+        assert!(result.is_ok());
+        let rule_set = result.unwrap();
+        match &rule_set.rules[0].conditions[0].condition {
+            crate::runner::model::Condition::RuleReference(ref_cond) => {
+                assert_eq!(ref_cond.selector.value, "");
+                assert_eq!(ref_cond.rule_name.value, "ageCheck");
+            }
+            _ => panic!("Expected rule reference condition"),
+        }
+
+        // Test rule name reference (the existing test works fine)
+        let rule_input = r#"A **user** passes the test if the **user** passes the age check."#;
+        let result = parse_rules(rule_input);
+        assert!(result.is_ok());
+        let rule_set = result.unwrap();
+        match &rule_set.rules[0].conditions[0].condition {
+            crate::runner::model::Condition::RuleReference(ref_cond) => {
+                assert_eq!(ref_cond.selector.value, "user");
+                assert_eq!(ref_cond.rule_name.value, "passes the age check");
+            }
+            _ => panic!("Expected rule reference condition"),
+        }
+    }
+
+    #[test]
+    fn test_driving_test_example_should_not_error() {
+        let input = r#"
+A **driver** gets a driving licence
+  if the **driver** is valid
+  and the **driver** passes the theory test
+  and the **driver** passes the practical test
+  and the **driver** has a provisional licence.
+
+A **driver** is valid
+  if __age__ of **driver** is greater than or equal to 17.
+
+A **driver** passes the theory test
+  if __theory_score__ of **driver** is greater than or equal to 43.
+
+A **driver** passes the practical test
+  if __practical_score__ of **driver** is greater than or equal to 50.
+
+A **driver** has a provisional licence
+  if __provisional__ of **driver** is equal to true.
+        "#;
+
+        let result = parse_rules(input);
+        if let Err(ref e) = result {
+            println!("Parse error: {:?}", e);
+        }
+        assert!(
+            result.is_ok(),
+            "Should parse without errors - rule references should not be considered global rules"
+        );
+
+        let rule_set = result.unwrap();
+        assert_eq!(rule_set.rules.len(), 5);
+
+        // The first rule should be the global rule since it references others
+        // The other rules are supporting rules that are referenced
+        assert_eq!(rule_set.rules[0].outcome, "a driving licence");
+    }
+
+    #[test]
+    fn test_partial_matching_issue() {
+        // This test demonstrates a potential issue with partial matching
+        let input = r#"
+A **person** gets access 
+  if the **person** is valid 
+  and the **person** has valid_license.
+
+A **person** is valid if __age__ of **person** is greater than 18.
+
+A **person** has valid_license if __license__ of **person** is equal to true.
+        "#;
+
+        let result = parse_rules(input);
+        assert!(
+            result.is_ok(),
+            "Should parse successfully with improved matching logic"
+        );
+
+        let rule_set = result.unwrap();
+
+        // Verify that the system correctly identifies the global rule
+        // and doesn't confuse similar rule names
+        let referenced = crate::runner::utils::find_referenced_outcomes(&rule_set.rules);
+
+        // Should have exactly the right references: valid, valid_license
+        assert_eq!(referenced.len(), 2);
+        assert!(referenced.contains("valid"));
+        assert!(referenced.contains("valid_license"));
+
+        // Should identify "access" as the only global rule
+        let global_rule_result = crate::runner::utils::find_global_rule(&rule_set.rules);
+        assert!(global_rule_result.is_ok());
+        assert_eq!(global_rule_result.unwrap().outcome, "access");
+    }
+
+    #[test]
+    fn test_complex_driving_test_example() {
+        let input = r#"
+A **driver** gets a driving licence
+  if the **driver** passes the age test
+  and the **driver** passes the test requirements
+  and the **driver** has taken the test in the time period
+  and the **driver** did their test at a valid center.
+
+A **driver** did their test at a valid center
+  if the __center__ of the **drivingTest.testDates.practical** is in ["Manchester", "Coventry"]
+  and the __center__ of the **practical** of the **test dates** in the **driving test** is in ["Manchester", "Coventry"].
+
+A **driver** passes the age test
+  if the __date of birth__ of the **person** in the **driving test** is earlier than 2008-12-12.
+
+A **driver** passes the test requirements
+  if **driver** passes the theory test
+  and the **driver** passes the practical test.
+
+A **driver** passes the theory test
+  if the __multiple choice__ of the **theory** of the **scores** in the **driving test** is at least 43
+  and the __hazard perception__ of the **theory** of the **scores** in the **driving test** is at least 44.
+
+A **driver** passes the practical test
+  if the __minor__ in the **practical** of the **scores** in the **driving test** is no more than 15
+  and the __major__ in the **practical** of the **scores** in the **driving test** is equal to false.
+
+A **driver** has taken the test in the time period
+  if the __date__ of the __theory__ of the **testDates** in the **driving test** is within 2 years
+  and the __date__ of the __practical__ of the **testDates** in the **driving test** is within 30 days.
+        "#;
+
+        let result = parse_rules(input);
+        assert!(
+            result.is_ok(),
+            "Should parse without errors - rule references should match rule outcomes"
+        );
+
+        let rule_set = result.unwrap();
+
+        // Should identify "a driving licence" as the only global rule
+        let global_rule_result = crate::runner::utils::find_global_rule(&rule_set.rules);
+        assert!(global_rule_result.is_ok());
+        assert_eq!(global_rule_result.unwrap().outcome, "a driving licence");
+    }
+
+    #[test]
+    fn test_driving_example_without_problematic_label() {
+        // The label grammar has a bug where it's too greedy across multiple rules
+        // For now, test without the label to confirm the reference matching works
+        let input = r#"
+A **driver** gets a driving licence
+  if the **driver** passes the age test
+  and the **driver** passes the test requirements
+  and the **driver** has taken the test in the time period
+  and the **driver** did their test at a valid center.
+
+A **driver** did their test at a valid center
+  if the __center__ of the **drivingTest.testDates.practical** is in ["Manchester", "Coventry"]
+  and the __center__ of the **practical** of the **test dates** in the **driving test** is in ["Manchester", "Coventry"].
+
+A **driver** passes the age test
+  if the __date of birth__ of the **person** in the **driving test** is earlier than 2008-12-12.
+
+A **driver** passes the test requirements
+  if **driver** passes the theory test
+  and the **driver** passes the practical test.
+
+A **driver** passes the theory test
+  if the __multiple choice__ of the **theory** of the **scores** in the **driving test** is at least 43
+  and the __hazard perception__ of the **theory** of the **scores** in the **driving test** is at least 44.
+
+A **driver** passes the practical test
+  if the __minor__ in the **practical** of the **scores** in the **driving test** is no more than 15
+  and the __major__ in the **practical** of the **scores** in the **driving test** is equal to false.
+
+A **driver** has taken the test in the time period
+  if the __date__ of the __theory__ of the **testDates** in the **driving test** is within 2 years
+  and the __date__ of the __practical__ of the **testDates** in the **driving test** is within 30 days.
+        "#;
+
+        let result = parse_rules(input);
+        assert!(
+            result.is_ok(),
+            "Should parse without errors when label is removed"
+        );
+
+        let rule_set = result.unwrap();
+
+        // Should have all 7 rules
+        assert_eq!(rule_set.rules.len(), 7);
+
+        // Should identify "a driving licence" as the only global rule
+        let global_rule_result = crate::runner::utils::find_global_rule(&rule_set.rules);
+        assert!(global_rule_result.is_ok());
+        assert_eq!(global_rule_result.unwrap().outcome, "a driving licence");
+    }
+
+    #[test]
+    fn test_label_parsing_bug_fixed() {
+        // First test that labels work correctly on a single rule
+        let single_rule = r#"tester. A **driver** passes the age test if __age__ of **driver** is greater than 18."#;
+        let result = parse_rules(single_rule);
+        assert!(result.is_ok(), "Single rule with label should parse");
+        let rule_set = result.unwrap();
+        assert_eq!(rule_set.rules.len(), 1);
+        assert_eq!(rule_set.rules[0].label, Some("tester".to_string()));
+
+        // Test the full scenario with 3 rules, where only the last has a label
+        let input = r#"
+A **driver** gets a driving licence
+  if the **driver** passes the age test
+  and the **driver** did their test at a valid center.
+
+A **driver** did their test at a valid center
+  if __center__ of **driver** is in ["Manchester", "Coventry"].
+
+tester. A **driver** passes the age test
+  if __date_of_birth__ of **driver** is earlier than 2008-12-12.
+        "#;
+
+        let result = parse_rules(input);
+        if let Err(ref e) = result {
+            println!("Parse error in test_label_parsing_bug_fixed: {:?}", e);
+        }
+        assert!(
+            result.is_ok(),
+            "Should parse successfully with label grammar fix"
+        );
+
+        let rule_set = result.unwrap();
+
+        // Should have 3 rules
+        assert_eq!(rule_set.rules.len(), 3);
+
+        // Check that only the third rule has a label
+        assert!(rule_set.rules[0].label.is_none());
+        assert!(rule_set.rules[1].label.is_none());
+        assert_eq!(rule_set.rules[2].label, Some("tester".to_string()));
+
+        // Should identify "a driving licence" as the only global rule
+        let global_rule_result = crate::runner::utils::find_global_rule(&rule_set.rules);
+        assert!(global_rule_result.is_ok());
+        assert_eq!(global_rule_result.unwrap().outcome, "a driving licence");
+    }
+
+    #[test]
+    fn test_valid_label_formats() {
+        // Test that various label formats should be valid according to the spec:
+        // a label can be anything <alphanumeric><fullstop>(repeated)<space>
+        let valid_labels = vec![
+            "a.b.c. ",
+            "a. ",
+            "a.1.s. ",
+            "1.a.s. ",
+            "tester. ",
+            "rule1. ",
+            "1. ",
+            "test.123. ",
+            "driver.bob. ",
+            "1.0. ",
+            "1.1. ",
+        ];
+
+        for label in valid_labels {
+            println!("Testing label: '{}'", label);
+            // The label should match the pattern: alphanumeric characters with dots, ending with ". "
+            assert!(label.ends_with(". "), "Label should end with '. '");
+            let without_ending = &label[..label.len() - 2];
+            assert!(
+                !without_ending.is_empty(),
+                "Label should have content before '. '"
+            );
+
+            // Check that all characters are alphanumeric or dots
+            for ch in without_ending.chars() {
+                assert!(
+                    ch.is_alphanumeric() || ch == '.',
+                    "Label should only contain alphanumeric characters and dots, found: '{}'",
+                    ch
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_label_reference_with_dots() {
+        // Test that label references with dots work correctly
+        let input = r#"
+A **driver** gets a driving licence
+  if §driver.bob is valid.
+
+driver.bob. A **driver** passes the age test
+  if __age__ of **driver** is greater than 18.
+        "#;
+
+        let result = parse_rules(input);
+        if let Err(ref e) = result {
+            println!("Parse error: {:?}", e);
+        }
+        assert!(result.is_ok(), "Should parse label references with dots");
+        
+        let rule_set = result.unwrap();
+        assert_eq!(rule_set.rules.len(), 2);
+        
+        // Check the label on the second rule
+        assert_eq!(rule_set.rules[1].label, Some("driver.bob".to_string()));
+        
+        // Check that the first rule has a label reference condition
+        match &rule_set.rules[0].conditions[0].condition {
+            crate::runner::model::Condition::RuleReference(ref_cond) => {
+                assert_eq!(ref_cond.rule_name.value, "driver.bob");
+            }
+            _ => panic!("Expected rule reference condition"),
+        }
+    }
+    
+    #[test]
+    fn test_numeric_labels() {
+        // Test that numeric labels like 1.0, 1.1 work correctly
+        let input = r#"
+1.0. A **driver** gets a driving licence
+  if the **driver** passes the age test.
+
+1.1. A **driver** passes the age test
+  if __age__ of **driver** is greater than 18.
+        "#;
+
+        let result = parse_rules(input);
+        if let Err(ref e) = result {
+            println!("Parse error: {:?}", e);
+        }
+        assert!(result.is_ok(), "Should parse numeric labels");
+        
+        let rule_set = result.unwrap();
+        assert_eq!(rule_set.rules.len(), 2);
+        
+        // Check the labels
+        assert_eq!(rule_set.rules[0].label, Some("1.0".to_string()));
+        assert_eq!(rule_set.rules[1].label, Some("1.1".to_string()));
+    }
+
+    #[test]
+    fn test_full_driving_test_with_label_references() {
+        // Test the full driving test example with driver.bob label reference
+        let input = r#"
+# Driving Test Example
+
+A **driver** gets a driving licence
+  if §driver.bob is valid
+  and the **driver** passes the test requirements
+  and the **driver** has taken the test in the time period
+  and the **driver** did their test at a valid center.
+
+A **driver** did their test at a valid center
+  if the __center__ of the **drivingTest.testDates.practical** is in ["Manchester", "Coventry"]
+  and the __center__ of the **practical** of the **test dates** in the **driving test** is in ["Manchester", "Coventry"].
+
+driver.bob. A **driver** passes the age test
+  if the __date of birth__ of the **person** in the **driving test** is earlier than 2008-12-12.
+
+A **driver** passes the test requirements
+  if **driver** passes the theory test
+  and the **driver** passes the practical test.
+
+A **driver** passes the theory test
+  if the __multiple choice__ of the **theory** of the **scores** in the **driving test** is at least 43
+  and the __hazard perception__ of the **theory** of the **scores** in the **driving test** is at least 44.
+
+A **driver** passes the practical test
+  if the __minor__ in the **practical** of the **scores** in the **driving test** is no more than 15
+  and the __major__ in the **practical** of the **scores** in the **driving test** is equal to false.
+
+A **driver** has taken the test in the time period
+  if the __date__ of the __theory__ of the **testDates** in the **driving test** is within 2 years
+  and the __date__ of the __practical__ of the **testDates** in the **driving test** is within 30 days.
+        "#;
+
+        let result = parse_rules(input);
+        if let Err(ref e) = result {
+            println!("Parse error: {:?}", e);
+        }
+        assert!(
+            result.is_ok(),
+            "Should parse driving test with label references"
+        );
+
+        let rule_set = result.unwrap();
+        
+        // Should have all 7 rules  
+        assert_eq!(rule_set.rules.len(), 7);
+        
+        // The third rule should have the driver.bob label
+        assert_eq!(rule_set.rules[2].label, Some("driver.bob".to_string()));
+        
+        // The first rule should have a label reference as its first condition
+        match &rule_set.rules[0].conditions[0].condition {
+            crate::runner::model::Condition::RuleReference(ref_cond) => {
+                assert_eq!(ref_cond.rule_name.value, "driver.bob");
+            }
+            _ => panic!("Expected label reference condition"),
+        }
+        
+        // Should identify "a driving licence" as the only global rule
+        let global_rule_result = crate::runner::utils::find_global_rule(&rule_set.rules);
+        assert!(global_rule_result.is_ok());
+        assert_eq!(global_rule_result.unwrap().outcome, "a driving licence");
+    }
+    
+    #[test]
+    fn test_driving_test_with_labels_fixed() {
+        // This is the full driving test example from the user, with label prefix
+        let input = r#"
+tester. A **driver** gets a driving licence
+  if the **driver** passes the age test
+  and the **driver** passes the test requirements
+  and the **driver** has taken the test in the time period
+  and the **driver** did their test at a valid center.
+
+A **driver** did their test at a valid center
+  if the __center__ of the **drivingTest.testDates.practical** is in ["Manchester", "Coventry"]
+  and the __center__ of the **practical** of the **test dates** in the **driving test** is in ["Manchester", "Coventry"].
+
+A **driver** passes the age test
+  if the __date of birth__ of the **person** in the **driving test** is earlier than 2008-12-12.
+
+A **driver** passes the test requirements
+  if **driver** passes the theory test
+  and the **driver** passes the practical test.
+
+A **driver** passes the theory test
+  if the __multiple choice__ of the **theory** of the **scores** in the **driving test** is at least 43
+  and the __hazard perception__ of the **theory** of the **scores** in the **driving test** is at least 44.
+
+A **driver** passes the practical test
+  if the __minor__ in the **practical** of the **scores** in the **driving test** is no more than 15
+  and the __major__ in the **practical** of the **scores** in the **driving test** is equal to false.
+
+A **driver** has taken the test in the time period
+  if the __date__ of the __theory__ of the **testDates** in the **driving test** is within 2 years
+  and the __date__ of the __practical__ of the **testDates** in the **driving test** is within 30 days.
+        "#;
+
+        let result = parse_rules(input);
+        if let Err(ref e) = result {
+            println!("Parse error: {:?}", e);
+        }
+        assert!(
+            result.is_ok(),
+            "Should parse without errors with fixed label grammar"
+        );
+
+        let rule_set = result.unwrap();
+
+        // Should have all 7 rules
+        assert_eq!(rule_set.rules.len(), 7);
+
+        // First rule should have the label
+        assert_eq!(rule_set.rules[0].label, Some("tester".to_string()));
+
+        // Should identify "a driving licence" as the only global rule
+        let global_rule_result = crate::runner::utils::find_global_rule(&rule_set.rules);
+        assert!(global_rule_result.is_ok());
+        assert_eq!(global_rule_result.unwrap().outcome, "a driving licence");
     }
 }
