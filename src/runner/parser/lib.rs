@@ -1199,6 +1199,75 @@ A **driver** has taken the test in the time period
     }
     
     #[test]
+    fn test_dollar_sign_label_reference() {
+        // Test that $ works as an alternative to § for label references
+        let input = r#"
+A **user** gets access
+  if $admin is valid.
+
+admin. A **user** is admin
+  if __role__ of **user** is equal to "admin".
+        "#;
+
+        let result = parse_rules(input);
+        if let Err(ref e) = result {
+            println!("Parse error: {:?}", e);
+        }
+        assert!(result.is_ok(), "Should parse $ label references");
+        
+        let rule_set = result.unwrap();
+        assert_eq!(rule_set.rules.len(), 2);
+        
+        // Check the label on the second rule
+        assert_eq!(rule_set.rules[1].label, Some("admin".to_string()));
+        
+        // Check that the first rule has a label reference condition
+        match &rule_set.rules[0].conditions[0].condition {
+            crate::runner::model::Condition::RuleReference(ref_cond) => {
+                assert_eq!(ref_cond.rule_name.value, "admin");
+            }
+            _ => panic!("Expected rule reference condition"),
+        }
+    }
+    
+    #[test]
+    fn test_both_label_reference_symbols() {
+        // Test that both § and $ work in the same ruleset
+        let input = r#"
+A **user** gets full_access
+  if §admin is valid
+  and $manager is valid.
+
+admin. A **user** is admin
+  if __role__ of **user** is equal to "admin".
+
+manager. A **user** is manager
+  if __role__ of **user** is equal to "manager".
+        "#;
+
+        let result = parse_rules(input);
+        assert!(result.is_ok(), "Should parse both § and $ label references");
+        
+        let rule_set = result.unwrap();
+        assert_eq!(rule_set.rules.len(), 3);
+        
+        // Check both label references in the first rule
+        match &rule_set.rules[0].conditions[0].condition {
+            crate::runner::model::Condition::RuleReference(ref_cond) => {
+                assert_eq!(ref_cond.rule_name.value, "admin");
+            }
+            _ => panic!("Expected rule reference condition for admin"),
+        }
+        
+        match &rule_set.rules[0].conditions[1].condition {
+            crate::runner::model::Condition::RuleReference(ref_cond) => {
+                assert_eq!(ref_cond.rule_name.value, "manager");
+            }
+            _ => panic!("Expected rule reference condition for manager"),
+        }
+    }
+
+    #[test]
     fn test_driving_test_with_labels_fixed() {
         // This is the full driving test example from the user, with label prefix
         let input = r#"

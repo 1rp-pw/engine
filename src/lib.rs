@@ -1525,6 +1525,61 @@ driver.test. A **driver** passes the age test
     }
 
     #[test]
+    fn test_dollar_label_reference_evaluation() {
+        use runner::evaluator::evaluate_rule_set_with_trace;
+        
+        let rules = r#"
+A **user** gets access
+  if $admin is valid
+  or $manager succeeds.
+
+admin. A **user** is admin
+  if __role__ of **user** is equal to "admin".
+
+manager. A **user** is manager
+  if __role__ of **user** is equal to "manager".
+        "#;
+
+        // Test with admin role
+        let admin_data = json!({
+            "user": {
+                "role": "admin"
+            }
+        });
+
+        let result = parse_rules(rules).unwrap();
+        let eval_result = evaluate_rule_set_with_trace(&result, &admin_data);
+        
+        assert!(eval_result.result.is_ok());
+        let results = eval_result.result.unwrap();
+        assert!(results["access"], "Admin should get access");
+        
+        // Test with manager role
+        let manager_data = json!({
+            "user": {
+                "role": "manager"
+            }
+        });
+        
+        let eval_result2 = evaluate_rule_set_with_trace(&result, &manager_data);
+        assert!(eval_result2.result.is_ok());
+        let results2 = eval_result2.result.unwrap();
+        assert!(results2["access"], "Manager should get access");
+        
+        // Test with neither role
+        let user_data = json!({
+            "user": {
+                "role": "user"
+            }
+        });
+        
+        let eval_result3 = evaluate_rule_set_with_trace(&result, &user_data);
+        assert!(eval_result3.result.is_ok());
+        let results3 = eval_result3.result.unwrap();
+        assert!(!results3["access"], "Regular user should not get access");
+    }
+
+    #[test]
     fn full_driving_test_custom_object() {
         let input = r#"A **driver** gets a driving licence
   if the **driver** passes the age test

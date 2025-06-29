@@ -22,8 +22,9 @@ label_predicate = _{
   | "is certified"
   | "is permitted"
   | "is legitimate"
+  | "is satisfied"
 }
-label_reference = { "§" ~ label_name ~ label_predicate? }
+label_reference = { ("§" | "$") ~ label_name ~ label_predicate? }
 
 rule_reference = { "the"? ~ object_selector ~ reference_name }
 reference_name = @{ (!("." | "\n") ~ ANY)+ }
