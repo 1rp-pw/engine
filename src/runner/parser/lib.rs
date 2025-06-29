@@ -1090,13 +1090,13 @@ driver.bob. A **driver** passes the age test
             println!("Parse error: {:?}", e);
         }
         assert!(result.is_ok(), "Should parse label references with dots");
-        
+
         let rule_set = result.unwrap();
         assert_eq!(rule_set.rules.len(), 2);
-        
+
         // Check the label on the second rule
         assert_eq!(rule_set.rules[1].label, Some("driver.bob".to_string()));
-        
+
         // Check that the first rule has a label reference condition
         match &rule_set.rules[0].conditions[0].condition {
             crate::runner::model::Condition::RuleReference(ref_cond) => {
@@ -1105,7 +1105,7 @@ driver.bob. A **driver** passes the age test
             _ => panic!("Expected rule reference condition"),
         }
     }
-    
+
     #[test]
     fn test_numeric_labels() {
         // Test that numeric labels like 1.0, 1.1 work correctly
@@ -1122,10 +1122,10 @@ driver.bob. A **driver** passes the age test
             println!("Parse error: {:?}", e);
         }
         assert!(result.is_ok(), "Should parse numeric labels");
-        
+
         let rule_set = result.unwrap();
         assert_eq!(rule_set.rules.len(), 2);
-        
+
         // Check the labels
         assert_eq!(rule_set.rules[0].label, Some("1.0".to_string()));
         assert_eq!(rule_set.rules[1].label, Some("1.1".to_string()));
@@ -1177,13 +1177,13 @@ A **driver** has taken the test in the time period
         );
 
         let rule_set = result.unwrap();
-        
-        // Should have all 7 rules  
+
+        // Should have all 7 rules
         assert_eq!(rule_set.rules.len(), 7);
-        
+
         // The third rule should have the driver.bob label
         assert_eq!(rule_set.rules[2].label, Some("driver.bob".to_string()));
-        
+
         // The first rule should have a label reference as its first condition
         match &rule_set.rules[0].conditions[0].condition {
             crate::runner::model::Condition::RuleReference(ref_cond) => {
@@ -1191,13 +1191,13 @@ A **driver** has taken the test in the time period
             }
             _ => panic!("Expected label reference condition"),
         }
-        
+
         // Should identify "a driving licence" as the only global rule
         let global_rule_result = crate::runner::utils::find_global_rule(&rule_set.rules);
         assert!(global_rule_result.is_ok());
         assert_eq!(global_rule_result.unwrap().outcome, "a driving licence");
     }
-    
+
     #[test]
     fn test_dollar_sign_label_reference() {
         // Test that $ works as an alternative to § for label references
@@ -1214,13 +1214,13 @@ admin. A **user** is admin
             println!("Parse error: {:?}", e);
         }
         assert!(result.is_ok(), "Should parse $ label references");
-        
+
         let rule_set = result.unwrap();
         assert_eq!(rule_set.rules.len(), 2);
-        
+
         // Check the label on the second rule
         assert_eq!(rule_set.rules[1].label, Some("admin".to_string()));
-        
+
         // Check that the first rule has a label reference condition
         match &rule_set.rules[0].conditions[0].condition {
             crate::runner::model::Condition::RuleReference(ref_cond) => {
@@ -1229,7 +1229,42 @@ admin. A **user** is admin
             _ => panic!("Expected rule reference condition"),
         }
     }
-    
+
+    #[test]
+    fn test_parse_age_comparison_operators() {
+        // Test parsing "is older than" operator - exact line from user error
+        let input = r#"
+        A **driver** passes the age test
+          if the __date of birth__ of the **person** in the **driving test** is older than 18 years.
+        "#;
+
+        let result = parse_rules(input);
+        if let Err(e) = &result {
+            println!("Parse error: {:?}", e);
+        }
+        assert!(result.is_ok(), "Should parse age comparison operators");
+
+        let rule_set = result.unwrap();
+        assert_eq!(rule_set.rules.len(), 1);
+
+        // Check that the condition has the correct operator
+        let rule = &rule_set.rules[0];
+        match &rule.conditions[0].condition {
+            crate::runner::model::Condition::Comparison(comp) => {
+                assert_eq!(comp.operator, crate::runner::model::ComparisonOperator::OlderThan);
+                // Check the value is a duration
+                match &comp.value.value {
+                    crate::runner::model::RuleValue::Duration(d) => {
+                        assert_eq!(d.amount, 18.0);
+                        assert_eq!(d.unit, crate::runner::model::TimeUnit::Years);
+                    }
+                    _ => panic!("Expected duration value"),
+                }
+            }
+            _ => panic!("Expected comparison condition"),
+        }
+    }
+
     #[test]
     fn test_both_label_reference_symbols() {
         // Test that both § and $ work in the same ruleset
@@ -1247,10 +1282,10 @@ manager. A **user** is manager
 
         let result = parse_rules(input);
         assert!(result.is_ok(), "Should parse both § and $ label references");
-        
+
         let rule_set = result.unwrap();
         assert_eq!(rule_set.rules.len(), 3);
-        
+
         // Check both label references in the first rule
         match &rule_set.rules[0].conditions[0].condition {
             crate::runner::model::Condition::RuleReference(ref_cond) => {
@@ -1258,7 +1293,7 @@ manager. A **user** is manager
             }
             _ => panic!("Expected rule reference condition for admin"),
         }
-        
+
         match &rule_set.rules[0].conditions[1].condition {
             crate::runner::model::Condition::RuleReference(ref_cond) => {
                 assert_eq!(ref_cond.rule_name.value, "manager");

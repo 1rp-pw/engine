@@ -44,7 +44,9 @@ comparison_operator = {
 
     "contains" |
     
-    "is within"
+    "is within" |
+    "is older than" |
+    "is younger than"
 }
 list_operator = { "is in" | "is not in" }
 empty_operator = { "is not empty" | "is empty" }
