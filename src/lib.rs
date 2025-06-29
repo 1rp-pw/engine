@@ -1489,7 +1489,7 @@ A **driving test** has taken the test in the time period
     #[test]
     fn test_labels_in_evaluation_result() {
         use runner::evaluator::evaluate_rule_set_with_trace;
-        
+
         let rules = r#"
 A **driver** gets a driving licence
   if §driver.test is valid.
@@ -1506,10 +1506,10 @@ driver.test. A **driver** passes the age test
 
         let result = parse_rules(rules).unwrap();
         let eval_result = evaluate_rule_set_with_trace(&result, &data);
-        
+
         assert!(eval_result.result.is_ok());
         assert!(eval_result.trace.is_some());
-        
+
         // Check that the trace contains labeled rules
         let trace = eval_result.trace.unwrap();
         let mut found_label = false;
@@ -1521,13 +1521,16 @@ driver.test. A **driver** passes the age test
                 }
             }
         }
-        assert!(found_label, "Should have found the driver.test label in trace");
+        assert!(
+            found_label,
+            "Should have found the driver.test label in trace"
+        );
     }
 
     #[test]
     fn test_dollar_label_reference_evaluation() {
         use runner::evaluator::evaluate_rule_set_with_trace;
-        
+
         let rules = r#"
 A **user** gets access
   if $admin is valid
@@ -1549,30 +1552,30 @@ manager. A **user** is manager
 
         let result = parse_rules(rules).unwrap();
         let eval_result = evaluate_rule_set_with_trace(&result, &admin_data);
-        
+
         assert!(eval_result.result.is_ok());
         let results = eval_result.result.unwrap();
         assert!(results["access"], "Admin should get access");
-        
+
         // Test with manager role
         let manager_data = json!({
             "user": {
                 "role": "manager"
             }
         });
-        
+
         let eval_result2 = evaluate_rule_set_with_trace(&result, &manager_data);
         assert!(eval_result2.result.is_ok());
         let results2 = eval_result2.result.unwrap();
         assert!(results2["access"], "Manager should get access");
-        
+
         // Test with neither role
         let user_data = json!({
             "user": {
                 "role": "user"
             }
         });
-        
+
         let eval_result3 = evaluate_rule_set_with_trace(&result, &user_data);
         assert!(eval_result3.result.is_ok());
         let results3 = eval_result3.result.unwrap();
@@ -1847,5 +1850,103 @@ A **driver** has taken the test in the time period
         } else {
             panic!("Expected comparison trace");
         }
+    }
+
+    #[test]
+    fn test_age_comparison_operators() {
+        // Test older than operator
+        let rule_text = r#"
+        A **driver** is allowed to drive
+          if the __date_of_birth__ of the **driver** is older than 18 years.
+        "#;
+
+        let rule_set = parse_rules(rule_text).unwrap();
+
+        // Test driver who is 24 years old (allowed to drive)
+        let json_driver = json!({
+            "driver": {
+                "date_of_birth": "2000-01-01"
+            }
+        });
+        let (results_driver, _trace) = evaluate_rule_set(&rule_set, &json_driver).unwrap();
+        assert!(results_driver["allowed to drive"]);
+
+        // Test young driver who is 16 years old (not allowed to drive)
+        let json_young_driver = json!({
+            "driver": {
+                "date_of_birth": "2008-01-01"
+            }
+        });
+        let (results_young, _trace) = evaluate_rule_set(&rule_set, &json_young_driver).unwrap();
+        assert!(!results_young["allowed to drive"]);
+
+        // Test younger than operator
+        let rule_text_child = r#"
+        A **child** gets child discount
+          if the __date_of_birth__ of the **child** is younger than 12 years.
+        "#;
+
+        let rule_set_child = parse_rules(rule_text_child).unwrap();
+
+        // Test child who is 4 years old (gets child discount)
+        let json_child = json!({
+            "child": {
+                "date_of_birth": "2020-06-15"
+            }
+        });
+        let (results_child, _trace) = evaluate_rule_set(&rule_set_child, &json_child).unwrap();
+        assert!(results_child["child discount"]);
+
+        // Test teenager who is 14 years old (not a child for discount)
+        let json_teen = json!({
+            "child": {
+                "date_of_birth": "2010-01-01"
+            }
+        });
+        let (results_teen, _trace) = evaluate_rule_set(&rule_set_child, &json_teen).unwrap();
+        assert!(!results_teen["child discount"]);
+
+        // Test combined age rules with single golden rule
+        let rule_text_combined = r#"
+        A **person** gets age_appropriate_benefit
+          if the **person** is a senior citizen
+          or the **person** is a young child.
+
+        A **person** is a senior citizen
+          if the __date_of_birth__ of the **person** is older than 65 years.
+
+        A **person** is a young child
+          if the __date_of_birth__ of the **person** is younger than 5 years.
+        "#;
+
+        let rule_set_combined = parse_rules(rule_text_combined).unwrap();
+
+        // Test senior who is 74 years old (gets benefit)
+        let json_senior = json!({
+            "person": {
+                "date_of_birth": "1950-03-20"
+            }
+        });
+        let (results_senior, _trace) = evaluate_rule_set(&rule_set_combined, &json_senior).unwrap();
+        assert!(results_senior["age_appropriate_benefit"]);
+
+        // Test toddler who is 3 years old (gets benefit)
+        let json_toddler = json!({
+            "person": {
+                "date_of_birth": "2021-06-15"
+            }
+        });
+        let (results_toddler, _trace) =
+            evaluate_rule_set(&rule_set_combined, &json_toddler).unwrap();
+        assert!(results_toddler["age_appropriate_benefit"]);
+
+        // Test middle-aged person who is 40 years old (no benefit)
+        let json_middle = json!({
+            "person": {
+                "date_of_birth": "1984-03-20"
+            }
+        });
+        let (results_middle, _trace) = evaluate_rule_set(&rule_set_combined, &json_middle).unwrap();
+        assert!(!results_middle["age_appropriate_benefit"]);
     }
 }

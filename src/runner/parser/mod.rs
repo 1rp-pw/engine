@@ -446,6 +446,8 @@ fn parse_comparison_operator(pair: Pair<Rule>) -> Result<ComparisonOperator, Rul
         "is empty" => Ok(ComparisonOperator::IsEmpty),
         "is not empty" => Ok(ComparisonOperator::IsNotEmpty),
         "is within" => Ok(ComparisonOperator::Within),
+        "is older than" => Ok(ComparisonOperator::OlderThan),
+        "is younger than" => Ok(ComparisonOperator::YoungerThan),
         _ => Err(RuleError::ParseError(format!(
             "Unknown operator: {}",
             pair.as_str()
@@ -499,6 +501,8 @@ fn parse_regular_property_condition(
             "is empty" => ComparisonOperator::IsEmpty,
             "is not empty" => ComparisonOperator::IsNotEmpty,
             "is within" => ComparisonOperator::Within,
+            "is older than" => ComparisonOperator::OlderThan,
+            "is younger than" => ComparisonOperator::YoungerThan,
             _ => {
                 return Err(RuleError::ParseError(format!(
                     "Unknown operator: {}",
@@ -848,7 +852,7 @@ fn parse_duration(pair: Pair<Rule>) -> Result<RuleValue, RuleError> {
         amount.ok_or_else(|| RuleError::ParseError("Missing duration amount".to_string()))?;
     let unit = unit.ok_or_else(|| RuleError::ParseError("Missing duration unit".to_string()))?;
 
-    let duration = Duration::new(amount, unit).normalize();
+    let duration = Duration::new(amount, unit);
     Ok(RuleValue::Duration(duration))
 }
 

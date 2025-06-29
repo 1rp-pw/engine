@@ -5,14 +5,15 @@ mod tests {
         compare_contains, compare_dates_earlier, compare_dates_later, compare_equal,
         compare_in_list, compare_is_empty, compare_is_not_empty, compare_not_equal,
         compare_not_in_list, compare_numbers_gt, compare_numbers_gte, compare_numbers_lt,
-        compare_numbers_lte, convert_json_to_rule_value, evaluate_comparison_condition,
-        evaluate_rule, evaluate_rule_set, evaluate_rule_set_with_trace, evaluate_rule_with_trace,
-        extract_value_from_json, find_effective_selector,
+        compare_numbers_lte, compare_older_than, compare_younger_than, convert_json_to_rule_value,
+        evaluate_comparison_condition, evaluate_rule, evaluate_rule_set,
+        evaluate_rule_set_with_trace, evaluate_rule_with_trace, extract_value_from_json,
+        find_effective_selector,
     };
     use crate::runner::model::{
         ComparisonCondition, ComparisonOperator, Condition, ConditionGroup, ConditionOperator,
-        PositionedValue, PropertyChainElement, PropertyPath, Rule, RuleReferenceCondition, RuleSet,
-        RuleValue, TimeUnit,
+        Duration, PositionedValue, PropertyChainElement, PropertyPath, Rule,
+        RuleReferenceCondition, RuleSet, RuleValue, TimeUnit,
     };
     use crate::runner::parser::parse_rules;
     use chrono::NaiveDate;
@@ -68,6 +69,59 @@ mod tests {
         let missing = RuleValue::String("orange".to_string());
         assert_eq!(compare_in_list(&missing, &list).unwrap(), false);
         assert_eq!(compare_not_in_list(&missing, &list).unwrap(), true);
+    }
+
+    #[test]
+    fn test_age_comparisons() {
+        // Get today's date for relative calculations
+        let today = chrono::Utc::now().naive_utc().date();
+
+        // Create test dates relative to today
+        // Someone who is 75 years old (born 75 years ago)
+        let old_date = RuleValue::Date(today - chrono::Duration::days(75 * 365));
+        // Someone who is 3 years old (born 3 years ago)
+        let young_date = RuleValue::Date(today - chrono::Duration::days(3 * 365));
+        // Someone who is 19 years old (born 19 years ago)
+        let teen_date = RuleValue::Date(today - chrono::Duration::days(19 * 365));
+
+        let eighteen_years = RuleValue::Duration(Duration::new(18.0, TimeUnit::Years));
+        let sixty_five_years = RuleValue::Duration(Duration::new(65.0, TimeUnit::Years));
+        let five_years = RuleValue::Duration(Duration::new(5.0, TimeUnit::Years));
+
+        // Test older than
+        assert_eq!(
+            compare_older_than(&old_date, &sixty_five_years).unwrap(),
+            true
+        ); // 75 > 65
+        assert_eq!(
+            compare_older_than(&teen_date, &eighteen_years).unwrap(),
+            true
+        ); // 19 > 18
+        assert_eq!(compare_older_than(&young_date, &five_years).unwrap(), false); // 3 < 5
+
+        // Test younger than
+        assert_eq!(
+            compare_younger_than(&young_date, &five_years).unwrap(),
+            true
+        ); // 3 < 5
+        assert_eq!(
+            compare_younger_than(&teen_date, &eighteen_years).unwrap(),
+            false
+        ); // 19 > 18
+        assert_eq!(
+            compare_younger_than(&old_date, &sixty_five_years).unwrap(),
+            false
+        ); // 75 > 65
+
+        // Test with string dates
+        let date_str = RuleValue::String("2010-06-15".to_string());
+        let twelve_years = RuleValue::Duration(Duration::new(12.0, TimeUnit::Years));
+
+        assert_eq!(compare_older_than(&date_str, &twelve_years).unwrap(), true);
+        assert_eq!(
+            compare_younger_than(&date_str, &eighteen_years).unwrap(),
+            true
+        );
     }
 
     // New comprehensive tests

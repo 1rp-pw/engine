@@ -173,6 +173,8 @@ pub enum ComparisonOperator {
     IsEmpty,
     IsNotEmpty,
     Within,
+    OlderThan,
+    YoungerThan,
 }
 
 impl fmt::Display for ComparisonOperator {
@@ -198,6 +200,8 @@ impl fmt::Display for ComparisonOperator {
             ComparisonOperator::IsEmpty => write!(f, "is empty"),
             ComparisonOperator::IsNotEmpty => write!(f, "is not empty"),
             ComparisonOperator::Within => write!(f, "is within"),
+            ComparisonOperator::OlderThan => write!(f, "is older than"),
+            ComparisonOperator::YoungerThan => write!(f, "is younger than"),
         }
     }
 }
@@ -225,6 +229,8 @@ impl ComparisonOperator {
             ComparisonOperator::IsEmpty => vec!["is empty"],
             ComparisonOperator::IsNotEmpty => vec!["is not empty"],
             ComparisonOperator::Within => vec!["is within"],
+            ComparisonOperator::OlderThan => vec!["is older than"],
+            ComparisonOperator::YoungerThan => vec!["is younger than"],
         }
     }
 }

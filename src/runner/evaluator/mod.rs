@@ -1931,6 +1931,10 @@ fn evaluate_comparison(
 
         // Duration comparison
         Within => compare_within(left, right),
+
+        // Age comparisons
+        OlderThan => compare_older_than(left, right),
+        YoungerThan => compare_younger_than(left, right),
     }
 }
 
@@ -2174,6 +2178,54 @@ fn compare_within(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleError
         }
         _ => Err(RuleError::TypeError(
             "Within operator requires a duration as the right operand".to_string(),
+        )),
+    }
+}
+
+pub fn compare_older_than(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleError> {
+    match right {
+        RuleValue::Duration(duration) => {
+            // Convert date of birth to a date
+            let date_of_birth = coerce_to_date(left).ok_or_else(|| {
+                RuleError::TypeError(format!(
+                    "Older than operator requires a date of birth, got {:?}",
+                    left
+                ))
+            })?;
+
+            let now = chrono::Utc::now().naive_utc().date();
+            let age_days = (now - date_of_birth).num_days() as f64;
+            let duration_days = duration.to_seconds() / 86400.0;
+
+            // Person is older than the duration if their age is greater than the duration
+            Ok(age_days > duration_days)
+        }
+        _ => Err(RuleError::TypeError(
+            "Older than operator requires a duration as the right operand".to_string(),
+        )),
+    }
+}
+
+pub fn compare_younger_than(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleError> {
+    match right {
+        RuleValue::Duration(duration) => {
+            // Convert date of birth to a date
+            let date_of_birth = coerce_to_date(left).ok_or_else(|| {
+                RuleError::TypeError(format!(
+                    "Younger than operator requires a date of birth, got {:?}",
+                    left
+                ))
+            })?;
+
+            let now = chrono::Utc::now().naive_utc().date();
+            let age_days = (now - date_of_birth).num_days() as f64;
+            let duration_days = duration.to_seconds() / 86400.0;
+
+            // Person is younger than the duration if their age is less than the duration
+            Ok(age_days < duration_days)
+        }
+        _ => Err(RuleError::TypeError(
+            "Younger than operator requires a duration as the right operand".to_string(),
         )),
     }
 }
