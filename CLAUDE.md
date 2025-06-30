@@ -62,7 +62,7 @@ This is a Policy Engine that evaluates business rules written in a custom DSL ag
 3. **HTTP API** (`main.rs`) - Axum server exposing POST endpoint for rule evaluation
 
 ### Key Design Patterns
-- **Grammar Composition**: Multiple `.pest` files are combined at build time via `build.rs`, never alter grammar.pest directly
+- **Grammar Composition**: Multiple `.pest` files are combined at build time via `build.rs`, always ignore grammar.pest since it's compiled at build
 - **Error Tracing**: All evaluations can produce detailed execution traces for debugging
 - **Property Transformation**: Automatic conversion between snake_case and camelCase for JSON access
 - **Caching**: Performance optimizations through selector mapping in RuleSet
@@ -80,6 +80,8 @@ A **Order** gets expedited_shipping
 
 ### Testing Approach
 Tests are embedded in `src/lib.rs` covering all operators, property access patterns, and edge cases. When adding new operators or functionality, follow the existing test pattern with both positive and negative test cases.
+
+**Important**: Always add tests to the relevant `lib.rs` file in the module where the functionality is implemented, rather than creating separate test files. This keeps tests close to the code they're testing and maintains consistency with the existing test structure.
 
 ## Testcontainer Integration
 

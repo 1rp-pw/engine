@@ -1363,48 +1363,100 @@ fn resolve_property_path<'a>(
     // For "__date of birth__ of **person** of **driving test**", we get properties: ["person", "date of birth"]
     // And we traverse: driving test -> person -> date of birth
     for property in properties_to_process.iter() {
-        let mut found_property = None;
-        let mut actual_property_name = property.clone();
+        // Check if the property contains dots (nested navigation)
+        if property.contains('.') {
+            // Handle nested property path (e.g., "advisor.agreement")
+            let nested_parts: Vec<&str> = property.split('.').collect();
+            for part in nested_parts {
+                let mut found_property = None;
+                let mut actual_property_name = part.to_string();
 
-        if let Some(prop_value) = current_value.get(property) {
-            found_property = Some(prop_value);
-        } else if let Some(prop_value) = get_json_value_insensitive(current_value, property) {
-            found_property = Some(prop_value);
-            // Find the actual property name in the JSON for path tracking
-            if let Some(obj) = current_value.as_object() {
-                for (key, _) in obj {
-                    if names_match(property, key) {
-                        actual_property_name = key.clone();
-                        break;
+                if let Some(prop_value) = current_value.get(part) {
+                    found_property = Some(prop_value);
+                } else if let Some(prop_value) = get_json_value_insensitive(current_value, part) {
+                    found_property = Some(prop_value);
+                    // Find the actual property name in the JSON for path tracking
+                    if let Some(obj) = current_value.as_object() {
+                        for (key, _) in obj {
+                            if names_match(part, key) {
+                                actual_property_name = key.clone();
+                                break;
+                            }
+                        }
                     }
+                } else {
+                    let transformed_property = transform_property_name(part);
+                    if let Some(prop_value) = current_value.get(&transformed_property) {
+                        found_property = Some(prop_value);
+                        actual_property_name = transformed_property.clone();
+                    } else if let Some(prop_value) =
+                        get_json_value_insensitive(current_value, &transformed_property)
+                    {
+                        found_property = Some(prop_value);
+                        // Find the actual property name in the JSON for path tracking
+                        if let Some(obj) = current_value.as_object() {
+                            for (key, _) in obj {
+                                if names_match(&transformed_property, key) {
+                                    actual_property_name = key.clone();
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if let Some(prop_value) = found_property {
+                    current_value = prop_value;
+                    path_parts.push(actual_property_name);
+                } else {
+                    return Ok((None, format!("$.{}", path_parts.join("."))));
                 }
             }
         } else {
-            let transformed_property = transform_property_name(property);
-            if let Some(prop_value) = current_value.get(&transformed_property) {
+            // Handle regular property (no dots)
+            let mut found_property = None;
+            let mut actual_property_name = property.clone();
+
+            if let Some(prop_value) = current_value.get(property) {
                 found_property = Some(prop_value);
-                actual_property_name = transformed_property.clone();
-            } else if let Some(prop_value) =
-                get_json_value_insensitive(current_value, &transformed_property)
-            {
+            } else if let Some(prop_value) = get_json_value_insensitive(current_value, property) {
                 found_property = Some(prop_value);
                 // Find the actual property name in the JSON for path tracking
                 if let Some(obj) = current_value.as_object() {
                     for (key, _) in obj {
-                        if names_match(&transformed_property, key) {
+                        if names_match(property, key) {
                             actual_property_name = key.clone();
                             break;
                         }
                     }
                 }
+            } else {
+                let transformed_property = transform_property_name(property);
+                if let Some(prop_value) = current_value.get(&transformed_property) {
+                    found_property = Some(prop_value);
+                    actual_property_name = transformed_property.clone();
+                } else if let Some(prop_value) =
+                    get_json_value_insensitive(current_value, &transformed_property)
+                {
+                    found_property = Some(prop_value);
+                    // Find the actual property name in the JSON for path tracking
+                    if let Some(obj) = current_value.as_object() {
+                        for (key, _) in obj {
+                            if names_match(&transformed_property, key) {
+                                actual_property_name = key.clone();
+                                break;
+                            }
+                        }
+                    }
+                }
             }
-        }
 
-        if let Some(prop_value) = found_property {
-            current_value = prop_value;
-            path_parts.push(actual_property_name);
-        } else {
-            return Ok((None, format!("$.{}", path_parts.join("."))));
+            if let Some(prop_value) = found_property {
+                current_value = prop_value;
+                path_parts.push(actual_property_name);
+            } else {
+                return Ok((None, format!("$.{}", path_parts.join("."))));
+            }
         }
     }
 
@@ -2116,7 +2168,38 @@ fn compare_not_in_list(left: &RuleValue, right: &RuleValue) -> Result<bool, Rule
 fn compare_contains(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleError> {
     match left {
         RuleValue::String(l) => match right {
-            RuleValue::String(r) => Ok(l.to_lowercase().contains(&r.to_lowercase())),
+            RuleValue::String(r) => {
+                // Convert to lowercase for case-insensitive comparison
+                let haystack = l.to_lowercase();
+                let needle = r.to_lowercase();
+
+                // Check if the needle appears as a whole word
+                // We need to check if the match is at a word boundary
+                let mut start = 0;
+                while let Some(pos) = haystack[start..].find(&needle) {
+                    let absolute_pos = start + pos;
+                    let before_is_boundary = absolute_pos == 0
+                        || !haystack
+                            .chars()
+                            .nth(absolute_pos - 1)
+                            .unwrap_or(' ')
+                            .is_alphanumeric();
+                    let after_pos = absolute_pos + needle.len();
+                    let after_is_boundary = after_pos >= haystack.len()
+                        || !haystack
+                            .chars()
+                            .nth(after_pos)
+                            .unwrap_or(' ')
+                            .is_alphanumeric();
+
+                    if before_is_boundary && after_is_boundary {
+                        return Ok(true);
+                    }
+
+                    start = absolute_pos + 1;
+                }
+                Ok(false)
+            }
             _ => Err(RuleError::TypeError(
                 "String contains only works with string values".to_string(),
             )),

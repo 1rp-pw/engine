@@ -15,4 +15,63 @@ rule_outcome = {
   outcome_verb? ~ outcome
 }
 rule_name = @{(!(". " | " and " | ".") ~ ANY)+}
-outcome_verb = { "gets" | "passes" | "is" | "has" | "receives" | "qualifies for" | "meets" | "satisfies" }
+outcome_verb = { 
+    "gets" | 
+    "passes" | 
+    "is" | 
+    "has" | 
+    "receives" | 
+    "qualifies for" | 
+    "meets" | 
+    "satisfies" |
+    "achieves" |
+    "attains" |
+    "earns" |
+    "gains" |
+    "obtains" |
+    "secures" |
+    "acquires" |
+    "deserves" |
+    "merits" |
+    "warrants" |
+    "requires" |
+    "needs" |
+    "completes" |
+    "fulfills" |
+    "demonstrates" |
+    "shows" |
+    "proves" |
+    "establishes" |
+    "maintains" |
+    "holds" |
+    "possesses" |
+    "displays" |
+    "exhibits" |
+    "presents" |
+    "provides" |
+    "supplies" |
+    "delivers" |
+    "submits" |
+    "confirms" |
+    "validates" |
+    "verifies" |
+    "supports" |
+    "justifies" |
+    "ensures" |
+    "guarantees" |
+    "undergoes" |
+    "experiences" |
+    "encounters" |
+    "faces" |
+    "enjoys" |
+    "benefits from" |
+    "suffers" |
+    "lacks" |
+    "misses" |
+    "fails" |
+    "succeeds in" |
+    "excels at" |
+    "reaches" |
+    "arrives at" |
+    "comes to"
+}

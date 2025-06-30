@@ -1054,7 +1054,7 @@ tester. A **driver** passes the age test
         ];
 
         for label in valid_labels {
-            println!("Testing label: '{}'", label);
+            //println!("Testing label: '{}'", label);
             // The label should match the pattern: alphanumeric characters with dots, ending with ". "
             assert!(label.ends_with(". "), "Label should end with '. '");
             let without_ending = &label[..label.len() - 2];
@@ -1251,7 +1251,10 @@ admin. A **user** is admin
         let rule = &rule_set.rules[0];
         match &rule.conditions[0].condition {
             crate::runner::model::Condition::Comparison(comp) => {
-                assert_eq!(comp.operator, crate::runner::model::ComparisonOperator::OlderThan);
+                assert_eq!(
+                    comp.operator,
+                    crate::runner::model::ComparisonOperator::OlderThan
+                );
                 // Check the value is a duration
                 match &comp.value.value {
                     crate::runner::model::RuleValue::Duration(d) => {

@@ -34,8 +34,28 @@ pub fn find_referenced_outcomes(rules: &[Rule]) -> std::collections::HashSet<Str
                         {
                             // Common stop words that shouldn't be used for matching
                             let stop_words: std::collections::HashSet<&str> = [
-                                "the", "a", "an", "is", "are", "was", "were", "has", "have", "had",
-                                "gets", "passes", "of",
+                                "the",
+                                "a",
+                                "an",
+                                "is",
+                                "are",
+                                "was",
+                                "were",
+                                "has",
+                                "have",
+                                "had",
+                                "gets",
+                                "passes",
+                                "of",
+                                "meets",
+                                "qualifies",
+                                "for",
+                                "satisfies",
+                                "achieves",
+                                "completes",
+                                "fulfills",
+                                "obtains",
+                                "receives",
                             ]
                             .iter()
                             .cloned()
@@ -102,9 +122,22 @@ pub fn find_global_rule(rules: &[Rule]) -> Result<&Rule, RuleError> {
     match globals.len() {
         1 => Ok(globals[0]),
         0 => Err(RuleError::ParseError("No global rule found".to_string())),
-        _ => Err(RuleError::ParseError(
-            "Multiple global rules found".to_string(),
-        )),
+        _ => {
+            let rule_list: Vec<String> = globals
+                .iter()
+                .map(|r| {
+                    if let Some(label) = &r.label {
+                        format!("'{}' ({})", label, r.outcome)
+                    } else {
+                        format!("'{}'", r.outcome)
+                    }
+                })
+                .collect();
+            Err(RuleError::ParseError(format!(
+                "Multiple global rules found: {}. There should be only one golden rule that is not referenced by other rules.",
+                rule_list.join(", ")
+            )))
+        }
     }
 }
 

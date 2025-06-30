@@ -11,12 +11,12 @@ fn main() {
     let mut combined = String::new();
 
     for path in &fragments {
-        let contents = read_to_string(path).expect(&format!("Failed to read {}", path));
+        let contents = read_to_string(path).unwrap_or_else(|_| panic!("Failed to read {path}"));
         combined.push_str(&contents);
         combined.push('\n');
 
         // Tell Cargo to rerun the build script if this fragment file changes
-        println!("cargo:rerun-if-changed={}", path);
+        println!("cargo:rerun-if-changed={path}");
     }
 
     write("pests/grammar.pest", combined).expect("Failed to write combined grammar");

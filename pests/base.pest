@@ -32,4 +32,6 @@ reference_name = @{ (!("." | "\n") ~ ANY)+ }
 length_of_expr = { ("the")? ~ "length" ~ "of" ~ property_access }
 number_of_expr = { ("the")? ~ "number" ~ "of" ~ property_access }
 
-outcome = @{ (!("if" | ".") ~ ANY)+ }
+// Use a non-greedy match that stops at a period or when we see whitespace followed by "if"
+outcome = @{ outcome_char+ }
+outcome_char = { !("." | (WHITESPACE+ ~ "if" ~ WHITESPACE)) ~ ANY }
