@@ -1054,7 +1054,7 @@ tester. A **driver** passes the age test
         ];
 
         for label in valid_labels {
-            println!("Testing label: '{}'", label);
+            //println!("Testing label: '{}'", label);
             // The label should match the pattern: alphanumeric characters with dots, ending with ". "
             assert!(label.ends_with(". "), "Label should end with '. '");
             let without_ending = &label[..label.len() - 2];
