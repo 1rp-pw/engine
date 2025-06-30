@@ -293,12 +293,12 @@ impl Duration {
     // Auto-reduce to appropriate unit
     // pub fn normalize(self) -> Self {
     //     let seconds = self.to_seconds();
-    // 
+    //
     //     // If less than a day, reduce to seconds for precision
     //     if seconds < 86400.0 {
     //         return Duration::new(seconds, TimeUnit::Seconds);
     //     }
-    // 
+    //
     //     // Otherwise, reduce to days
     //     Duration::new(seconds / 86400.0, TimeUnit::Days)
     // }

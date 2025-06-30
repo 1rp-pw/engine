@@ -1345,20 +1345,26 @@ A **user** is valid if __age__ of **user** is greater than 18
         // Test that "is valid" works (single outcome_verb "is" + outcome "valid")
         let rule1 = r#"A **student** is valid
             if the __criminal_background_clear__ of the **background.criminal** in the **student** is equal to true."#;
-        
+
         let result1 = parse_rules(rule1);
-        assert!(result1.is_ok(), "Rule with 'is valid' should parse successfully");
-        
+        assert!(
+            result1.is_ok(),
+            "Rule with 'is valid' should parse successfully"
+        );
+
         let rule_set1 = result1.unwrap();
         assert_eq!(rule_set1.rules[0].outcome, "valid");
 
         // Test that "has passed background verification" now works correctly
         let rule2 = r#"A **student** has passed background verification
             if the __criminal_background_clear__ of the **background.criminal** in the **student** is equal to true."#;
-        
+
         let result2 = parse_rules(rule2);
-        assert!(result2.is_ok(), "Rule with 'has passed background verification' should parse successfully");
-        
+        assert!(
+            result2.is_ok(),
+            "Rule with 'has passed background verification' should parse successfully"
+        );
+
         let rule_set2 = result2.unwrap();
         assert_eq!(rule_set2.rules[0].outcome, "passed background verification");
     }
@@ -1386,14 +1392,22 @@ A **user** is valid if __age__ of **user** is greater than 18
 
         for (rule_text, expected_outcome) in test_cases {
             let result = parse_rules(rule_text);
-            assert!(result.is_ok(), "Failed to parse rule: {}\nError: {:?}", rule_text, result);
-            
+            assert!(
+                result.is_ok(),
+                "Failed to parse rule: {}\nError: {:?}",
+                rule_text,
+                result
+            );
+
             let rule_set = result.unwrap();
-            assert_eq!(rule_set.rules[0].outcome, expected_outcome, 
-                "Incorrect outcome for rule: {}", rule_text);
+            assert_eq!(
+                rule_set.rules[0].outcome, expected_outcome,
+                "Incorrect outcome for rule: {}",
+                rule_text
+            );
         }
     }
-    
+
     #[test]
     fn test_outcome_with_if_keyword() {
         // Test that words containing "if" now work correctly after the fix
@@ -1410,23 +1424,34 @@ A **user** is valid if __age__ of **user** is greater than 18
             ("A **student** has passed verification\n  if __age__ of **student** is greater than 18.", "passed verification"),
             ("A **student** gets certificate_of_qualification\n  if __score__ of **student** is greater than 90.", "certificate_of_qualification"),
         ];
-        
+
         for (rule_text, expected_outcome) in test_cases {
             let result = parse_rules(rule_text);
-            assert!(result.is_ok(), "Failed to parse rule: {}\nError: {:?}", rule_text, result);
-            
+            assert!(
+                result.is_ok(),
+                "Failed to parse rule: {}\nError: {:?}",
+                rule_text,
+                result
+            );
+
             let rule_set = result.unwrap();
-            assert_eq!(rule_set.rules[0].outcome, expected_outcome, 
-                "Incorrect outcome for rule: {}", rule_text);
+            assert_eq!(
+                rule_set.rules[0].outcome, expected_outcome,
+                "Incorrect outcome for rule: {}",
+                rule_text
+            );
         }
-        
+
         // Test edge case: outcome ending with "if" should still work
         let edge_case = "A **user** gets elif if __test__ of **user** is equal to true.";
         let result = parse_rules(edge_case);
-        assert!(result.is_ok(), "Failed to parse rule with 'if' at end of outcome: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Failed to parse rule with 'if' at end of outcome: {:?}",
+            result
+        );
         assert_eq!(result.unwrap().rules[0].outcome, "elif");
     }
-
 
     #[test]
     fn test_username_and_password_validation() {
@@ -2038,283 +2063,283 @@ A **driver** has taken the test in the time period
         assert!(!results_middle["age_appropriate_benefit"]);
     }
 
-//     #[test]
-//     fn test_long_university_admission_policy() {
-//         // This test reproduces the issue with line 123 parsing error
-//         let rules = r#"# University Admission Policy - Comprehensive Example
-// # This policy demonstrates all features of the policy language system
-// # Covers student admission to various programs with complex requirements
-//
-// # Golden Rule - Entry point for policy evaluation
-// A **student** gets university admission
-//   if the **student** meets basic eligibility requirements
-//   and §academic.standards is valid
-//   and the **student** qualifies for their chosen program
-//   and $financial.verification is satisfied
-//   and the **student** has completed application requirements
-//   and the **student** has passed background verification.
-//
-// # Basic eligibility with multiple comparison types
-// A **student** meets basic eligibility requirements
-//   if the __age__ of the **applicant** in the **student** is at least 16
-//   and the __age__ of the **applicant** in the **student** is no more than 65
-//   and the __citizenship status__ of the **applicant** in the **student** contains "eligible"
-//   and the __application date__ of the **submission** in the **student** is later than date(2025-01-01)
-//   and the __application date__ of the **submission** in the **student** is within 90 days
-//   and the __country of origin__ of the **applicant** in the **student** is not in ["restricted_country_1", "restricted_country_2"].
-//
-// # Labeled rule for academic standards
-// academic.standards. A **student** meets academic standards
-//   if the **student** has sufficient academic background
-//   and the __cumulative gpa__ of the **transcripts.undergraduate** in the **student** is greater than 2.5
-//   and the __graduation date__ of the **previous education** in the **student** is earlier than 2030-12-31
-//   and the __english proficiency verified__ of the **language tests** in the **student** is equal to true.
-//
-// # Academic background verification with nested objects
-// A **student** has sufficient academic background
-//   if the __completion status__ of the **transcripts.undergraduate.degree** is the same as "completed"
-//   and the __credit hours__ of the **transcripts.undergraduate** in the **student** is at least 120
-//   and the __math requirement met__ of the **prerequisites** in the **student** is not the same as false
-//   and the __science requirement met__ of the **prerequisites** in the **student** is equal to true.
-//
-// # Program-specific qualification rules
-// A **student** qualifies for their chosen program
-//   if the **student** meets undergraduate program requirements
-//   or the **student** meets graduate program requirements
-//   or the **student** meets doctoral program requirements.
-//
-// A **student** meets undergraduate program requirements
-//   if the __program type__ of the **application.program** is in ["bachelor_arts", "bachelor_science", "bachelor_engineering"]
-//   and the __sat score__ of the **standardized tests** in the **student** is at least 1200
-//   and the __high school gpa__ of the **transcripts.secondary** in the **student** is greater than 3.0
-//   and §extracurricular.activity succeeds.
-//
-// A **student** meets graduate program requirements
-//   if the __program type__ of the **application.program** is in ["master_arts", "master_science", "master_business"]
-//   and the __gre score__ of the **standardized tests** in the **student** is at least 310
-//   and the __undergraduate gpa__ of the **transcripts.undergraduate** in the **student** is greater than 3.25
-//   and the **student** has relevant work experience
-//   and $research.experience is approved.
-//
-// A **student** meets doctoral program requirements
-//   if the __program type__ of the **application.program** is in ["phd", "doctorate"]
-//   and the __gre score__ of the **standardized tests** in the **student** is at least 320
-//   and the __masters gpa__ of the **transcripts.graduate** in the **student** is at least 3.5
-//   and the **student** has published research
-//   and §advisor.approval is certified.
-//
-// # Work experience verification
-// A **student** has relevant work experience
-//   if the __years of experience__ of the **employment.history** in the **student** is at least 2
-//   and the __field relevance__ of the **employment.current** in the **student** contains "related"
-//   and the __employment verification__ of the **employment.references** in the **student** is equal to true.
-//
-// # Research experience verification
-// research.experience. A **student** has research experience
-//   if the __research projects count__ of the **academic.research** in the **student** is greater than 1
-//   and the __publication count__ of the **academic.publications** in the **student** is at least 1
-//   and the __conference presentations__ of the **academic.conferences** in the **student** is no more than 10.
-//
-// # Extracurricular activities
-// extracurricular.activity. A **student** has extracurricular involvement
-//   if the __volunteer hours__ of the **community.service** in the **student** is at least 50
-//   or the __leadership roles__ of the **organizations** in the **student** is greater than 0
-//   or the __sports participation__ of the **athletics** in the **student** is equal to true.
-//
-// # Published research verification
-// A **student** has published research
-//   if the __peer reviewed papers__ of the **academic.publications__ in the **student** is at least 3
-//   and the __citation count__ of the **academic.impact** in the **student** is greater than 10
-//   and the __first author papers__ of the **academic.publications** in the **student** is at least 1.
-//
-// # Advisor approval for doctoral programs
-// advisor.approval. A **student** has advisor approval
-//   if the __faculty sponsor confirmed__ of the **advisor.agreement** in the **student** is not the same as false
-//   and the __research alignment__ of the **advisor.fit__ in the **student** contains "excellent"
-//   and the __funding availability__ of the **advisor.resources** in the **student** is equal to true.
-//
-// # Financial verification
-// financial.verification. A **student** meets financial requirements
-//   if the **student** has proof of financial support
-//   and the __tuition payment method__ of the **finances.payment** in the **student** is in ["scholarship", "loan", "self_pay", "employer_sponsored"]
-//   and the __financial aid processed__ of the **finances.aid** in the **student** is the same as true.
-//
-// A **student** has proof of financial support
-//   if the __bank balance__ of the **finances.accounts** in the **student** is at least 50000
-//   or the __scholarship amount__ of the **finances.awards** in the **student** is greater than 25000
-//   or the __loan approval__ of the **finances.loans** in the **student** is equal to true.
-//
-// # Application requirements completion
-// A **student** has completed application requirements
-//   if the **student** has submitted all documents
-//   and the **student** has paid application fees
-//   and the __interview completed__ of the **admission.process** in the **student** is not the same as false
-//   and the __recommendation letters count__ of the **references** in the **student** is at least 3.
-//
-// A **student** has submitted all documents
-//   if the __transcripts submitted__ of the **documents.academic** in the **student** is equal to true
-//   and the __personal statement submitted__ of the **documents.essays** in the **student** is equal to true
-//   and the __test scores submitted__ of the **documents.testing** in the **student** is equal to true
-//   and the __application form completed__ of the **documents.forms** in the **student** is the same as true.
-//
-// A **student** has paid application fees
-//   if the __application fee paid__ of the **finances.fees** in the **student** is equal to true
-//   and the __payment date__ of the **finances.payment** in the **student** is within 30 days
-//   and the __payment amount__ of the **finances.payment** in the **student** is at least 75.
-//
-// # Background verification
-// A **student** has passed background verification
-//   if the __criminal background clear__ of the **background.criminal** in the **student** is equal to true
-//   and the __academic integrity violations__ of the **background.academic** in the **student** is equal to false
-//   and the __visa status valid__ of the **background.immigration** in the **student** is not the same as false
-//   and the __health clearance__ of the **background.medical** in the **student** contains "approved"
-//   and the __emergency contact provided__ of the **background.contacts** in the **student** is the same as true."#;
-//
-//         // This should parse successfully
-//         let result = parse_rules(rules);
-//         if let Err(ref e) = result {
-//             // Print the rules with line numbers to debug
-//             for (i, line) in rules.lines().enumerate() {
-//                 println!("{:3}: {}", i + 1, line);
-//                 if i + 1 == 83 {
-//                     println!("     {}", "^".repeat(77).as_str());
-//                 }
-//             }
-//         }
-//         assert!(result.is_ok(), "Failed to parse university admission rules: {:?}", result);
-//
-//         // Test with sample data
-//         let json_data = json!({
-//             "student": {
-//                 "applicant": {
-//                     "age": 20,
-//                     "citizenship_status": "eligible",
-//                     "country_of_origin": "USA"
-//                 },
-//                 "submission": {
-//                     "application_date": "2025-06-01"
-//                 },
-//                 "transcripts": {
-//                     "undergraduate": {
-//                         "cumulative_gpa": 3.5,
-//                         "degree": {
-//                             "completion_status": "completed"
-//                         },
-//                         "credit_hours": 120
-//                     }
-//                 },
-//                 "previous_education": {
-//                     "graduation_date": "2024-05-15"
-//                 },
-//                 "language_tests": {
-//                     "english_proficiency_verified": true
-//                 },
-//                 "prerequisites": {
-//                     "math_requirement_met": true,
-//                     "science_requirement_met": true
-//                 },
-//                 "application": {
-//                     "program": {
-//                         "program_type": "master_science"
-//                     }
-//                 },
-//                 "standardized_tests": {
-//                     "gre_score": 320
-//                 },
-//                 "employment": {
-//                     "history": {
-//                         "years_of_experience": 3
-//                     },
-//                     "current": {
-//                         "field_relevance": "directly_related"
-//                     },
-//                     "references": {
-//                         "employment_verification": true
-//                     }
-//                 },
-//                 "academic": {
-//                     "research": {
-//                         "research_projects_count": 2
-//                     },
-//                     "publications": {
-//                         "publication_count": 2,
-//                         "peer_reviewed_papers": 4,
-//                         "first_author_papers": 2
-//                     },
-//                     "conferences": {
-//                         "conference_presentations": 3
-//                     },
-//                     "impact": {
-//                         "citation_count": 15
-//                     }
-//                 },
-//                 "community": {
-//                     "service": {
-//                         "volunteer_hours": 100
-//                     }
-//                 },
-//                 "finances": {
-//                     "accounts": {
-//                         "bank_balance": 60000
-//                     },
-//                     "payment": {
-//                         "tuition_payment_method": "self_pay",
-//                         "payment_date": "2025-06-01",
-//                         "payment_amount": 100
-//                     },
-//                     "fees": {
-//                         "application_fee_paid": true
-//                     },
-//                     "aid": {
-//                         "financial_aid_processed": true
-//                     }
-//                 },
-//                 "admission": {
-//                     "process": {
-//                         "interview_completed": true
-//                     }
-//                 },
-//                 "references": {
-//                     "recommendation_letters_count": 3
-//                 },
-//                 "documents": {
-//                     "academic": {
-//                         "transcripts_submitted": true
-//                     },
-//                     "essays": {
-//                         "personal_statement_submitted": true
-//                     },
-//                     "testing": {
-//                         "test_scores_submitted": true
-//                     },
-//                     "forms": {
-//                         "application_form_completed": true
-//                     }
-//                 },
-//                 "background": {
-//                     "criminal": {
-//                         "criminal_background_clear": true
-//                     },
-//                     "academic": {
-//                         "academic_integrity_violations": false
-//                     },
-//                     "immigration": {
-//                         "visa_status_valid": true
-//                     },
-//                     "medical": {
-//                         "health_clearance": "approved"
-//                     },
-//                     "contacts": {
-//                         "emergency_contact_provided": true
-//                     }
-//                 }
-//             }
-//         });
-//
-//         let rule_set = result.unwrap();
-//         let (results, _trace) = evaluate_rule_set(&rule_set, &json_data).unwrap();
-//         assert!(results["university admission"], "Student should get university admission");
-//     }
+    //     #[test]
+    //     fn test_long_university_admission_policy() {
+    //         // This test reproduces the issue with line 123 parsing error
+    //         let rules = r#"# University Admission Policy - Comprehensive Example
+    // # This policy demonstrates all features of the policy language system
+    // # Covers student admission to various programs with complex requirements
+    //
+    // # Golden Rule - Entry point for policy evaluation
+    // A **student** gets university admission
+    //   if the **student** meets basic eligibility requirements
+    //   and §academic.standards is valid
+    //   and the **student** qualifies for their chosen program
+    //   and $financial.verification is satisfied
+    //   and the **student** has completed application requirements
+    //   and the **student** has passed background verification.
+    //
+    // # Basic eligibility with multiple comparison types
+    // A **student** meets basic eligibility requirements
+    //   if the __age__ of the **applicant** in the **student** is at least 16
+    //   and the __age__ of the **applicant** in the **student** is no more than 65
+    //   and the __citizenship status__ of the **applicant** in the **student** contains "eligible"
+    //   and the __application date__ of the **submission** in the **student** is later than date(2025-01-01)
+    //   and the __application date__ of the **submission** in the **student** is within 90 days
+    //   and the __country of origin__ of the **applicant** in the **student** is not in ["restricted_country_1", "restricted_country_2"].
+    //
+    // # Labeled rule for academic standards
+    // academic.standards. A **student** meets academic standards
+    //   if the **student** has sufficient academic background
+    //   and the __cumulative gpa__ of the **transcripts.undergraduate** in the **student** is greater than 2.5
+    //   and the __graduation date__ of the **previous education** in the **student** is earlier than 2030-12-31
+    //   and the __english proficiency verified__ of the **language tests** in the **student** is equal to true.
+    //
+    // # Academic background verification with nested objects
+    // A **student** has sufficient academic background
+    //   if the __completion status__ of the **transcripts.undergraduate.degree** is the same as "completed"
+    //   and the __credit hours__ of the **transcripts.undergraduate** in the **student** is at least 120
+    //   and the __math requirement met__ of the **prerequisites** in the **student** is not the same as false
+    //   and the __science requirement met__ of the **prerequisites** in the **student** is equal to true.
+    //
+    // # Program-specific qualification rules
+    // A **student** qualifies for their chosen program
+    //   if the **student** meets undergraduate program requirements
+    //   or the **student** meets graduate program requirements
+    //   or the **student** meets doctoral program requirements.
+    //
+    // A **student** meets undergraduate program requirements
+    //   if the __program type__ of the **application.program** is in ["bachelor_arts", "bachelor_science", "bachelor_engineering"]
+    //   and the __sat score__ of the **standardized tests** in the **student** is at least 1200
+    //   and the __high school gpa__ of the **transcripts.secondary** in the **student** is greater than 3.0
+    //   and §extracurricular.activity succeeds.
+    //
+    // A **student** meets graduate program requirements
+    //   if the __program type__ of the **application.program** is in ["master_arts", "master_science", "master_business"]
+    //   and the __gre score__ of the **standardized tests** in the **student** is at least 310
+    //   and the __undergraduate gpa__ of the **transcripts.undergraduate** in the **student** is greater than 3.25
+    //   and the **student** has relevant work experience
+    //   and $research.experience is approved.
+    //
+    // A **student** meets doctoral program requirements
+    //   if the __program type__ of the **application.program** is in ["phd", "doctorate"]
+    //   and the __gre score__ of the **standardized tests** in the **student** is at least 320
+    //   and the __masters gpa__ of the **transcripts.graduate** in the **student** is at least 3.5
+    //   and the **student** has published research
+    //   and §advisor.approval is certified.
+    //
+    // # Work experience verification
+    // A **student** has relevant work experience
+    //   if the __years of experience__ of the **employment.history** in the **student** is at least 2
+    //   and the __field relevance__ of the **employment.current** in the **student** contains "related"
+    //   and the __employment verification__ of the **employment.references** in the **student** is equal to true.
+    //
+    // # Research experience verification
+    // research.experience. A **student** has research experience
+    //   if the __research projects count__ of the **academic.research** in the **student** is greater than 1
+    //   and the __publication count__ of the **academic.publications** in the **student** is at least 1
+    //   and the __conference presentations__ of the **academic.conferences** in the **student** is no more than 10.
+    //
+    // # Extracurricular activities
+    // extracurricular.activity. A **student** has extracurricular involvement
+    //   if the __volunteer hours__ of the **community.service** in the **student** is at least 50
+    //   or the __leadership roles__ of the **organizations** in the **student** is greater than 0
+    //   or the __sports participation__ of the **athletics** in the **student** is equal to true.
+    //
+    // # Published research verification
+    // A **student** has published research
+    //   if the __peer reviewed papers__ of the **academic.publications__ in the **student** is at least 3
+    //   and the __citation count__ of the **academic.impact** in the **student** is greater than 10
+    //   and the __first author papers__ of the **academic.publications** in the **student** is at least 1.
+    //
+    // # Advisor approval for doctoral programs
+    // advisor.approval. A **student** has advisor approval
+    //   if the __faculty sponsor confirmed__ of the **advisor.agreement** in the **student** is not the same as false
+    //   and the __research alignment__ of the **advisor.fit__ in the **student** contains "excellent"
+    //   and the __funding availability__ of the **advisor.resources** in the **student** is equal to true.
+    //
+    // # Financial verification
+    // financial.verification. A **student** meets financial requirements
+    //   if the **student** has proof of financial support
+    //   and the __tuition payment method__ of the **finances.payment** in the **student** is in ["scholarship", "loan", "self_pay", "employer_sponsored"]
+    //   and the __financial aid processed__ of the **finances.aid** in the **student** is the same as true.
+    //
+    // A **student** has proof of financial support
+    //   if the __bank balance__ of the **finances.accounts** in the **student** is at least 50000
+    //   or the __scholarship amount__ of the **finances.awards** in the **student** is greater than 25000
+    //   or the __loan approval__ of the **finances.loans** in the **student** is equal to true.
+    //
+    // # Application requirements completion
+    // A **student** has completed application requirements
+    //   if the **student** has submitted all documents
+    //   and the **student** has paid application fees
+    //   and the __interview completed__ of the **admission.process** in the **student** is not the same as false
+    //   and the __recommendation letters count__ of the **references** in the **student** is at least 3.
+    //
+    // A **student** has submitted all documents
+    //   if the __transcripts submitted__ of the **documents.academic** in the **student** is equal to true
+    //   and the __personal statement submitted__ of the **documents.essays** in the **student** is equal to true
+    //   and the __test scores submitted__ of the **documents.testing** in the **student** is equal to true
+    //   and the __application form completed__ of the **documents.forms** in the **student** is the same as true.
+    //
+    // A **student** has paid application fees
+    //   if the __application fee paid__ of the **finances.fees** in the **student** is equal to true
+    //   and the __payment date__ of the **finances.payment** in the **student** is within 30 days
+    //   and the __payment amount__ of the **finances.payment** in the **student** is at least 75.
+    //
+    // # Background verification
+    // A **student** has passed background verification
+    //   if the __criminal background clear__ of the **background.criminal** in the **student** is equal to true
+    //   and the __academic integrity violations__ of the **background.academic** in the **student** is equal to false
+    //   and the __visa status valid__ of the **background.immigration** in the **student** is not the same as false
+    //   and the __health clearance__ of the **background.medical** in the **student** contains "approved"
+    //   and the __emergency contact provided__ of the **background.contacts** in the **student** is the same as true."#;
+    //
+    //         // This should parse successfully
+    //         let result = parse_rules(rules);
+    //         if let Err(ref e) = result {
+    //             // Print the rules with line numbers to debug
+    //             for (i, line) in rules.lines().enumerate() {
+    //                 println!("{:3}: {}", i + 1, line);
+    //                 if i + 1 == 83 {
+    //                     println!("     {}", "^".repeat(77).as_str());
+    //                 }
+    //             }
+    //         }
+    //         assert!(result.is_ok(), "Failed to parse university admission rules: {:?}", result);
+    //
+    //         // Test with sample data
+    //         let json_data = json!({
+    //             "student": {
+    //                 "applicant": {
+    //                     "age": 20,
+    //                     "citizenship_status": "eligible",
+    //                     "country_of_origin": "USA"
+    //                 },
+    //                 "submission": {
+    //                     "application_date": "2025-06-01"
+    //                 },
+    //                 "transcripts": {
+    //                     "undergraduate": {
+    //                         "cumulative_gpa": 3.5,
+    //                         "degree": {
+    //                             "completion_status": "completed"
+    //                         },
+    //                         "credit_hours": 120
+    //                     }
+    //                 },
+    //                 "previous_education": {
+    //                     "graduation_date": "2024-05-15"
+    //                 },
+    //                 "language_tests": {
+    //                     "english_proficiency_verified": true
+    //                 },
+    //                 "prerequisites": {
+    //                     "math_requirement_met": true,
+    //                     "science_requirement_met": true
+    //                 },
+    //                 "application": {
+    //                     "program": {
+    //                         "program_type": "master_science"
+    //                     }
+    //                 },
+    //                 "standardized_tests": {
+    //                     "gre_score": 320
+    //                 },
+    //                 "employment": {
+    //                     "history": {
+    //                         "years_of_experience": 3
+    //                     },
+    //                     "current": {
+    //                         "field_relevance": "directly_related"
+    //                     },
+    //                     "references": {
+    //                         "employment_verification": true
+    //                     }
+    //                 },
+    //                 "academic": {
+    //                     "research": {
+    //                         "research_projects_count": 2
+    //                     },
+    //                     "publications": {
+    //                         "publication_count": 2,
+    //                         "peer_reviewed_papers": 4,
+    //                         "first_author_papers": 2
+    //                     },
+    //                     "conferences": {
+    //                         "conference_presentations": 3
+    //                     },
+    //                     "impact": {
+    //                         "citation_count": 15
+    //                     }
+    //                 },
+    //                 "community": {
+    //                     "service": {
+    //                         "volunteer_hours": 100
+    //                     }
+    //                 },
+    //                 "finances": {
+    //                     "accounts": {
+    //                         "bank_balance": 60000
+    //                     },
+    //                     "payment": {
+    //                         "tuition_payment_method": "self_pay",
+    //                         "payment_date": "2025-06-01",
+    //                         "payment_amount": 100
+    //                     },
+    //                     "fees": {
+    //                         "application_fee_paid": true
+    //                     },
+    //                     "aid": {
+    //                         "financial_aid_processed": true
+    //                     }
+    //                 },
+    //                 "admission": {
+    //                     "process": {
+    //                         "interview_completed": true
+    //                     }
+    //                 },
+    //                 "references": {
+    //                     "recommendation_letters_count": 3
+    //                 },
+    //                 "documents": {
+    //                     "academic": {
+    //                         "transcripts_submitted": true
+    //                     },
+    //                     "essays": {
+    //                         "personal_statement_submitted": true
+    //                     },
+    //                     "testing": {
+    //                         "test_scores_submitted": true
+    //                     },
+    //                     "forms": {
+    //                         "application_form_completed": true
+    //                     }
+    //                 },
+    //                 "background": {
+    //                     "criminal": {
+    //                         "criminal_background_clear": true
+    //                     },
+    //                     "academic": {
+    //                         "academic_integrity_violations": false
+    //                     },
+    //                     "immigration": {
+    //                         "visa_status_valid": true
+    //                     },
+    //                     "medical": {
+    //                         "health_clearance": "approved"
+    //                     },
+    //                     "contacts": {
+    //                         "emergency_contact_provided": true
+    //                     }
+    //                 }
+    //             }
+    //         });
+    //
+    //         let rule_set = result.unwrap();
+    //         let (results, _trace) = evaluate_rule_set(&rule_set, &json_data).unwrap();
+    //         assert!(results["university admission"], "Student should get university admission");
+    //     }
 
     #[test]
     fn test_simple_peer_reviewed_papers_rule() {
@@ -2324,7 +2349,11 @@ A **student** has published research
   if the __peer reviewed papers__ of the **academic.publications** in the **student** is at least 3."#;
 
         let result = parse_rules(rules);
-        assert!(result.is_ok(), "Failed to parse peer reviewed papers rule: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Failed to parse peer reviewed papers rule: {:?}",
+            result
+        );
     }
 
     #[test]
@@ -2335,9 +2364,12 @@ A **student** is indiferrent
   if the __peer reviewed papers__ of the **academic.publications** in the **student** is at least 3."#;
 
         let result = parse_rules(rules);
-        assert!(result.is_ok(), "Failed to parse peer reviewed papers rule: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Failed to parse peer reviewed papers rule: {:?}",
+            result
+        );
     }
-
 
     #[test]
     fn test_property_with_spaces_and_dots() {
@@ -2353,7 +2385,13 @@ A **student** is indiferrent
 
         for (i, rule) in test_cases.iter().enumerate() {
             let result = parse_rules(rule);
-            assert!(result.is_ok(), "Test case {} failed to parse: {:?}\nRule: {}", i, result, rule);
+            assert!(
+                result.is_ok(),
+                "Test case {} failed to parse: {:?}\nRule: {}",
+                i,
+                result,
+                rule
+            );
         }
     }
 
@@ -2386,7 +2424,11 @@ advisor.approval. A **student** has advisor approval
   and the __funding availability__ of the **advisor.resources** in the **student** is equal to true."#;
 
         let result = parse_rules(rules);
-        assert!(result.is_ok(), "Failed to parse rules with peer reviewed papers: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Failed to parse rules with peer reviewed papers: {:?}",
+            result
+        );
     }
 
     #[test]
@@ -2395,7 +2437,7 @@ advisor.approval. A **student** has advisor approval
         let test_cases = vec![
             // Using "of" twice
             r#"A **student** is valid if the __prop__ of the **sub** of the **student** is at least 3."#,
-            // Using "in" twice  
+            // Using "in" twice
             r#"A **student** is valid if the __prop__ in the **sub** in the **student** is at least 3."#,
             // Using "of" then "in" - this is what's failing
             r#"A **student** is valid if the __prop__ of the **sub** in the **student** is at least 3."#,
@@ -2409,7 +2451,350 @@ advisor.approval. A **student** has advisor approval
             if result.is_err() {
                 println!("Error in case {}: {:?}", i, result);
             }
-            assert!(result.is_ok(), "Test case {} failed to parse: {:?}\nRule: {}", i, result, rule);
+            assert!(
+                result.is_ok(),
+                "Test case {} failed to parse: {:?}\nRule: {}",
+                i,
+                result,
+                rule
+            );
         }
+    }
+
+    #[test]
+    fn test_contains_operator_word_boundary() {
+        // Test that contains operator respects word boundaries
+        let rule_text = r#"
+        A **document** is inappropriate
+          if the __content__ of the **document** contains "ass".
+        "#;
+
+        let rule_set = parse_rules(rule_text).unwrap();
+
+        // Should NOT match when "ass" is part of another word
+        let json_class = json!({
+            "document": {
+                "content": "This is a class about classification and assistance"
+            }
+        });
+        let (results_class, _) = evaluate_rule_set(&rule_set, &json_class).unwrap();
+        assert!(
+            !results_class["inappropriate"],
+            "Should not match 'ass' within 'class'"
+        );
+
+        // Should match when "ass" is a standalone word
+        let json_standalone = json!({
+            "document": {
+                "content": "That person is an ass and very rude"
+            }
+        });
+        let (results_standalone, _) = evaluate_rule_set(&rule_set, &json_standalone).unwrap();
+        assert!(
+            results_standalone["inappropriate"],
+            "Should match 'ass' as standalone word"
+        );
+
+        // Test with punctuation boundaries
+        let json_punctuation = json!({
+            "document": {
+                "content": "What an ass!"
+            }
+        });
+        let (results_punctuation, _) = evaluate_rule_set(&rule_set, &json_punctuation).unwrap();
+        assert!(
+            results_punctuation["inappropriate"],
+            "Should match 'ass' with punctuation boundary"
+        );
+
+        // Test at start of string
+        let json_start = json!({
+            "document": {
+                "content": "ass is not a nice word"
+            }
+        });
+        let (results_start, _) = evaluate_rule_set(&rule_set, &json_start).unwrap();
+        assert!(
+            results_start["inappropriate"],
+            "Should match 'ass' at start of string"
+        );
+    }
+
+    #[test]
+    fn test_contains_with_common_substrings() {
+        // Test other common Scunthorpe problem scenarios
+        let test_cases = vec![
+            ("if", "verification process", false), // "if" within "verification"
+            ("if", "what if we try", true),        // "if" as word
+            ("sex", "Essex is a county", false),   // "sex" in "Essex"
+            ("sex", "determine sex of patient", true), // "sex" as word
+            ("hell", "hello world", false),        // "hell" in "hello"
+            ("hell", "go to hell", true),          // "hell" as word
+        ];
+
+        for (search_term, content, should_match) in test_cases {
+            let rule_text = format!(
+                r#"A **text** is flagged if the __content__ of the **text** contains "{}"."#,
+                search_term
+            );
+
+            let rule_set = parse_rules(&rule_text).unwrap();
+            let json = json!({
+                "text": {
+                    "content": content
+                }
+            });
+
+            let (results, _) = evaluate_rule_set(&rule_set, &json).unwrap();
+            assert_eq!(
+                results["flagged"],
+                should_match,
+                "Search for '{}' in '{}' should {}",
+                search_term,
+                content,
+                if should_match { "match" } else { "not match" }
+            );
+        }
+    }
+
+    #[test]
+    fn test_multiple_golden_rules_error_message() {
+        // Test that multiple golden rules produces a helpful error message
+        let rule_text = r#"
+        # First rule - not referenced by anything
+        A **user** gets access
+          if the __role__ of the **user** is equal to "admin".
+        
+        # Second rule - also not referenced
+        A **user** gets premium_features
+          if the __subscription__ of the **user** is equal to "premium".
+        "#;
+
+        let result = parse_rules(rule_text);
+        assert!(
+            result.is_err(),
+            "Should fail to parse due to multiple golden rules"
+        );
+
+        let error = result.err().unwrap();
+        let error_msg = error.to_string();
+
+        // Check that the error message lists both rules
+        assert!(
+            error_msg.contains("'access'") && error_msg.contains("'premium_features'"),
+            "Error message should list both golden rules: {}",
+            error_msg
+        );
+        assert!(
+            error_msg.contains("Multiple global rules found"),
+            "Error message should mention multiple global rules: {}",
+            error_msg
+        );
+        assert!(
+            error_msg.contains("There should be only one golden rule"),
+            "Error message should explain the issue: {}",
+            error_msg
+        );
+    }
+
+    #[test]
+    fn test_golden_rule_reference_matching() {
+        // Test the specific issue with "meets" and "qualifies for" references
+        let rule_text = r#"
+# Golden Rule - Entry point
+A **student** gets admission
+  if the **student** meets basic eligibility requirements
+  and the **student** qualifies for their chosen program.
+
+# Referenced rule 1
+A **student** meets basic eligibility requirements
+  if the __age__ of the **student** is at least 18.
+
+# Referenced rule 2  
+A **student** qualifies for their chosen program
+  if the **student** meets undergraduate program requirements.
+
+# Referenced rule 3
+A **student** meets undergraduate program requirements
+  if the __gpa__ of the **student** is greater than 3.0.
+"#;
+
+        let result = parse_rules(rule_text);
+        assert!(
+            result.is_ok(),
+            "Should successfully parse rules with 'meets' and 'qualifies for' references"
+        );
+        
+        // Also test with evaluation to ensure it works end-to-end
+        let rule_set = result.unwrap();
+        let json_data = json!({
+            "student": {
+                "age": 20,
+                "gpa": 3.5
+            }
+        });
+        
+        let (results, _trace) = evaluate_rule_set(&rule_set, &json_data).unwrap();
+        assert!(results["admission"], "Student should get admission");
+    }
+    
+    #[test]
+    fn test_various_rule_reference_verbs() {
+        // Test that various common verbs used in rule references are handled correctly
+        let test_cases = vec![
+            ("meets", "basic requirements"),
+            ("qualifies for", "special program"),
+            ("satisfies", "minimum criteria"),
+            ("achieves", "performance standards"),
+            ("completes", "application process"),
+            ("fulfills", "academic requirements"),
+            ("obtains", "necessary clearance"),
+            ("receives", "approval status"),
+        ];
+        
+        for (verb, outcome_base) in test_cases {
+            let rule_text = format!(r#"
+A **user** gets access
+  if the **user** {} {}.
+
+A **user** {}
+  if the __status__ of the **user** is equal to "approved".
+"#, verb, outcome_base, outcome_base);
+
+            let result = parse_rules(&rule_text);
+            assert!(
+                result.is_ok(),
+                "Should parse rule with verb '{}' and outcome '{}': {:?}",
+                verb, outcome_base, result.err()
+            );
+        }
+    }
+
+    #[test]
+    fn test_golden_rule_issue_meets_qualifies() {
+        // Test the exact scenario from the user's issue
+        let rule_text = r#"
+        A **student** gets university admission
+          if the **student** meets basic eligibility requirements
+          and the **student** qualifies for their chosen program.
+        
+        A **student** meets basic eligibility requirements
+          if __age__ of **student** is greater than 18.
+        
+        A **student** qualifies for their chosen program
+          if __gpa__ of **student** is greater than 3.0.
+        "#;
+
+        let result = parse_rules(rule_text);
+        assert!(result.is_ok(), "Should parse successfully");
+        
+        let rule_set = result.unwrap();
+        
+        // Check that the system correctly identifies only one golden rule
+        let referenced = runner::utils::find_referenced_outcomes(&rule_set.rules);
+        println!("Referenced outcomes: {:?}", referenced);
+        
+        // Should find "basic eligibility requirements" and "their chosen program" as referenced
+        assert!(referenced.contains("basic eligibility requirements"), 
+                "Should recognize 'basic eligibility requirements' as referenced");
+        assert!(referenced.contains("their chosen program"), 
+                "Should recognize 'their chosen program' as referenced");
+        
+        // The only golden rule should be "university admission"
+        let global_rule = runner::utils::find_global_rule(&rule_set.rules);
+        assert!(global_rule.is_ok(), "Should find exactly one golden rule");
+        assert_eq!(global_rule.unwrap().outcome, "university admission");
+    }
+
+    #[test]
+    fn test_rule_reference_verbs_not_golden() {
+        // Test that common verbs in rule references don't cause multiple golden rule errors
+        let rule_text = r#"
+        # Golden rule
+        A **student** gets university admission
+          if the **student** meets basic eligibility requirements
+          and the **student** qualifies for their chosen program
+          and the **student** has completed application requirements
+          and the **student** passes background verification.
+        
+        # These should all be recognized as referenced, not golden rules
+        A **student** meets basic eligibility requirements
+          if __age__ of **student** is at least 16.
+        
+        A **student** qualifies for their chosen program  
+          if __gpa__ of **student** is greater than 3.0.
+          
+        A **student** has completed application requirements
+          if __forms__ of **student** is equal to true.
+          
+        A **student** passes background verification
+          if __criminal__ of **student** is equal to false.
+        "#;
+
+        let result = parse_rules(rule_text);
+        assert!(result.is_ok(), "Should parse successfully");
+        
+        // This should NOT give multiple golden rules error
+        let rule_set = result.unwrap();
+        let global_rule = runner::utils::find_global_rule(&rule_set.rules);
+        
+        match global_rule {
+            Ok(rule) => {
+                assert_eq!(rule.outcome, "university admission", 
+                          "Should identify 'university admission' as the only golden rule");
+            }
+            Err(e) => {
+                panic!("Should not fail with error: {}", e);
+            }
+        }
+    }
+
+    #[test]
+    fn test_or_conditions_reference_matching() {
+        // Test that rules referenced with OR conditions are properly detected
+        let rule_text = r#"
+        # Golden rule
+        A **student** gets admission
+          if the **student** qualifies for their chosen program.
+        
+        # This rule references three others with OR
+        A **student** qualifies for their chosen program
+          if the **student** meets undergraduate program requirements
+          or the **student** meets graduate program requirements
+          or the **student** meets doctoral program requirements.
+        
+        # These should all be recognized as referenced
+        A **student** meets undergraduate program requirements
+          if __program__ of **student** is equal to "undergrad".
+          
+        A **student** meets graduate program requirements
+          if __program__ of **student** is equal to "grad".
+          
+        A **student** meets doctoral program requirements
+          if __program__ of **student** is equal to "phd".
+        "#;
+
+        let result = parse_rules(rule_text);
+        assert!(result.is_ok(), "Should parse successfully");
+        
+        let rule_set = result.unwrap();
+        
+        // Check what outcomes are detected as referenced
+        let referenced = runner::utils::find_referenced_outcomes(&rule_set.rules);
+        println!("Referenced outcomes: {:?}", referenced);
+        
+        assert!(referenced.contains("their chosen program"), 
+                "'their chosen program' should be referenced");
+        assert!(referenced.contains("undergraduate program requirements"), 
+                "'undergraduate program requirements' should be referenced");
+        assert!(referenced.contains("graduate program requirements"), 
+                "'graduate program requirements' should be referenced");
+        assert!(referenced.contains("doctoral program requirements"), 
+                "'doctoral program requirements' should be referenced");
+        
+        // Should only have one golden rule
+        let global_rule = runner::utils::find_global_rule(&rule_set.rules);
+        assert!(global_rule.is_ok(), "Should find exactly one golden rule");
+        assert_eq!(global_rule.unwrap().outcome, "admission");
     }
 }

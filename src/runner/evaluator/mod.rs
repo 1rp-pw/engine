@@ -2116,7 +2116,38 @@ fn compare_not_in_list(left: &RuleValue, right: &RuleValue) -> Result<bool, Rule
 fn compare_contains(left: &RuleValue, right: &RuleValue) -> Result<bool, RuleError> {
     match left {
         RuleValue::String(l) => match right {
-            RuleValue::String(r) => Ok(l.to_lowercase().contains(&r.to_lowercase())),
+            RuleValue::String(r) => {
+                // Convert to lowercase for case-insensitive comparison
+                let haystack = l.to_lowercase();
+                let needle = r.to_lowercase();
+
+                // Check if the needle appears as a whole word
+                // We need to check if the match is at a word boundary
+                let mut start = 0;
+                while let Some(pos) = haystack[start..].find(&needle) {
+                    let absolute_pos = start + pos;
+                    let before_is_boundary = absolute_pos == 0
+                        || !haystack
+                            .chars()
+                            .nth(absolute_pos - 1)
+                            .unwrap_or(' ')
+                            .is_alphanumeric();
+                    let after_pos = absolute_pos + needle.len();
+                    let after_is_boundary = after_pos >= haystack.len()
+                        || !haystack
+                            .chars()
+                            .nth(after_pos)
+                            .unwrap_or(' ')
+                            .is_alphanumeric();
+
+                    if before_is_boundary && after_is_boundary {
+                        return Ok(true);
+                    }
+
+                    start = absolute_pos + 1;
+                }
+                Ok(false)
+            }
             _ => Err(RuleError::TypeError(
                 "String contains only works with string values".to_string(),
             )),
