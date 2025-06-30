@@ -1379,8 +1379,9 @@ A **user** is valid if __age__ of **user** is greater than 18
             // Edge cases
             ("A **user** passed_all_checks if __verified__ of **user** is equal to true.", "passed_all_checks"),
             
-            // Test the problematic case - should work since "has" is a recognized verb
+            // Test cases with "if" in the outcome - now works after fix
             ("A **student** has background_verification_passed if __age__ of **student** is greater than 18.", "background_verification_passed"),
+            ("A **student** has passed verification if __age__ of **student** is greater than 18.", "passed verification"),
         ];
 
         for (rule_text, expected_outcome) in test_cases {
@@ -1395,27 +1396,22 @@ A **user** is valid if __age__ of **user** is greater than 18
     
     #[test]
     fn test_outcome_with_if_keyword() {
-        // Test that the issue is with words containing "if"
-        let problematic_cases = vec![
+        // Test that words containing "if" now work correctly after the fix
+        let test_cases = vec![
             ("A **student** has passed verification if __age__ of **student** is greater than 18.", "passed verification"),
             ("A **student** has qualified_verification if __age__ of **student** is greater than 18.", "qualified_verification"),
             ("A **student** has passed background verification if __age__ of **student** is greater than 18.", "passed background verification"),
+            ("A **user** gets gift_certificate if __points__ of **user** is greater than 100.", "gift_certificate"),
+            ("A **user** is verified_different if __status__ of **user** is equal to \"active\".", "verified_different"),
+            ("A **student** qualifies_for_certification if __score__ of **student** is greater than 80.", "qualifies_for_certification"),
+            ("A **user** receives notification_benefits if __tier__ of **user** is equal to \"premium\".", "notification_benefits"),
+            
+            // Test multi-line rules with "if" in outcome
+            ("A **student** has passed verification\n  if __age__ of **student** is greater than 18.", "passed verification"),
+            ("A **student** gets certificate_of_qualification\n  if __score__ of **student** is greater than 90.", "certificate_of_qualification"),
         ];
         
-        for (rule_text, _expected_outcome) in problematic_cases {
-            let result = parse_rules(rule_text);
-            // These should fail because "verification" contains "if"
-            assert!(result.is_err(), "Expected parse error for rule with 'if' in outcome: {}", rule_text);
-        }
-        
-        // Test workarounds
-        let working_cases = vec![
-            ("A **student** has passed_background_checks if __age__ of **student** is greater than 18.", "passed_background_checks"),
-            ("A **student** passes background verification if __age__ of **student** is greater than 18.", "background verification"),
-            ("A **student** completes verification if __age__ of **student** is greater than 18.", "verification"),
-        ];
-        
-        for (rule_text, expected_outcome) in working_cases {
+        for (rule_text, expected_outcome) in test_cases {
             let result = parse_rules(rule_text);
             assert!(result.is_ok(), "Failed to parse rule: {}\nError: {:?}", rule_text, result);
             
@@ -1423,7 +1419,14 @@ A **user** is valid if __age__ of **user** is greater than 18
             assert_eq!(rule_set.rules[0].outcome, expected_outcome, 
                 "Incorrect outcome for rule: {}", rule_text);
         }
+        
+        // Test edge case: outcome ending with "if" should still work
+        let edge_case = "A **user** gets elif if __test__ of **user** is equal to true.";
+        let result = parse_rules(edge_case);
+        assert!(result.is_ok(), "Failed to parse rule with 'if' at end of outcome: {:?}", result);
+        assert_eq!(result.unwrap().rules[0].outcome, "elif");
     }
+
 
     #[test]
     fn test_username_and_password_validation() {
@@ -2169,6 +2172,15 @@ A **student** has passed background verification
 
         // This should parse successfully
         let result = parse_rules(rules);
+        if let Err(ref e) = result {
+            // Print the rules with line numbers to debug
+            for (i, line) in rules.lines().enumerate() {
+                println!("{:3}: {}", i + 1, line);
+                if i + 1 == 83 {
+                    println!("     {}", "^".repeat(77).as_str());
+                }
+            }
+        }
         assert!(result.is_ok(), "Failed to parse university admission rules: {:?}", result);
 
         // Test with sample data
