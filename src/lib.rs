@@ -1377,14 +1377,14 @@ A **user** is valid if __age__ of **user** is greater than 18
             ("A **user** can_access_admin_panel if __role__ of **user** is equal to \"admin\".", "can_access_admin_panel"),
             ("A **user** should-be-promoted if __performance__ of **user** is greater than 90.", "should-be-promoted"),
             ("A **user** will receive bonus payment if __sales__ of **user** is greater than 100000.", "will receive bonus payment"),
-            
+
             // With recognized verbs
             ("A **user** gets premium_access if __tier__ of **user** is equal to \"gold\".", "premium_access"),
             ("A **user** is authorized_for_deletion if __admin__ of **user** is equal to true.", "authorized_for_deletion"),
-            
+
             // Edge cases
             ("A **user** passed_all_checks if __verified__ of **user** is equal to true.", "passed_all_checks"),
-            
+
             // Test cases with "if" in the outcome - now works after fix
             ("A **student** has background_verification_passed if __age__ of **student** is greater than 18.", "background_verification_passed"),
             ("A **student** has passed verification if __age__ of **student** is greater than 18.", "passed verification"),
@@ -1419,7 +1419,7 @@ A **user** is valid if __age__ of **user** is greater than 18
             ("A **user** is verified_different if __status__ of **user** is equal to \"active\".", "verified_different"),
             ("A **student** qualifies_for_certification if __score__ of **student** is greater than 80.", "qualifies_for_certification"),
             ("A **user** receives notification_benefits if __tier__ of **user** is equal to \"premium\".", "notification_benefits"),
-            
+
             // Test multi-line rules with "if" in outcome
             ("A **student** has passed verification\n  if __age__ of **student** is greater than 18.", "passed verification"),
             ("A **student** gets certificate_of_qualification\n  if __score__ of **student** is greater than 90.", "certificate_of_qualification"),
@@ -2564,7 +2564,7 @@ advisor.approval. A **student** has advisor approval
         # First rule - not referenced by anything
         A **user** gets access
           if the __role__ of the **user** is equal to "admin".
-        
+
         # Second rule - also not referenced
         A **user** gets premium_features
           if the __subscription__ of the **user** is equal to "premium".
@@ -2610,7 +2610,7 @@ A **student** gets admission
 A **student** meets basic eligibility requirements
   if the __age__ of the **student** is at least 18.
 
-# Referenced rule 2  
+# Referenced rule 2
 A **student** qualifies for their chosen program
   if the **student** meets undergraduate program requirements.
 
@@ -2624,7 +2624,7 @@ A **student** meets undergraduate program requirements
             result.is_ok(),
             "Should successfully parse rules with 'meets' and 'qualifies for' references"
         );
-        
+
         // Also test with evaluation to ensure it works end-to-end
         let rule_set = result.unwrap();
         let json_data = json!({
@@ -2633,11 +2633,11 @@ A **student** meets undergraduate program requirements
                 "gpa": 3.5
             }
         });
-        
+
         let (results, _trace) = evaluate_rule_set(&rule_set, &json_data).unwrap();
         assert!(results["admission"], "Student should get admission");
     }
-    
+
     #[test]
     fn test_various_rule_reference_verbs() {
         // Test that various common verbs used in rule references are handled correctly
@@ -2651,21 +2651,26 @@ A **student** meets undergraduate program requirements
             ("obtains", "necessary clearance"),
             ("receives", "approval status"),
         ];
-        
+
         for (verb, outcome_base) in test_cases {
-            let rule_text = format!(r#"
+            let rule_text = format!(
+                r#"
 A **user** gets access
   if the **user** {} {}.
 
 A **user** {}
   if the __status__ of the **user** is equal to "approved".
-"#, verb, outcome_base, outcome_base);
+"#,
+                verb, outcome_base, outcome_base
+            );
 
             let result = parse_rules(&rule_text);
             assert!(
                 result.is_ok(),
                 "Should parse rule with verb '{}' and outcome '{}': {:?}",
-                verb, outcome_base, result.err()
+                verb,
+                outcome_base,
+                result.err()
             );
         }
     }
@@ -2677,29 +2682,33 @@ A **user** {}
         A **student** gets university admission
           if the **student** meets basic eligibility requirements
           and the **student** qualifies for their chosen program.
-        
+
         A **student** meets basic eligibility requirements
           if __age__ of **student** is greater than 18.
-        
+
         A **student** qualifies for their chosen program
           if __gpa__ of **student** is greater than 3.0.
         "#;
 
         let result = parse_rules(rule_text);
         assert!(result.is_ok(), "Should parse successfully");
-        
+
         let rule_set = result.unwrap();
-        
+
         // Check that the system correctly identifies only one golden rule
         let referenced = runner::utils::find_referenced_outcomes(&rule_set.rules);
         println!("Referenced outcomes: {:?}", referenced);
-        
+
         // Should find "basic eligibility requirements" and "their chosen program" as referenced
-        assert!(referenced.contains("basic eligibility requirements"), 
-                "Should recognize 'basic eligibility requirements' as referenced");
-        assert!(referenced.contains("their chosen program"), 
-                "Should recognize 'their chosen program' as referenced");
-        
+        assert!(
+            referenced.contains("basic eligibility requirements"),
+            "Should recognize 'basic eligibility requirements' as referenced"
+        );
+        assert!(
+            referenced.contains("their chosen program"),
+            "Should recognize 'their chosen program' as referenced"
+        );
+
         // The only golden rule should be "university admission"
         let global_rule = runner::utils::find_global_rule(&rule_set.rules);
         assert!(global_rule.is_ok(), "Should find exactly one golden rule");
@@ -2716,32 +2725,34 @@ A **user** {}
           and the **student** qualifies for their chosen program
           and the **student** has completed application requirements
           and the **student** passes background verification.
-        
+
         # These should all be recognized as referenced, not golden rules
         A **student** meets basic eligibility requirements
           if __age__ of **student** is at least 16.
-        
-        A **student** qualifies for their chosen program  
+
+        A **student** qualifies for their chosen program
           if __gpa__ of **student** is greater than 3.0.
-          
+
         A **student** has completed application requirements
           if __forms__ of **student** is equal to true.
-          
+
         A **student** passes background verification
           if __criminal__ of **student** is equal to false.
         "#;
 
         let result = parse_rules(rule_text);
         assert!(result.is_ok(), "Should parse successfully");
-        
+
         // This should NOT give multiple golden rules error
         let rule_set = result.unwrap();
         let global_rule = runner::utils::find_global_rule(&rule_set.rules);
-        
+
         match global_rule {
             Ok(rule) => {
-                assert_eq!(rule.outcome, "university admission", 
-                          "Should identify 'university admission' as the only golden rule");
+                assert_eq!(
+                    rule.outcome, "university admission",
+                    "Should identify 'university admission' as the only golden rule"
+                );
             }
             Err(e) => {
                 panic!("Should not fail with error: {}", e);
@@ -2756,45 +2767,164 @@ A **user** {}
         # Golden rule
         A **student** gets admission
           if the **student** qualifies for their chosen program.
-        
+
         # This rule references three others with OR
         A **student** qualifies for their chosen program
           if the **student** meets undergraduate program requirements
           or the **student** meets graduate program requirements
           or the **student** meets doctoral program requirements.
-        
+
         # These should all be recognized as referenced
         A **student** meets undergraduate program requirements
           if __program__ of **student** is equal to "undergrad".
-          
+
         A **student** meets graduate program requirements
           if __program__ of **student** is equal to "grad".
-          
+
         A **student** meets doctoral program requirements
           if __program__ of **student** is equal to "phd".
         "#;
 
         let result = parse_rules(rule_text);
         assert!(result.is_ok(), "Should parse successfully");
-        
+
         let rule_set = result.unwrap();
-        
+
         // Check what outcomes are detected as referenced
         let referenced = runner::utils::find_referenced_outcomes(&rule_set.rules);
         println!("Referenced outcomes: {:?}", referenced);
-        
-        assert!(referenced.contains("their chosen program"), 
-                "'their chosen program' should be referenced");
-        assert!(referenced.contains("undergraduate program requirements"), 
-                "'undergraduate program requirements' should be referenced");
-        assert!(referenced.contains("graduate program requirements"), 
-                "'graduate program requirements' should be referenced");
-        assert!(referenced.contains("doctoral program requirements"), 
-                "'doctoral program requirements' should be referenced");
-        
+
+        assert!(
+            referenced.contains("their chosen program"),
+            "'their chosen program' should be referenced"
+        );
+        assert!(
+            referenced.contains("undergraduate program requirements"),
+            "'undergraduate program requirements' should be referenced"
+        );
+        assert!(
+            referenced.contains("graduate program requirements"),
+            "'graduate program requirements' should be referenced"
+        );
+        assert!(
+            referenced.contains("doctoral program requirements"),
+            "'doctoral program requirements' should be referenced"
+        );
+
         // Should only have one golden rule
         let global_rule = runner::utils::find_global_rule(&rule_set.rules);
         assert!(global_rule.is_ok(), "Should find exactly one golden rule");
         assert_eq!(global_rule.unwrap().outcome, "admission");
+    }
+
+    #[test]
+    fn test_nested_selector_with_in_the_syntax() {
+        // Test for the failing case: __property__ of the **nested.selector** in the **parent**
+        let rule_text = r#"
+        A **student** is eligible
+          if the __faculty_sponsor_confirmed__ of the **advisor.agreement** in the **student** is equal to true.
+        "#;
+
+        let rule_set = parse_rules(rule_text).unwrap();
+
+        let json = json!({
+            "student": {
+                "advisor": {
+                    "agreement": {
+                        "faculty_sponsor_confirmed": true
+                    }
+                }
+            }
+        });
+
+        let (results, trace) = evaluate_rule_set(&rule_set, &json).unwrap();
+        // println!(
+        //     "Trace for nested selector test: {}",
+        //     serde_json::to_string_pretty(&trace).unwrap()
+        // );
+        assert!(
+            results["eligible"],
+            "Should evaluate to true when advisor.agreement.faculty_sponsor_confirmed is true"
+        );
+    }
+
+    #[test]
+    fn test_nested_selector_vs_direct_path() {
+        // Compare the two syntaxes to ensure they work the same
+        let rule_text1 = r#"
+        A **student** is eligible
+          if the __research_alignment__ of the **student.advisor.fit** is equal to true.
+        "#;
+
+        let rule_text2 = r#"
+        A **student** is eligible
+          if the __research_alignment__ of the **advisor.fit** in the **student** is equal to true.
+        "#;
+
+        let json = json!({
+            "student": {
+                "advisor": {
+                    "fit": {
+                        "research_alignment": true
+                    }
+                }
+            }
+        });
+
+        // Test syntax 1 (direct path)
+        let rule_set1 = parse_rules(rule_text1).unwrap();
+        let (results1, _) = evaluate_rule_set(&rule_set1, &json).unwrap();
+        assert!(results1["eligible"], "Direct path syntax should work");
+
+        // Test syntax 2 (in the syntax) - this is currently failing
+        let rule_set2 = parse_rules(rule_text2).unwrap();
+        let (results2, trace2) = evaluate_rule_set(&rule_set2, &json).unwrap();
+        // println!(
+        //     "Trace for 'in the' syntax: {}",
+        //     serde_json::to_string_pretty(&trace2).unwrap()
+        // );
+        assert!(
+            results2["eligible"],
+            "'in the' syntax should work the same as direct path"
+        );
+    }
+
+    #[test]
+    fn test_deeply_nested_selector_paths() {
+        // Test various nested path patterns
+        let rule_text = r#"
+        A **application** is complete
+          if the __signature__ of the **documents.consent.form** in the **application** is not empty
+          and the __verified__ of the **background.check** in the **application** is equal to true.
+        "#;
+
+        let rule_set = parse_rules(rule_text).unwrap();
+
+        let json = json!({
+            "application": {
+                "documents": {
+                    "consent": {
+                        "form": {
+                            "signature": "John Doe"
+                        }
+                    }
+                },
+                "background": {
+                    "check": {
+                        "verified": true
+                    }
+                }
+            }
+        });
+
+        let (results, trace) = evaluate_rule_set(&rule_set, &json).unwrap();
+        // println!(
+        //     "Trace for deeply nested test: {}",
+        //     serde_json::to_string_pretty(&trace).unwrap()
+        // );
+        assert!(
+            results["complete"],
+            "Should handle deeply nested selectors with dots"
+        );
     }
 }

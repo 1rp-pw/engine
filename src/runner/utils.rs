@@ -34,9 +34,28 @@ pub fn find_referenced_outcomes(rules: &[Rule]) -> std::collections::HashSet<Str
                         {
                             // Common stop words that shouldn't be used for matching
                             let stop_words: std::collections::HashSet<&str> = [
-                                "the", "a", "an", "is", "are", "was", "were", "has", "have", "had",
-                                "gets", "passes", "of", "meets", "qualifies", "for", "satisfies",
-                                "achieves", "completes", "fulfills", "obtains", "receives",
+                                "the",
+                                "a",
+                                "an",
+                                "is",
+                                "are",
+                                "was",
+                                "were",
+                                "has",
+                                "have",
+                                "had",
+                                "gets",
+                                "passes",
+                                "of",
+                                "meets",
+                                "qualifies",
+                                "for",
+                                "satisfies",
+                                "achieves",
+                                "completes",
+                                "fulfills",
+                                "obtains",
+                                "receives",
                             ]
                             .iter()
                             .cloned()
