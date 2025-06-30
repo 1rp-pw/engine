@@ -2837,11 +2837,7 @@ A **user** {}
             }
         });
 
-        let (results, trace) = evaluate_rule_set(&rule_set, &json).unwrap();
-        // println!(
-        //     "Trace for nested selector test: {}",
-        //     serde_json::to_string_pretty(&trace).unwrap()
-        // );
+        let (results, _trace) = evaluate_rule_set(&rule_set, &json).unwrap();
         assert!(
             results["eligible"],
             "Should evaluate to true when advisor.agreement.faculty_sponsor_confirmed is true"
@@ -2878,11 +2874,7 @@ A **user** {}
 
         // Test syntax 2 (in the syntax) - this is currently failing
         let rule_set2 = parse_rules(rule_text2).unwrap();
-        let (results2, trace2) = evaluate_rule_set(&rule_set2, &json).unwrap();
-        // println!(
-        //     "Trace for 'in the' syntax: {}",
-        //     serde_json::to_string_pretty(&trace2).unwrap()
-        // );
+        let (results2, _trace2) = evaluate_rule_set(&rule_set2, &json).unwrap();
         assert!(
             results2["eligible"],
             "'in the' syntax should work the same as direct path"
@@ -2917,11 +2909,7 @@ A **user** {}
             }
         });
 
-        let (results, trace) = evaluate_rule_set(&rule_set, &json).unwrap();
-        // println!(
-        //     "Trace for deeply nested test: {}",
-        //     serde_json::to_string_pretty(&trace).unwrap()
-        // );
+        let (results, _trace) = evaluate_rule_set(&rule_set, &json).unwrap();
         assert!(
             results["complete"],
             "Should handle deeply nested selectors with dots"
