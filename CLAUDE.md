@@ -81,6 +81,8 @@ A **Order** gets expedited_shipping
 ### Testing Approach
 Tests are embedded in `src/lib.rs` covering all operators, property access patterns, and edge cases. When adding new operators or functionality, follow the existing test pattern with both positive and negative test cases.
 
+**Important**: Always add tests to the relevant `lib.rs` file in the module where the functionality is implemented, rather than creating separate test files. This keeps tests close to the code they're testing and maintains consistency with the existing test structure.
+
 ## Testcontainer Integration
 
 The Policy Engine can be used as a testcontainer for integration testing in other systems.
