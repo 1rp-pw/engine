@@ -1522,6 +1522,14 @@ A **bob** passes the test if __name__ of **user** is equal to "bob"."#;
 
     #[test]
     fn full_driving_test() {
+        // Calculate dates dynamically
+        let today = chrono::Utc::now().date_naive();
+        let practical_date = today - chrono::Duration::days(5);
+        let theory_date = today - chrono::Duration::days(200); // Well within 2 years
+
+        let practical_date_str = practical_date.format("%Y-%m-%d").to_string();
+        let theory_date_str = theory_date.format("%Y-%m-%d").to_string();
+
         let input = r#"A **driving test** gets a driving licence
   if the **driving test** passes the age test
   and the **driving test** passes the test requirements
@@ -1565,8 +1573,8 @@ A **driving test** has taken the test in the time period
               }
             },
             "testDates": {
-              "practical": "2025-06-01",
-              "theory": "2024-12-12"
+              "practical": practical_date_str,
+              "theory": theory_date_str.clone()
             }
           }
         });
@@ -1722,6 +1730,12 @@ A **driver** has taken the test in the time period
   and the __practical__ of the __test dates__ in the **driving test** is within 30 days."#;
 
         let rule_set = parse_rules(input).unwrap();
+        let today = chrono::Utc::now().date_naive();
+        let practical_date = today - chrono::Duration::days(5);
+        let theory_date = today - chrono::Duration::days(200); // Well within 2 years
+
+        let practical_date_str = practical_date.format("%Y-%m-%d").to_string();
+        let theory_date_str = theory_date.format("%Y-%m-%d").to_string();
 
         let json_good = json!({
           "drivingTest": {
@@ -1740,8 +1754,8 @@ A **driver** has taken the test in the time period
               }
             },
             "testDates": {
-              "practical": "2025-06-01",
-              "theory": "2024-12-12"
+              "practical": practical_date_str,
+              "theory": theory_date_str.clone()
             }
           }
         });
