@@ -271,12 +271,14 @@ dependencies = [
  "axum",
  "chrono",
  "flags-rs",
+ "hyper 0.14.32",
  "pest",
  "pest_derive",
  "serde",
  "serde_json",
  "thiserror 2.0.12",
  "tokio",
+ "tower",
 ]
 
 [[package]]

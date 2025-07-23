@@ -2,8 +2,8 @@ mod lib;
 
 use crate::runner::error::{EvaluationResult, PartialRuleTrace, RuleError};
 use crate::runner::model::{
-    ComparisonCondition, ComparisonOperator, Condition, ConditionOperator, PropertyChainElement,
-    Rule, RuleReferenceCondition, RuleSet, RuleValue,
+    ComparisonCondition, ComparisonOperator, Condition, ConditionOperator, PerformanceCache,
+    PropertyChainElement, Rule, RuleReferenceCondition, RuleSet, RuleValue,
 };
 use crate::runner::trace::{
     ComparisonEvaluationTrace, ComparisonTrace, ConditionTrace, OutcomeTrace, PropertyCheckTrace,
@@ -2361,4 +2361,62 @@ fn get_json_value_insensitive<'a>(
         }
     }
     None
+}
+
+/// Cached version of get_json_value_insensitive that uses the performance cache
+fn get_json_value_insensitive_cached<'a>(
+    json: &'a serde_json::Value,
+    key: &str,
+    cache: &PerformanceCache,
+) -> Option<&'a serde_json::Value> {
+    if let Some(obj) = json.as_object() {
+        // First try exact match (most common case)
+        if let Some(value) = obj.get(key) {
+            return Some(value);
+        }
+
+        // Generate a cache key based on object keys and lookup key
+        // We use a simplified object signature to avoid complex hashing
+        let obj_signature = {
+            let mut keys: Vec<_> = obj.keys().cloned().collect();
+            keys.sort();
+            keys.join(",")
+        };
+        let cache_key = (obj_signature, key.to_string());
+
+        // Check cache
+        if let Ok(cache_guard) = cache.json_property_lookups.read() {
+            if let Some(cached_result) = cache_guard.get(&cache_key) {
+                // If we have a cached result, return the actual value
+                if let Some(actual_key) = cached_result {
+                    return obj.get(actual_key);
+                } else {
+                    return None;
+                }
+            }
+        }
+
+        // Cache miss - perform the lookup
+        let mut found_key = None;
+        for k in obj.keys() {
+            if names_match(key, k) {
+                found_key = Some(k.clone());
+                break;
+            }
+        }
+
+        // Store in cache
+        if let Ok(mut cache_guard) = cache.json_property_lookups.write() {
+            cache_guard.insert(cache_key, found_key.clone());
+        }
+
+        // Return the result
+        if let Some(actual_key) = found_key {
+            obj.get(&actual_key)
+        } else {
+            None
+        }
+    } else {
+        None
+    }
 }

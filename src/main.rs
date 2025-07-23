@@ -45,9 +45,9 @@ async fn main() {
     let flags_client = Client::builder()
         .with_memory_cache()
         .with_auth(Auth {
-            environment_id: env::var("FF_ENV_ID").unwrap(),
-            agent_id: env::var("FF_AGENT_ID").unwrap(),
-            project_id: env::var("FF_PROJECT_ID").unwrap(),
+            environment_id: env::var("FF_ENV_ID").unwrap_or_else(|_| "default-env".to_string()),
+            agent_id: env::var("FF_AGENT_ID").unwrap_or_else(|_| "default-agent".to_string()),
+            project_id: env::var("FF_PROJECT_ID").unwrap_or_else(|_| "default-project".to_string()),
         })
         .build();
 
