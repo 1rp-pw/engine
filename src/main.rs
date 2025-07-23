@@ -49,7 +49,8 @@ async fn main() {
             agent_id: env::var("FF_AGENT_ID").unwrap_or_else(|_| "default-agent".to_string()),
             project_id: env::var("FF_PROJECT_ID").unwrap_or_else(|_| "default-project".to_string()),
         })
-        .build();
+        .build()
+        .unwrap_or_else(|e| panic!("Failed to create flags client: {:?}", e));
 
     let state = AppState { flags_client };
 
