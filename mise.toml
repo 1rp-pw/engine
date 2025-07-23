@@ -1,0 +1,4 @@
+[tools]
+claude-code = "latest"
+rust = { version = "latest", components = "rust-src,llvm-tools" }
+
