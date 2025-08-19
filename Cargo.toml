@@ -18,4 +18,4 @@ flags-rs = "0.1.4"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
-hyper = { version = "1.6", features = ["full"] }
+hyper = { version = "1.7", features = ["full"] }
