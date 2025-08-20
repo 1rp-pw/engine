@@ -305,9 +305,9 @@ checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
 
 [[package]]
 name = "flags-rs"
-version = "0.1.7"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "988fa3d1faa71fcf731db8e78c23e6042a79779c441e5c8b2861567245d4e6c5"
+checksum = "9101317a6418a3e69f4a0b6399e90d2a670c998b1c11d5335355854fcb1fe6f7"
 dependencies = [
  "async-trait",
  "chrono",
